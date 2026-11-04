@@ -351,10 +351,20 @@ pub fn practice() -> Map {
             Surface::Trim,
         ));
     }
-    Map {
-        brushes: b,
-        spawns: vec![(v3(int(8), 0, int(16)), 0)],
-    }
+    // M4: four spawns for an online match, each facing the room's middle;
+    // the first is the practice room's own
+    // (the second faces past the block at (24, -4): from (26, -28) it ran
+    // straight into the one at (20, -20))
+    let spawns = [(8, 16), (28, -14), (-26, -28), (-28, 20)]
+        .iter()
+        .enumerate()
+        .map(|(k, &(x, z))| {
+            let at = v3(int(x), 0, int(z));
+            let yaw = if k == 0 { 0 } else { crate::geom::yaw_of(at.neg()) };
+            (at, yaw)
+        })
+        .collect();
+    Map { brushes: b, spawns }
 }
 
 #[cfg(test)]

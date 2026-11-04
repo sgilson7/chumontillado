@@ -21,6 +21,8 @@
 //! (CS-Q15), its lunge flings you, and the guadaña's hook pulls you to a
 //! wall. A nail can pin a body to a wall behind it.
 
+use std::rc::Rc;
+
 use crate::arms::{Arms, Shot, RECOIL};
 use crate::camera::{self, Aim};
 use crate::fx::{self, int, Fx, ONE};
@@ -229,7 +231,9 @@ pub enum Bot {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct World {
     pub tick: u64,
-    pub map: Map,
+    /// shared, not copied, by rollback's copies of the world (M4): it
+    /// never changes in a match
+    pub map: Rc<Map>,
     pub players: Vec<Player>,
     pub dummies: Vec<Dummy>,
     pub trails: Vec<Trail>,
@@ -238,12 +242,44 @@ pub struct World {
     pub bursts: Vec<Burst>,
     /// the field of view across, degrees (a reader's setting)
     pub fov: i32,
+    /// an online match (M4)
+    pub online: bool,
 }
 
 /// The straw targets in the practice room, down the hop lane.
 pub const DUMMIES: [(i32, i32); 3] = [(8, -4), (14, -24), (22, -28)];
 /// The bot's spawn: the first corner of its loop.
 pub const BOT_SPAWN: (i32, i32) = (8, -28);
+
+/// M4: the world as rollback runs it, on every seat's record in seat order.
+impl crate::rollback::Sim for World {
+    fn tick(&mut self, inputs: &[Input; crate::online::SEATS]) {
+        // `step` takes a record for each seat a person holds, in order
+        let people: Vec<Input> = self
+            .players
+            .iter()
+            .zip(inputs)
+            .filter(|(p, _)| p.pilot.is_none())
+            .map(|(_, i)| *i)
+            .collect();
+        self.step(&people);
+    }
+
+    fn sum(&self) -> u64 {
+        World::sum(self)
+    }
+
+    fn hand_to_bot(&mut self, seat: usize) {
+        if let Some(p) = self.players.get_mut(seat) {
+            if p.pilot.is_none() {
+                p.pilot = Some(Pilot {
+                    shoots: true,
+                    ..Pilot::default()
+                });
+            }
+        }
+    }
+}
 
 impl World {
     /// The practice room with the player at its spawn, three straw targets,
@@ -254,7 +290,7 @@ impl World {
 
     /// The practice room with its bot moving only, or shooting back.
     pub fn room(bot: Bot) -> World {
-        let map = map::practice();
+        let map = Rc::new(map::practice());
         let mut players = vec![Player::at(map.spawns[0])];
         let mut b = Player::at((v3(int(BOT_SPAWN.0), 0, int(BOT_SPAWN.1)), fx::HALF_TURN));
         b.pilot = Some(Pilot {
@@ -280,7 +316,86 @@ impl World {
             flying: Vec::new(),
             bursts: Vec::new(),
             fov: camera::FOV_START,
+            online: false,
         }
+    }
+
+    /// M4: an online match in the practice room: four seats at its four
+    /// spawns, those `seats` does not hold played by bots that shoot back
+    /// (CS-Q17: A), and the straw targets.
+    pub fn online(seats: crate::online::Seats) -> World {
+        let mut w = World::room(Bot::Shoots);
+        w.players = (0..crate::online::SEATS)
+            .map(|s| {
+                let mut p = Player::at(w.map.spawns[s]);
+                if !crate::online::holds(seats, s) {
+                    p.pilot = Some(Pilot {
+                        shoots: true,
+                        ..Pilot::default()
+                    });
+                }
+                p
+            })
+            .collect();
+        w.online = true;
+        w
+    }
+
+    /// M4: one number for the whole state a tick can change, the same on
+    /// every browser that ran the same records (FNV-1a over the fields in a
+    /// fixed order). Two browsers whose sums differ have come apart.
+    pub fn sum(&self) -> u64 {
+        let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+        let mut mix = |v: i64| {
+            h ^= v as u64;
+            h = h.wrapping_mul(0x0100_0000_01b3);
+        };
+        mix(self.tick as i64);
+        let v3s = |mix: &mut dyn FnMut(i64), v: V3| {
+            mix(v.x as i64);
+            mix(v.y as i64);
+            mix(v.z as i64);
+        };
+        for p in &self.players {
+            v3s(&mut mix, p.body.origin);
+            v3s(&mut mix, p.body.velocity);
+            for n in [
+                p.aim.yaw,
+                p.aim.pitch,
+                p.health,
+                p.dead,
+                p.pinned,
+                p.body.wall_jumps,
+                p.arms.weapon as i32,
+                p.arms.cooldown,
+                p.arms.charge,
+                p.body.on_ground as i32,
+                p.body.ducked as i32,
+                p.pilot.is_some() as i32,
+            ] {
+                mix(n as i64);
+            }
+            for r in p.arms.rounds {
+                mix(r as i64);
+            }
+            if let Some(sw) = p.swing {
+                mix(sw.age as i64);
+                mix(sw.struck as i64);
+            }
+            if let Some(hk) = p.hook {
+                v3s(&mut mix, hk.at);
+            }
+        }
+        for q in &self.flying {
+            v3s(&mut mix, q.at);
+            v3s(&mut mix, q.velocity);
+            mix(q.owner as i64);
+        }
+        for d in &self.dummies {
+            mix(d.health as i64);
+            mix(d.down as i64);
+        }
+        h
     }
 
     /// What a bot in seat `id` knows this tick: itself, and the first
@@ -332,6 +447,8 @@ impl World {
         }
 
         let mut shots: Vec<(usize, Shot)> = Vec::new();
+        // online (M4), Backspace does not stand you back at your spawn whole
+        let online = self.online;
         {
             let mut mover = Mover::new(&self.map);
             for (id, (p, input)) in self.players.iter_mut().zip(&records).enumerate() {
@@ -347,7 +464,7 @@ impl World {
                     }
                     continue;
                 }
-                if input.key(RESET) {
+                if input.key(RESET) && !online {
                     p.respawn();
                     continue;
                 }

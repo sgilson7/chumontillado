@@ -110,6 +110,18 @@ A gun whose shot arrives the moment it is fired, along a straight line from the 
 
 Not: instant hit, raycast
 
+### Host
+
+The player who opens an online match. The host holds the first seat, gives each guest a seat, starts the match, and passes on what one guest sends to the others.
+
+Not: server, admin
+
+### Invite link
+
+The game's address with a room code in it. Opening it joins that room.
+
+Not: lobby link
+
 ### Katana
 
 A sword drawn true. Each swing carries you on a little, its second button lunges, and the first ticks of a swing parry.
@@ -121,6 +133,12 @@ Not: sword, blade
 A rifle drawn true: slow and heavy, a headshot kills.
 
 Not: sniper, marksman rifle
+
+### Lobby
+
+Where the players of an online match wait for the host to start it.
+
+Not: waiting room
 
 ### Lunge
 
@@ -163,6 +181,18 @@ Not: bullet, missile
 A gun drawn true that fires eight pellets on a fixed ring. Fired at the floor in the air, it throws you up.
 
 Not: scattergun
+
+### Room code
+
+Five letters that name an online match. Anyone who types them joins it while a seat is free.
+
+Not: lobby code, session id
+
+### Seat
+
+One of an online match's four places. A player holds it, or a bot plays it.
+
+Not: player slot
 
 ### Service pistol
 

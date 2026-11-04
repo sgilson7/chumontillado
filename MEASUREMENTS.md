@@ -13,7 +13,8 @@ Stage 4, recorded by the agent. `B2 Require step-by-step justification`.
 | WebAssembly size (M2) | printed by `./scripts/build.sh` | 437 KB | 2026-11-04, Apple M2 Max |
 | Tick, four seats moving and shooting (M3, the same probe) | `cargo test --release -p tool_core --test tick_probe -- --ignored --nocapture` | mean 8 µs, 99th percentile 18 µs, worst 28 µs over 3 600 ticks | 2026-11-04, Apple M2 Max |
 | Tick, four seats with the air full: 96 grenades bouncing, the most it holds (M3) | the same command, second probe | mean 27 µs, 99th percentile 59 µs, worst 90 µs over 3 600 ticks; under the 100 µs target even at its worst | 2026-11-04, Apple M2 Max |
+| A frame online (M4): one browser of four, 100 ms of lag each way, rollbacks included | a one-off probe on `rollback/tests.rs`'s four-browser harness, release build; not kept, because the core's scan (`boundary.rs`) refuses a clock in its source | mean 34 µs, 99th percentile 49 µs, worst 75 µs over 1 200 frames; 1 186 rollbacks, at most 5 ticks run again | 2026-11-04, Apple M2 Max |
 
 ## Not measured
 
-- A frame in WebAssembly in a browser; the online frame (M4).
+- A frame in WebAssembly in a browser; online play between two real networks.

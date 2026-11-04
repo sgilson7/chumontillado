@@ -6,8 +6,8 @@
 //! the uniforms, the clear colour, mesh and instance values) are divided by
 //! the core's own `ONE` here, and the page's millisecond clock and pixel
 //! movement become the whole microseconds and hundredths of a pixel the
-//! core expects. (Chumworld Arena's shim, e78945b, less its save, hurt and
-//! online calls until a milestone needs them.)
+//! core expects. (Chumworld Arena's shim, e78945b, less its save and hurt
+//! calls; its online calls came back at M4.)
 //! `crates/core/tests/boundary.rs` fails if a branch, a loop or the `?`
 //! operator appears in this file.
 
@@ -105,6 +105,26 @@ impl Game {
     /// A screen, setting or flag: the new view model, or the error, as JSON.
     pub fn act(&mut self, name: &str, value: &str) -> String {
         api::act(&mut self.inner, name, value)
+    }
+
+    /// M4: the transport says a browser arrived.
+    pub fn online_connected(&mut self, peer: u32) {
+        self.inner.online_connected(peer)
+    }
+
+    /// M4: the transport says a browser left.
+    pub fn online_left(&mut self, peer: u32) {
+        self.inner.online_left(peer)
+    }
+
+    /// M4: text from a browser.
+    pub fn online_message(&mut self, peer: u32, text: &str) {
+        self.inner.online_message(peer, text)
+    }
+
+    /// M4: what the transport should send, as JSON `[[peer, text], ...]`.
+    pub fn online_outbox(&mut self) -> String {
+        self.inner.online_outbox()
     }
 }
 

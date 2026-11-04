@@ -17,6 +17,7 @@ use crate::page::{self, Strings};
 use crate::prim::MeshTable;
 use crate::render::{self, Frame, Group, Scene, Shapes};
 use crate::ticks::Clock;
+use crate::versus::{self, Cmd, Versus};
 use crate::world::{Bot, World};
 
 /// Software drawing (a CPU in place of a graphics card) draws a share of the
@@ -34,6 +35,8 @@ pub enum Screen {
     Play,
     Paused,
     Settings,
+    /// M4: hosting or joining, the lobby, or a match that has ended
+    Online,
 }
 
 impl Screen {
@@ -44,6 +47,7 @@ impl Screen {
             Screen::Play => "play",
             Screen::Paused => "paused",
             Screen::Settings => "settings",
+            Screen::Online => "online",
         }
     }
 }
@@ -78,10 +82,28 @@ pub struct Game {
     pub ui_version: u32,
     /// the HUD's last text, so the view model changes only when it does
     hud_seen: String,
+    /// M4: the online match or lobby, if any
+    pub versus: Option<Versus>,
+    /// the commands given to the page's transport, numbered from 1
+    pub cmds: Vec<Cmd>,
+    /// this build's name for the online hello, and this page's address for
+    /// the invite link (the page says both at start)
+    pub build: String,
+    pub address: String,
+    /// a room code the reader is typing toward, or that a link brought
+    pub invited: String,
+    /// the seed the page drew, for room codes
+    seed: u32,
+    /// the page's clock at the last frame (µs)
+    pub now_us: i64,
+    /// the last words of a match just left, still to send
+    outbox_left: Vec<(u32, String)>,
+    /// the field just copied to the clipboard, whose button says so
+    pub copied: String,
 }
 
 impl Game {
-    pub fn new(strings: &str, glossary: &str, look: &str, _seed: u32) -> Result<Game, String> {
+    pub fn new(strings: &str, glossary: &str, look: &str, seed: u32) -> Result<Game, String> {
         let strings = page::parse_strings(strings).map_err(|e| e.message())?;
         let look = Look::parse(look)?;
         let world = World::practice();
@@ -111,6 +133,15 @@ impl Game {
             frame: Frame::default(),
             ui_version: 1,
             hud_seen: String::new(),
+            versus: None,
+            cmds: Vec::new(),
+            build: "dev".into(),
+            address: String::new(),
+            invited: String::new(),
+            seed,
+            now_us: 0,
+            outbox_left: Vec::new(),
+            copied: String::new(),
         };
         g.draw();
         Ok(g)
@@ -159,7 +190,13 @@ impl Game {
     /// One display frame: the page's clock in microseconds, the held action
     /// bits, and the mouse and wheel movement in hundredths of a CSS pixel.
     pub fn advance(&mut self, now_us: i64, bits: u32, dx: i32, dy: i32, wheel: i32) {
+        self.now_us = now_us;
         let ticks = self.clock.frame(now_us, bits);
+        if self.in_match() {
+            self.advance_match(&ticks, dx, dy, wheel);
+            self.draw();
+            return;
+        }
         if self.screen == Screen::Play {
             self.pending.add(dx, dy, wheel);
             for (k, b) in ticks.iter().enumerate() {
@@ -186,9 +223,72 @@ impl Game {
         self.draw();
     }
 
+    /// M4: a frame of an online match. The match runs on whatever screen
+    /// shows (it cannot pause); only in play does the reader's input go in.
+    /// The look speed is applied to the mouse here, before the record is
+    /// made, so the world every browser runs turns each seat at 100%.
+    fn advance_match(&mut self, ticks: &[u32], dx: i32, dy: i32, wheel: i32) {
+        let playing = self.screen == Screen::Play;
+        if playing {
+            self.pending
+                .add(dx * self.look_pct / 100, dy * self.look_pct / 100, wheel);
+        } else {
+            self.pending.clear();
+        }
+        let now = self.now_us;
+        let Some(v) = self.versus.as_mut() else { return };
+        v.check_time(now);
+        for (k, b) in ticks.iter().enumerate() {
+            let m = if k == 0 && playing {
+                self.pending.take()
+            } else {
+                Mouse::default()
+            };
+            let bits = if playing { *b } else { 0 };
+            if let Some(s) = v.session_mut() {
+                s.local(Input::from_page(bits, m));
+                s.step();
+            }
+        }
+        self.alpha = self.clock.alpha();
+        if v.ended() {
+            self.show(Screen::Online);
+        }
+        self.follow_hud();
+    }
+
+    /// An online match is under way (not its lobby, and not ended).
+    pub fn in_match(&self) -> bool {
+        self.versus
+            .as_ref()
+            .is_some_and(|v| v.session().is_some() && !v.ended())
+    }
+
+    /// The world the view shows: the match's, or the room's.
+    pub fn view_world(&self) -> &World {
+        match self.versus.as_ref().and_then(|v| v.session()) {
+            Some(s) => &s.world,
+            None => &self.world,
+        }
+    }
+
+    /// The seat the view is from.
+    pub fn me(&self) -> usize {
+        match self.versus.as_ref().and_then(|v| v.session()) {
+            Some(s) => s.seat,
+            None => 0,
+        }
+    }
+
     /// The HUD's text changes: the view model does too.
     fn follow_hud(&mut self) {
-        let now = serde_json::to_string(&crate::api::hud(self)).unwrap_or_default();
+        // (and, online, the checksums the online check reads)
+        let sums = self
+            .versus
+            .as_ref()
+            .and_then(|v| v.session())
+            .and_then(|s| s.made.back().copied());
+        let now = serde_json::to_string(&crate::api::hud(self)).unwrap_or_default() + &format!("{sums:?}");
         if now != self.hud_seen {
             self.hud_seen = now;
             self.ui_version += 1;
@@ -213,12 +313,16 @@ impl Game {
             let eye = v3(0, fx::int(16), 0).sub(fwd.scale(fx::int(30)));
             return camera::eye_view(eye, aim, camera::vertical_fov(self.fov, self.aspect));
         }
-        self.world.camera(0, self.alpha, self.pending.peek(), self.aspect)
+        self.view_world()
+            .camera(self.me(), self.alpha, self.pending.peek(), self.aspect)
     }
 
     /// Builds the frame the page draws next.
     pub fn draw(&mut self) {
         self.world.fov = self.fov;
+        if let Some(s) = self.versus.as_mut().and_then(|v| v.session_mut()) {
+            s.world.fov = self.fov;
+        }
         let cam = self.camera();
         let origin = render::origin_for(cam.eye);
         if origin != self.scene.origin || self.scene.version == 0 {
@@ -233,14 +337,21 @@ impl Game {
         } else {
             Mouse::default()
         };
-        self.world
-            .draw(0, first_person, self.alpha, pending, &self.look, &mut moving);
+        self.view_world().draw(
+            self.me(),
+            first_person,
+            self.alpha,
+            pending,
+            &self.look,
+            &mut moving,
+        );
         crate::render::keep_visible(&mut moving.list, cam.eye);
         self.frame = Frame::build(&self.scene, &moving, &cam, self.aspect);
     }
 
     pub(crate) fn show(&mut self, s: Screen) {
         if self.screen != s {
+            self.copied.clear();
             self.screen = s;
             self.pending.clear();
             self.ui_version += 1;
@@ -259,6 +370,85 @@ impl Game {
         self.show(Screen::Play);
     }
 
+    /// M4: a room to host or join: the transport is told to open it.
+    fn open_room(&mut self, host: bool, code: &str) {
+        self.versus = Some(Versus::new(host, code, &self.build));
+        self.invited = code.to_string();
+        self.command("open", host, &crate::online::room_name(code));
+        self.show(Screen::Online);
+        self.ui_version += 1;
+    }
+
+    fn command(&mut self, act: &str, host: bool, room: &str) {
+        let id = self.cmds.len() as u32 + 1;
+        self.cmds.push(Cmd {
+            id,
+            act: act.into(),
+            host,
+            mode: "room".into(),
+            room: room.into(),
+            code: String::new(),
+        });
+    }
+
+    /// Leaves an online lobby or match, if one is open: the others are told
+    /// and the transport closes.
+    pub fn leave_online(&mut self) {
+        if let Some(mut v) = self.versus.take() {
+            v.leave();
+            // the bye goes out before the close
+            self.outbox_left = v.take_outbox();
+            self.command("close", false, "");
+            self.ui_version += 1;
+        }
+    }
+
+    /// The transport says a browser arrived.
+    pub fn online_connected(&mut self, peer: u32) {
+        if let Some(v) = self.versus.as_mut() {
+            v.connected(peer);
+            self.ui_version += 1;
+        }
+    }
+
+    /// The transport says a browser left.
+    pub fn online_left(&mut self, peer: u32) {
+        if let Some(v) = self.versus.as_mut() {
+            v.left(peer);
+            self.ui_version += 1;
+            if v.ended() {
+                self.show(Screen::Online);
+            }
+        }
+    }
+
+    /// Text from a browser.
+    pub fn online_message(&mut self, peer: u32, text: &str) {
+        let now = self.now_us;
+        let Some(v) = self.versus.as_mut() else { return };
+        let lobby = v.session().is_none();
+        let began = v.message(peer, text, now);
+        if lobby || v.ended() {
+            self.ui_version += 1;
+        }
+        if began {
+            self.clock.rest();
+            self.show(Screen::Play);
+        }
+        if self.versus.as_ref().is_some_and(|v| v.ended()) {
+            self.show(Screen::Online);
+        }
+    }
+
+    /// What the transport should send, as JSON `[[peer, text], ...]`.
+    pub fn online_outbox(&mut self) -> String {
+        let mut out = std::mem::take(&mut self.outbox_left);
+        if let Some(v) = self.versus.as_mut() {
+            out.extend(v.take_outbox());
+        }
+        serde_json::to_string(&out).unwrap_or_else(|_| "[]".into())
+    }
+
     /// A screen, setting or flag by name (`api::act` is the page's door).
     pub fn act(&mut self, name: &str, value: &str) -> Result<(), String> {
         let v = value.trim();
@@ -267,8 +457,69 @@ impl Game {
             "menu.practice" => self.practice(Bot::Moves),
             "menu.duel" => self.practice(Bot::Shoots),
             "play.resume" => self.show(Screen::Play),
-            "play.restart" => self.practice(self.bot),
-            "screen.menu" => self.show(Screen::Menu),
+            "play.restart" => {
+                if self.versus.is_none() {
+                    self.practice(self.bot)
+                }
+            }
+            "screen.menu" => {
+                self.leave_online();
+                self.show(Screen::Menu)
+            }
+            // M4: online play
+            "online.build" => self.build = v.to_string(),
+            "online.address" => self.address = v.to_string(),
+            "online.host" => {
+                self.leave_online();
+                let code = versus::make_code(self.seed ^ (self.now_us as u32));
+                self.open_room(true, &code);
+            }
+            "online.join" => {
+                self.leave_online();
+                self.invited.clear();
+                self.show(Screen::Online);
+                self.ui_version += 1;
+            }
+            // a typed code, a pasted code or link, or the page opened from
+            // an invite link (`?join=CODE`): straight into the room
+            "online.room" | "online.link" => {
+                let code = versus::read_code(v).ok_or_else(|| self.strings.get("online.bad_room"))?;
+                self.leave_online();
+                self.open_room(false, &code);
+            }
+            "online.start" => {
+                let started = self.versus.as_mut().is_some_and(|x| x.start());
+                if !started {
+                    return Err(self.strings.get("online.not_host"));
+                }
+                self.clock.rest();
+                self.show(Screen::Play);
+                self.ui_version += 1;
+            }
+            "online.error" => {
+                let key = versus::TRANSPORT_ERRORS
+                    .iter()
+                    .copied()
+                    .find(|k| *k == v)
+                    .unwrap_or("online.no_relay");
+                let Some(x) = self.versus.as_mut() else {
+                    return Ok(());
+                };
+                // one pair that cannot link is carried by the host (CS-Q6:
+                // A); only a guest that cannot reach the host has lost
+                let fatal = key != "online.no_path" || !x.host && x.links().host_peer().is_none();
+                if !fatal {
+                    return Ok(());
+                }
+                x.error = Some(key);
+                self.show(Screen::Online);
+                self.ui_version += 1;
+            }
+            "page.leaving" => self.leave_online(),
+            "online.copied" => {
+                self.copied = v.to_string();
+                self.ui_version += 1;
+            }
             "screen.settings" => {
                 if self.screen != Screen::Settings {
                     self.settings_from = self.screen;
@@ -282,6 +533,7 @@ impl Game {
                 Screen::Play => self.show(Screen::Paused),
                 Screen::Paused => self.show(Screen::Play),
                 Screen::Settings => self.show(self.settings_from),
+                Screen::Online if self.versus.is_none() => self.show(Screen::Menu),
                 _ => {}
             },
             "pointer.lost" | "page.hidden" => {
@@ -341,7 +593,7 @@ impl Game {
 
     /// The speed shown on the HUD (m/s, Q16.16).
     pub fn speed(&self) -> Fx {
-        self.world.players[0].body.speed()
+        self.view_world().players[self.me()].body.speed()
     }
 
     /// Whether the page should hold the pointer.
@@ -439,5 +691,118 @@ pub(crate) mod tests {
         g.advance(1_000, 0, 5_000, 0, 0);
         assert_eq!(g.world.tick, ticks);
         assert_ne!(g.camera().fwd, before, "the view turned before the tick");
+    }
+    // ---- M4: online ------------------------------------------------------
+
+    #[test]
+    fn hosting_shows_the_room_code_and_an_invite_link_and_tells_the_transport_to_open_the_room() {
+        let mut g = game();
+        g.act("online.address", "https://sgilson7.github.io/chumontillado/")
+            .unwrap();
+        g.act("online.host", "").unwrap();
+        assert_eq!(g.screen, Screen::Online);
+        let code = g.versus.as_ref().unwrap().code.clone();
+        assert_eq!(crate::versus::read_code(&code), Some(code.clone()));
+        let ui = crate::api::ui(&g);
+        let fields: Vec<(String, String)> = ui.panels[0]
+            .fields
+            .iter()
+            .map(|f| (f.id.clone(), f.value.clone()))
+            .collect();
+        assert_eq!(
+            fields,
+            vec![
+                ("room-code".into(), code.clone()),
+                (
+                    "invite-link".into(),
+                    format!("https://sgilson7.github.io/chumontillado/?join={code}")
+                ),
+            ]
+        );
+        let cmd = g.cmds.last().unwrap();
+        assert_eq!(
+            (cmd.act.as_str(), cmd.host, cmd.room.clone()),
+            ("open", true, format!("chumontillado-p1-{code}"))
+        );
+        // the host's seats: itself, and three bots until guests come
+        let rows: Vec<String> = ui.panels[0].rows.iter().map(|r| r.does.clone()).collect();
+        assert_eq!(rows[0], g.strings.get("seat_you"));
+        assert_eq!(rows[3], g.strings.get("seat_bot"));
+    }
+
+    #[test]
+    fn an_invite_link_joins_its_room_at_once_and_a_bad_code_is_refused_in_words() {
+        let mut g = game();
+        g.act("online.link", "kqxrt").unwrap();
+        let v = g.versus.as_ref().unwrap();
+        assert_eq!((v.host, v.code.as_str()), (false, "KQXRT"));
+        assert_eq!(g.cmds.last().unwrap().room, "chumontillado-p1-KQXRT");
+        assert_eq!(g.screen, Screen::Online);
+        let mut g = game();
+        assert_eq!(
+            g.act("online.room", "KQXRO"),
+            Err(g.strings.get("online.bad_room"))
+        );
+        assert!(g.versus.is_none());
+    }
+
+    #[test]
+    fn leaving_tells_the_others_and_closes_the_transport() {
+        let mut g = game();
+        g.act("online.host", "").unwrap();
+        g.online_connected(7);
+        let _ = g.online_outbox();
+        g.act("screen.menu", "").unwrap();
+        assert!(g.versus.is_none());
+        assert_eq!(g.cmds.last().unwrap().act, "close");
+        let out = g.online_outbox();
+        assert!(out.contains("bye") || out == "[]", "{out}");
+        assert_eq!(g.screen, Screen::Menu);
+    }
+
+    #[test]
+    fn a_pair_that_cannot_link_ends_nothing_for_the_host_but_a_guest_without_the_host_has_lost() {
+        let mut g = game();
+        g.act("online.host", "").unwrap();
+        g.act("online.error", "online.no_path").unwrap();
+        assert!(!g.versus.as_ref().unwrap().ended(), "the host carries on");
+        let mut g = game();
+        g.act("online.link", "KQXRT").unwrap();
+        g.act("online.error", "online.no_path").unwrap();
+        assert_eq!(g.versus.as_ref().unwrap().status(), "online.no_path");
+        // and no relay at all ends a host's room too
+        let mut g = game();
+        g.act("online.host", "").unwrap();
+        g.act("online.error", "online.no_relay").unwrap();
+        assert!(g.versus.as_ref().unwrap().ended());
+    }
+
+    #[test]
+    fn online_the_look_speed_scales_the_mouse_before_the_record_so_every_browser_turns_alike() {
+        // a match of one person and three bots, started by its host
+        let mut g = game();
+        g.act("look.speed", "200").unwrap();
+        g.act("online.host", "").unwrap();
+        g.act("online.start", "").unwrap();
+        assert_eq!(g.screen, Screen::Play);
+        let s = g.versus.as_ref().unwrap().session().unwrap();
+        assert_eq!(
+            s.world.players[0].aim.pct, 100,
+            "the world turns every seat at 100%"
+        );
+        // 1 000 hundredths of a pixel at 200% is the record's 2 000; a
+        // record is used two ticks after it is made, so five frames
+        let frames = |g: &mut Game, dx: i32| {
+            for k in 0..5 {
+                g.advance(k * 16_667, 0, if k == 0 { dx } else { 0 }, 0, 0);
+            }
+            g.view_world().players[0].aim.yaw
+        };
+        let yaw_once = frames(&mut g, 1_000);
+        let mut h = game();
+        h.act("online.host", "").unwrap();
+        h.act("online.start", "").unwrap();
+        assert_eq!(frames(&mut h, 2_000), yaw_once);
+        assert_ne!(yaw_once, 0);
     }
 }

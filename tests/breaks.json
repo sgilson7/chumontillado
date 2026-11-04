@@ -135,8 +135,8 @@
   {
     "name": "M1 reset",
     "file": "crates/core/src/world.rs",
-    "find": "            if input.key(RESET) {",
-    "replace": "            if input.key(RESET) && false {",
+    "find": "                if input.key(RESET) && !online {",
+    "replace": "                if input.key(RESET) && false {",
     "test": "r_puts_the_player_back_at_the_spawn"
   },
   {
@@ -733,5 +733,187 @@
     "find": "        .add(dir.scale(fx::mul(weapons::HOOK_PULL, dt)))",
     "replace": "        .add(dir.scale(fx::mul(0, dt)))",
     "test": "the_guadana_hook_pulls_you_to_a_wall_in_reach_while_held_and_lets_go_when_released"
+  },
+  {
+    "name": "M4 the host gives the lowest free seat",
+    "file": "crates/core/src/online.rs",
+    "find": "let free = (1..SEATS).find(|&s| !holds(self.seats, s));",
+    "replace": "let free = (1..SEATS).rev().find(|&s| !holds(self.seats, s));",
+    "test": "the_host_seats_guests_in_turn_and_turns_away_a_fifth"
+  },
+  {
+    "name": "M4 a fifth is told the room is full",
+    "file": "crates/core/src/online.rs",
+    "find": "                        why: FULL.to_string(),",
+    "replace": "                        why: LEFT_ROOM.to_string(),",
+    "test": "the_host_seats_guests_in_turn_and_turns_away_a_fifth"
+  },
+  {
+    "name": "M4 another build is turned away",
+    "file": "crates/core/src/online.rs",
+    "find": "if protocol != PROTOCOL || build != self.build {",
+    "replace": "if protocol != PROTOCOL {",
+    "test": "another_build_is_turned_away_and_both_ends_say_why"
+  },
+  {
+    "name": "M4 data before a hello is refused",
+    "file": "crates/core/src/online.rs",
+    "find": "                // data before a hello: not one of ours\n                self.status = GARBLED;",
+    "replace": "                // data before a hello: not one of ours\n                self.status = WAITING;",
+    "test": "garbage_changes_the_status_and_nothing_else_and_data_before_a_hello_is_refused"
+  },
+  {
+    "name": "M4 a guest leaving the lobby frees its seat",
+    "file": "crates/core/src/online.rs",
+    "find": "        } else {\n            self.seats &= !(1 << seat);",
+    "replace": "        } else {\n            self.seats &= !0;",
+    "test": "a_guest_leaving_the_lobby_frees_its_seat_and_during_the_match_is_reported_gone"
+  },
+  {
+    "name": "M4 a guest that loses the host has lost",
+    "file": "crates/core/src/online.rs",
+    "find": "        if o.host {\n            self.status = HOST_LEFT;\n            return None;\n        }",
+    "replace": "        if o.host {\n            return None;\n        }",
+    "test": "a_guest_that_loses_the_host_has_lost_the_match"
+  },
+  {
+    "name": "M4 a differing checksum is a desync",
+    "file": "crates/core/src/online.rs",
+    "find": "                self.status = DESYNC;",
+    "replace": "                self.status = PLAYING;",
+    "test": "a_checksum_that_differs_from_this_browsers_is_a_desync"
+  },
+  {
+    "name": "M4 a wrong guess is run again",
+    "file": "crates/core/src/rollback.rs",
+    "find": "        if tick < self.tick && self.used.get(&tick).map(|u| u[seat]) != Some(input) {",
+    "replace": "        if false && tick < self.tick && self.used.get(&tick).map(|u| u[seat]) != Some(input) {",
+    "test": "four_browsers_with_lag_end_on_the_world_one_browser_reaches_on_time"
+  },
+  {
+    "name": "M4 the window holds a browser back",
+    "file": "crates/core/src/rollback.rs",
+    "find": "        self.tick >= self.frontier().saturating_add(WINDOW)",
+    "replace": "        self.tick >= self.frontier().saturating_add(WINDOW * 2)",
+    "test": "a_browser_runs_no_more_than_the_window_past_a_silent_seat"
+  },
+  {
+    "name": "M4 the host passes records on",
+    "file": "crates/core/src/rollback.rs",
+    "find": "                    self.links.pass_on(&Msg::Input { seat, tick, input }, from);",
+    "replace": "                    let _ = from;",
+    "test": "two_guests_that_cannot_link_hear_each_other_through_the_host"
+  },
+  {
+    "name": "M4 the host tells everyone of a drop",
+    "file": "crates/core/src/rollback.rs",
+    "find": "        self.links.broadcast(&Msg::Drop { seat, from }, None);",
+    "replace": "        let _ = from;",
+    "test": "a_guest_who_leaves_is_played_by_its_bot_from_the_tick_the_host_chose_on_every_browser"
+  },
+  {
+    "name": "M4 a drop runs again from its tick",
+    "file": "crates/core/src/rollback.rs",
+    "find": "        if from < self.tick {\n            self.redo",
+    "replace": "        if false && from < self.tick {\n            self.redo",
+    "test": "a_guest_who_leaves_is_played_by_its_bot_from_the_tick_the_host_chose_on_every_browser"
+  },
+  {
+    "name": "M4 the bot takes the seat at the drop's tick",
+    "file": "crates/core/src/rollback.rs",
+    "find": "            if self.drops[s] == Some(t) {",
+    "replace": "            if self.drops[s] == Some(t + 1) {",
+    "test": "a_guest_who_leaves_is_played_by_its_bot_from_the_tick_the_host_chose_on_every_browser"
+  },
+  {
+    "name": "M4 two different records for a tick are garbled",
+    "file": "crates/core/src/rollback.rs",
+    "find": "            if *had != input {\n                self.links.status = GARBLED;",
+    "replace": "            if *had != input {\n                self.links.status = self.links.status;",
+    "test": "a_record_that_comes_twice_is_kept_once_and_two_different_ones_are_garbled"
+  },
+  {
+    "name": "M4 only confirmed worlds are summed",
+    "file": "crates/core/src/rollback.rs",
+    "find": "        while self.next_sum <= self.tick && self.next_sum <= self.frontier() && self.redo.is_none() {",
+    "replace": "        while self.next_sum <= self.tick && self.redo.is_none() {",
+    "test": "four_browsers_with_lag_end_on_the_world_one_browser_reaches_on_time"
+  },
+  {
+    "name": "M4 empty seats are bots",
+    "file": "crates/core/src/world.rs",
+    "find": "                if !crate::online::holds(seats, s) {",
+    "replace": "                if s > 3 && !crate::online::holds(seats, s) {",
+    "test": "two_people_play_with_bots_in_the_empty_seats"
+  },
+  {
+    "name": "M4 a code is read from a whole link",
+    "file": "crates/core/src/versus.rs",
+    "find": "        Some(at) => text[at + key.len()..].split(['&', '#']).next().unwrap_or(\"\"),",
+    "replace": "        Some(_) => text,",
+    "test": "a_room_code_is_read_from_what_was_typed_or_from_a_whole_invite_link"
+  },
+  {
+    "name": "M4 ten seconds of silence ends a guest's match",
+    "file": "crates/core/src/versus.rs",
+    "find": "            Some(t) if now_us - t > TIMEOUT_US && self.links().host_peer().is_some() => {",
+    "replace": "            Some(t) if now_us - t >= TIMEOUT_US && self.links().host_peer().is_some() => {",
+    "test": "a_guest_that_hears_nothing_from_the_host_for_ten_seconds_has_lost_it"
+  },
+  {
+    "name": "M4 a transport error ends the room",
+    "file": "crates/core/src/versus.rs",
+    "find": "        ENDED.contains(&self.status()) || self.error.is_some()",
+    "replace": "        ENDED.contains(&self.status())",
+    "test": "a_pair_that_cannot_link_ends_nothing_for_the_host_but_a_guest_without_the_host_has_lost"
+  },
+  {
+    "name": "M4 the invite link carries the code",
+    "file": "crates/core/src/versus.rs",
+    "find": "    format!(\"{address}?{LINK_KEY}={code}\")",
+    "replace": "    format!(\"{address}#{LINK_KEY}={code}\")",
+    "test": "the_invite_link_is_the_page_with_the_code_and_reads_back_to_it"
+  },
+  {
+    "name": "M4 the host's invite link on the screen",
+    "file": "crates/core/src/versus.rs",
+    "find": "    format!(\"{address}?{LINK_KEY}={code}\")",
+    "replace": "    format!(\"{address}#{LINK_KEY}={code}\")",
+    "test": "hosting_shows_the_room_code_and_an_invite_link_and_tells_the_transport_to_open_the_room"
+  },
+  {
+    "name": "M4 one pair that cannot link is not fatal",
+    "file": "crates/core/src/game.rs",
+    "find": "key != \"online.no_path\" || !x.host && x.links().host_peer().is_none();",
+    "replace": "true;",
+    "test": "a_pair_that_cannot_link_ends_nothing_for_the_host_but_a_guest_without_the_host_has_lost"
+  },
+  {
+    "name": "M4 the look speed scales the record",
+    "file": "crates/core/src/game.rs",
+    "find": ".add(dx * self.look_pct / 100, dy * self.look_pct / 100, wheel);",
+    "replace": ".add(dx, dy * self.look_pct / 100, wheel);",
+    "test": "online_the_look_speed_scales_the_mouse_before_the_record_so_every_browser_turns_alike"
+  },
+  {
+    "name": "M4 the lobby shows empty seats as bots'",
+    "file": "crates/core/src/api.rs",
+    "find": "                } else if crate::online::holds(v.seats(), k) {",
+    "replace": "                } else if k < 9 {",
+    "test": "hosting_shows_the_room_code_and_an_invite_link_and_tells_the_transport_to_open_the_room"
+  },
+  {
+    "name": "M4 leaving closes the transport",
+    "file": "crates/core/src/game.rs",
+    "find": "            self.command(\"close\", false, \"\");",
+    "replace": "            let _ = 0;",
+    "test": "leaving_tells_the_others_and_closes_the_transport"
+  },
+  {
+    "name": "M4 a link joins at once",
+    "file": "crates/core/src/game.rs",
+    "find": "                self.open_room(false, &code);",
+    "replace": "                let _ = code;",
+    "test": "an_invite_link_joins_its_room_at_once_and_a_bad_code_is_refused_in_words"
   }
 ]

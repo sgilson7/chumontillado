@@ -1,7 +1,7 @@
 // The page draws what the core returns and decides nothing.
 //
-// Chumworld Arena's page (e78945b) less its save, health bars, watch mode
-// and online play (M1). It loads the data files, starts the core through
+// Chumworld Arena's page (e78945b) less its save, health bars and watch
+// mode; its online play came back at M4. It loads the data files, starts the core through
 // the shim, and each display frame passes the clock, the held actions and
 // the mouse and wheel movement in, then draws the frame that comes out
 // (gl.js). The screen's panels and the lines over play are built from the
@@ -101,13 +101,54 @@ async function main() {
     node.disabled = !a.enabled;
     node.dataset.action = a.name;
     node.dataset.value = a.value;
+    if (a.copies) node.dataset.copies = a.copies;
     node.addEventListener("click", () => {
+      // M4: a copy button puts a field's text on the clipboard, and says so
+      // (the core then labels it Copied; where the clipboard is refused,
+      // the text stays selected to copy by hand)
+      if (a.copies) {
+        const box = el(a.copies);
+        box.select();
+        navigator.clipboard.writeText(box.value).then(() => act("online.copied", a.copies), () => {});
+        return;
+      }
       // the browser grants the pointer only inside a click
       if (a.engage) input.engage();
       node.blur();
-      act(a.name, a.value);
+      // M4: a button that sends what was typed into a field
+      act(a.name, a.from ? el(a.from).value : a.value);
     });
     return node;
+  }
+
+  // M4: a box of text: a code or link to copy (fixed), or a box to type in.
+  function field(f) {
+    const label = make("label", undefined, "field");
+    const box = make("input");
+    box.id = f.id;
+    box.value = f.value;
+    box.readOnly = f.fixed;
+    box.spellcheck = false;
+    box.autocomplete = "off";
+    if (f.fixed) box.addEventListener("focus", () => box.select());
+    label.append(make("span", f.label, "label"), box);
+    return label;
+  }
+
+  // M4: online play. Nothing for it loads until the core gives the
+  // transport its first command (Host or Join); then the one page file that
+  // reaches the transport is imported (web/online.js).
+  let online = null;
+  let onlineLoading = null;
+  function follow(o) {
+    el("online-sums").textContent = o.sums;
+    if (online) online.follow(o);
+    else if (o.cmds.length && !onlineLoading) {
+      onlineLoading = import("./online.js").then((m) => {
+        online = m.makeOnline(game, (name, value) => act(name, value));
+        online.follow(ui.online);
+      });
+    }
   }
 
   function panel(p) {
@@ -122,6 +163,7 @@ async function main() {
       row.append(make("span", s.label, "label"), value, ...s.actions.map(button));
       box.append(row);
     });
+    (p.fields || []).forEach((f) => box.append(field(f)));
     (p.actions || []).forEach((a) => box.append(button(a)));
     if (p.rows) {
       if (p.rows_heading) box.append(make("h2", p.rows_heading));
@@ -157,6 +199,7 @@ async function main() {
       });
     }
     el("overlay").hidden = u.panels.length === 0;
+    follow(u.online);
     for (const item of u.hud) {
       let node = el(`hud-${item.id}`);
       if (!node) {
@@ -189,6 +232,11 @@ async function main() {
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) act("page.hidden", "");
   });
+  // M4: a page closing or navigated away leaves an online match first
+  window.addEventListener("pagehide", () => {
+    act("page.leaving", "");
+    if (online) online.pump();
+  });
   // in play, a click on the view takes the pointer again if it was let go
   canvas.addEventListener("mousedown", () => {
     if (ui && ui.capture && !input.engaged()) input.engage();
@@ -203,6 +251,14 @@ async function main() {
     const [name, value] = asked.split(":");
     act(name, value || "");
   }
+  // M4: this build's name for the online hello, from this module's own
+  // stamped address (scripts/build.sh), so two builds are told apart
+  act("online.build", new URL(import.meta.url).searchParams.get("v") || "dev");
+  // this page's address, for the host's invite link
+  act("online.address", location.origin + location.pathname);
+  // opened from an invite link (?join=CODE): the core joins that room
+  const joining = params.get("join");
+  if (joining) act("online.link", joining);
   show(JSON.parse(game.ui()).ok);
 
   function resize() {
@@ -222,6 +278,8 @@ async function main() {
       renderer.setStatic(game.static_values());
     }
     renderer.frame(game.view(), game.instances(), game.draws());
+    // M4: what this frame's ticks left for the other browsers
+    if (online) online.pump();
     if (game.ui_version() !== uiVersion) {
       uiVersion = game.ui_version();
       show(JSON.parse(game.ui()).ok);

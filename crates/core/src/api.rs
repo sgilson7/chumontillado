@@ -32,6 +32,34 @@ pub struct Action {
     pub label: String,
     pub enabled: bool,
     pub engage: bool,
+    /// M4: the field whose text this button sends as its value, if any
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub from: String,
+    /// M4: the field whose text this button copies, if any (the page's
+    /// clipboard; nothing goes through `act`)
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub copies: String,
+}
+
+/// M4: a box of text: a code or link to copy (`fixed`), or a box to type
+/// a code into.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Field {
+    pub id: String,
+    pub label: String,
+    pub value: String,
+    pub fixed: bool,
+}
+
+/// M4: online play as the page's transport needs it: the commands to run,
+/// and the status key.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct OnlineView {
+    pub cmds: Vec<crate::versus::Cmd>,
+    pub status: String,
+    /// this browser's checksums, `tick:sum` newest last, for the online
+    /// check to compare across browsers
+    pub sums: String,
 }
 
 /// A setting's row: its name, its value in words, and the buttons that
@@ -61,6 +89,8 @@ pub struct Panel {
     pub text: String,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub settings: Vec<Setting>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub fields: Vec<Field>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub actions: Vec<Action>,
     #[serde(skip_serializing_if = "String::is_empty")]
@@ -96,6 +126,8 @@ pub struct Ui {
     pub hints: Vec<Hint>,
     /// shown where WebGL 2 is missing
     pub no_webgl: String,
+    /// M4
+    pub online: OnlineView,
 }
 
 fn action(g: &Game, name: &str, value: &str, label_key: &str, engage: bool) -> Action {
@@ -105,7 +137,87 @@ fn action(g: &Game, name: &str, value: &str, label_key: &str, engage: bool) -> A
         label: g.strings.get(label_key),
         enabled: true,
         engage,
+        from: String::new(),
+        copies: String::new(),
     }
+}
+
+fn field(g: &Game, id: &str, label: &str, value: &str, fixed: bool) -> Field {
+    Field {
+        id: id.into(),
+        label: g.strings.get(label),
+        value: value.into(),
+        fixed,
+    }
+}
+
+/// M4: the online screen: hosting (the room code, the invite link, the
+/// seats and Start), joining (a box for the code), a guest's lobby, or a
+/// match that has ended and why.
+fn online_panel(g: &Game) -> Panel {
+    let s = &g.strings;
+    let mut p = panel("online");
+    let leave = action(g, "screen.menu", "", "leave", false);
+    let Some(v) = g.versus.as_ref() else {
+        // Join: a box for the code, or the whole link
+        p.heading = s.get("join_match");
+        p.text = s.get("join_text");
+        p.fields = vec![field(g, "room-in", "room_code", &g.invited, false)];
+        p.actions = vec![
+            Action {
+                from: "room-in".into(),
+                ..action(g, "online.room", "", "join", false)
+            },
+            action(g, "screen.menu", "", "back", false),
+        ];
+        return p;
+    };
+    if v.ended() {
+        p.heading = s.get("match_ended");
+        p.text = s.get(v.status());
+        p.actions = vec![action(g, "screen.menu", "", "to_menu", false)];
+        return p;
+    }
+    p.heading = s.get(if v.host { "host_match" } else { "join_match" });
+    p.text = s.get(match (v.host, v.seat()) {
+        (true, _) => "host_text",
+        (false, None) => "joining_text",
+        (false, Some(_)) => "online.lobby",
+    });
+    p.fields = vec![field(g, "room-code", "room_code", &v.code, true)];
+    // a copy button says Copied once its text is on the clipboard
+    let copy = |id: &str, label: &str| Action {
+        copies: id.into(),
+        ..action(g, "", "", if g.copied == id { "copied" } else { label }, false)
+    };
+    let mut copies = vec![copy("room-code", "copy_code")];
+    if !g.address.is_empty() {
+        let link = crate::versus::invite_link(&g.address, &v.code);
+        p.fields.push(field(g, "invite-link", "invite_link", &link, true));
+        copies.push(copy("invite-link", "copy_link"));
+    }
+    p.actions = copies;
+    if v.host {
+        p.actions.push(action(g, "online.start", "", "start_match", true));
+    }
+    p.actions.push(leave);
+    // the seats, once this browser knows them
+    if v.host || v.seat().is_some() {
+        p.rows_heading = s.get("seats");
+        p.rows = (0..crate::online::SEATS)
+            .map(|k| Row {
+                key: s.get("seat_n").replace("{n}", &(k + 1).to_string()),
+                does: s.get(if Some(k) == v.seat() {
+                    "seat_you"
+                } else if crate::online::holds(v.seats(), k) {
+                    "seat_player"
+                } else {
+                    "seat_bot"
+                }),
+            })
+            .collect();
+    }
+    p
 }
 
 fn panel(id: &str) -> Panel {
@@ -117,6 +229,7 @@ fn panel(id: &str) -> Panel {
         actions: Vec::new(),
         rows_heading: String::new(),
         rows: Vec::new(),
+        fields: Vec::new(),
     }
 }
 
@@ -180,7 +293,7 @@ fn charge_pct(a: &crate::arms::Arms) -> i32 {
 /// a reload, the Pincel's charge, being down, and the hit and kill marks.
 pub fn hud(g: &Game) -> Vec<Hud> {
     let playing = g.screen == Screen::Play;
-    let p = &g.world.players[0];
+    let p = &g.view_world().players[g.me()];
     let b = &p.body;
     // the katana in hand allows a fourth (M3)
     let left = (p.tuning().wall_jumps - b.wall_jumps).max(0);
@@ -219,7 +332,19 @@ pub fn hud(g: &Game) -> Vec<Hud> {
                 .replace("{speed}", &world::speed_text(p.top_speed)),
             playing,
         ),
-        line("hint", g.strings.get("hint_play"), playing && g.world.tick < 600),
+        line(
+            "hint",
+            g.strings.get("hint_play"),
+            playing && g.versus.is_none() && g.world.tick < 600,
+        ),
+        // M4: online, which seat is yours, for the match's first seconds
+        line(
+            "online",
+            g.strings
+                .get("hud_seat")
+                .replace("{n}", &(g.me() + 1).to_string()),
+            playing && g.in_match() && g.view_world().tick < 600,
+        ),
         // M2: health, the gun and its rounds, reloading, the Pincel's charge
         line(
             "health",
@@ -272,6 +397,8 @@ pub fn ui(g: &Game) -> Ui {
             p.actions = vec![
                 action(g, "menu.practice", "", "practice", true),
                 action(g, "menu.duel", "", "duel", true),
+                action(g, "online.host", "", "host_match", false),
+                action(g, "online.join", "", "join_match", false),
                 action(g, "screen.settings", "", "settings", false),
             ];
             panels.push(p);
@@ -280,12 +407,22 @@ pub fn ui(g: &Game) -> Ui {
         Screen::Paused => {
             let mut p = panel("paused");
             p.heading = g.strings.get("paused");
-            p.actions = vec![
-                action(g, "play.resume", "", "resume", true),
-                action(g, "play.restart", "", "restart", true),
-                action(g, "screen.settings", "", "settings", false),
-                action(g, "screen.menu", "", "to_menu", false),
-            ];
+            p.actions = if g.versus.is_some() {
+                // online: the match runs on behind the pause, and cannot be
+                // started again
+                vec![
+                    action(g, "play.resume", "", "resume", true),
+                    action(g, "screen.settings", "", "settings", false),
+                    action(g, "screen.menu", "", "leave", false),
+                ]
+            } else {
+                vec![
+                    action(g, "play.resume", "", "resume", true),
+                    action(g, "play.restart", "", "restart", true),
+                    action(g, "screen.settings", "", "settings", false),
+                    action(g, "screen.menu", "", "to_menu", false),
+                ]
+            };
             p.rows_heading = g.strings.get("controls");
             p.rows = controls(g);
             panels.push(p);
@@ -297,6 +434,7 @@ pub fn ui(g: &Game) -> Ui {
             p.actions = vec![action(g, "settings.back", "", "back", false)];
             panels.push(p);
         }
+        Screen::Online => panels.push(online_panel(g)),
     }
     Ui {
         title: g.strings.get("title"),
@@ -313,6 +451,22 @@ pub fn ui(g: &Game) -> Ui {
             })
             .collect(),
         no_webgl: g.strings.get("no_webgl"),
+        online: OnlineView {
+            cmds: g.cmds.clone(),
+            status: g.versus.as_ref().map(|v| v.status()).unwrap_or("").into(),
+            sums: g
+                .versus
+                .as_ref()
+                .and_then(|v| v.session())
+                .map(|s| {
+                    s.made
+                        .iter()
+                        .map(|(t, sum)| format!("{t}:{sum:x}"))
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                })
+                .unwrap_or_default(),
+        },
     }
 }
 

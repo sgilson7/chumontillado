@@ -110,14 +110,14 @@ fn hopping_and_strafing_builds_speed_past_the_run_and_landing_late_does_not() {
         // a bare floor 400 m across: the room's ramps would get in the way of
         // the circles a strafer turns
         let mut w = World::practice();
-        w.map = crate::map::Map {
+        w.map = Rc::new(crate::map::Map {
             brushes: vec![crate::map::block(
                 v3(-int(200), -ONE, -int(200)),
                 v3(int(200), 0, int(200)),
                 crate::map::Surface::Floor,
             )],
             spawns: vec![(V3::ZERO, 0)],
-        };
+        });
         w.players[0].body.origin = V3::ZERO;
         w.players[0].prev = V3::ZERO;
         run(&mut w, Input::default(), 10);
@@ -455,14 +455,14 @@ fn a_slide_jump_counts_up_to_a_fifth_of_a_second_after_the_slide_ends() {
 fn holding_crouch_and_jump_chains_slide_jumps_landing_after_landing() {
     let mut w = World::practice();
     // a bare floor, room to run straight
-    w.map = crate::map::Map {
+    w.map = Rc::new(crate::map::Map {
         brushes: vec![crate::map::block(
             v3(-int(400), -ONE, -int(400)),
             v3(int(400), 0, int(400)),
             crate::map::Surface::Floor,
         )],
         spawns: vec![(V3::ZERO, 0)],
-    };
+    });
     w.players[0].body.origin = V3::ZERO;
     run(&mut w, keys(FORWARD), 60);
     let mut chained = 0;
@@ -821,10 +821,10 @@ fn bare(north: i32, south: i32) -> World {
             Surface::Wall,
         ));
     }
-    w.map = Map {
+    w.map = Rc::new(Map {
         brushes,
         spawns: vec![(V3::ZERO, 0)],
-    };
+    });
     w.players.truncate(1);
     w.dummies.clear();
     w.players[0] = Player::at((V3::ZERO, 0));

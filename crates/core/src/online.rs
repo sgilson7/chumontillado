@@ -1,0 +1,660 @@
+//! Online play, core side (M4): what crosses the wire between up to four
+//! browsers, and the bookkeeping each keeps about the others.
+//!
+//! Chumworld Arena's `online.rs` (e78945b), from two seats to four (CS-2,
+//! R8.1). The transport (`web/links/rtc.js`) connects browsers and carries
+//! text; it hands this module three things: a peer arrived, a peer left,
+//! and text from a peer. This module answers by leaving text in an outbox,
+//! which the transport sends. It never sees a connection, so `cargo test`
+//! plays a whole match between four simulated browsers, with lag, in a few
+//! milliseconds.
+//!
+//! The shape (CS-Q6: A): every browser links to every other through the
+//! room, and the host also passes on every record, checksum and drop it
+//! hears from one guest to the others. So two guests that cannot link to
+//! each other still hear each other, a little later, through the host; a
+//! record that comes twice, once directly and once passed on, is the same
+//! record and is kept once.
+//!
+//! The host is seat 0. It gives each guest a seat as its hello is accepted,
+//! tells everyone who holds a seat, and starts the match when its player
+//! chooses; seats nobody holds are played by bots (CS-Q17: A). A guest who
+//! leaves during the match is played by its bot from a tick the host
+//! chooses and tells everyone (`Msg::Drop`).
+//!
+//! Every status is a key for a string in `data/strings.json`.
+
+use crate::input::Input;
+use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, VecDeque};
+
+/// Bumped whenever a message changes shape or a rule changes how a tick
+/// runs. It is in the room's name, so a stale tab and a fresh one still
+/// meet, and the hello turns the stale one away with a reason.
+pub const PROTOCOL: u32 = 1;
+
+/// The first part of each room's name, keeping this game's rooms apart
+/// from every other app on the same public relays.
+pub const APP_ID: &str = "chumontillado";
+
+/// The seats in a match: the host's and three more.
+pub const SEATS: usize = 4;
+
+/// Ticks between a local record and the tick that uses it (two ticks,
+/// 33 ms, as the arena's).
+pub const DELAY: u32 = 2;
+
+/// Ticks between checksums (half a second).
+pub const SUM_EVERY: u32 = 30;
+
+/// Status keys. Each has a string in `data/strings.json`.
+pub const WAITING: &str = "online.waiting";
+pub const LOBBY: &str = "online.lobby";
+pub const PLAYING: &str = "online.playing";
+pub const RELOAD: &str = "online.reload";
+pub const GARBLED: &str = "online.garbled";
+pub const LEFT_ROOM: &str = "online.left";
+pub const HOST_LEFT: &str = "online.host_left";
+pub const FULL: &str = "online.full";
+pub const DESYNC: &str = "online.desync";
+
+/// The reasons a `Bye` may carry; anything else reads as `LEFT_ROOM`.
+const REASONS: &[&str] = &[RELOAD, FULL];
+
+/// The transport's id for another browser.
+pub type Peer = u32;
+
+/// Which seats people hold, one bit a seat.
+pub type Seats = u8;
+
+pub fn holds(seats: Seats, seat: usize) -> bool {
+    seat < SEATS && seats & (1 << seat) != 0
+}
+
+/// Everything that crosses the wire, as JSON tagged by `t`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "t", rename_all = "lowercase")]
+pub enum Msg {
+    Hello {
+        protocol: u32,
+        build: String,
+        host: bool,
+    },
+    /// host to a guest: the seat it holds
+    Welcome {
+        seat: usize,
+    },
+    /// host to everyone, before the match: which seats people hold
+    Roster {
+        seats: Seats,
+    },
+    /// host to everyone: the match begins, these seats held by people
+    Start {
+        seats: Seats,
+    },
+    /// one seat's record for one tick
+    Input {
+        seat: usize,
+        tick: u32,
+        input: Input,
+    },
+    /// one seat's checksum of the world before a tick
+    Sum {
+        seat: usize,
+        tick: u32,
+        sum: u64,
+    },
+    /// host to everyone: a seat's player has gone, and its bot plays it
+    /// from tick `from` on
+    Drop {
+        seat: usize,
+        from: u32,
+    },
+    Bye {
+        why: String,
+    },
+}
+
+pub fn encode(m: &Msg) -> String {
+    serde_json::to_string(m).expect("a Msg always serialises")
+}
+
+pub fn decode(text: &str) -> Option<Msg> {
+    serde_json::from_str(text).ok()
+}
+
+/// The room name the transport joins: the app id, the protocol and the
+/// room code. No build hash, so mismatched builds meet and are told why.
+pub fn room_name(code: &str) -> String {
+    format!("{APP_ID}-p{PROTOCOL}-{code}")
+}
+
+/// What one browser knows of another.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Other {
+    /// its hello has been accepted
+    pub said: bool,
+    pub host: bool,
+    /// the seat it holds, once the host has given one
+    pub seat: Option<usize>,
+}
+
+/// One browser's links to the others: who they are, the status, the
+/// outbox, and the checksums waiting for their match.
+#[derive(Debug, Clone)]
+pub struct Net {
+    pub host: bool,
+    pub status: &'static str,
+    build: String,
+    pub others: BTreeMap<Peer, Other>,
+    /// this browser's seat: 0 for the host, a guest's once welcomed
+    pub seat: Option<usize>,
+    /// which seats people hold
+    pub seats: Seats,
+    /// the match has begun
+    pub started: bool,
+    /// this browser's checksums and the others', by tick, kept until each
+    /// pair can be compared
+    mine: BTreeMap<u32, u64>,
+    theirs: BTreeMap<(u32, usize), u64>,
+    /// the last tick whose checksums all agreed
+    pub agreed: Option<u32>,
+    outbox: VecDeque<(Peer, String)>,
+}
+
+/// A message `Net` hands back to the session: a record, or a drop.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Event {
+    Input {
+        seat: usize,
+        tick: u32,
+        input: Input,
+    },
+    Drop {
+        seat: usize,
+        from: u32,
+    },
+    Start {
+        seats: Seats,
+    },
+    /// a guest left during the match (the host only): drop its seat
+    Gone {
+        seat: usize,
+    },
+}
+
+impl Net {
+    pub fn new(host: bool, build: &str) -> Net {
+        Net {
+            host,
+            status: WAITING,
+            build: build.to_string(),
+            others: BTreeMap::new(),
+            seat: host.then_some(0),
+            seats: if host { 1 } else { 0 },
+            started: false,
+            mine: BTreeMap::new(),
+            theirs: BTreeMap::new(),
+            agreed: None,
+            outbox: VecDeque::new(),
+        }
+    }
+
+    pub fn send(&mut self, to: Peer, m: &Msg) {
+        self.outbox.push_back((to, encode(m)));
+    }
+
+    /// To every browser whose hello was accepted, but `except`.
+    pub fn broadcast(&mut self, m: &Msg, except: Option<Peer>) {
+        let to: Vec<Peer> = self
+            .others
+            .iter()
+            .filter(|(p, o)| o.said && Some(**p) != except)
+            .map(|(p, _)| *p)
+            .collect();
+        let text = encode(m);
+        for p in to {
+            self.outbox.push_back((p, text.clone()));
+        }
+    }
+
+    pub fn take_outbox(&mut self) -> Vec<(Peer, String)> {
+        self.outbox.drain(..).collect()
+    }
+
+    /// The host's peer, once its hello is in.
+    pub fn host_peer(&self) -> Option<Peer> {
+        self.others
+            .iter()
+            .find(|(_, o)| o.said && o.host)
+            .map(|(p, _)| *p)
+    }
+
+    /// The transport says a browser arrived: say hello.
+    pub fn connected(&mut self, peer: Peer) {
+        if self.others.contains_key(&peer) {
+            return;
+        }
+        self.others.insert(
+            peer,
+            Other {
+                said: false,
+                host: false,
+                seat: None,
+            },
+        );
+        let hello = Msg::Hello {
+            protocol: PROTOCOL,
+            build: self.build.clone(),
+            host: self.host,
+        };
+        self.send(peer, &hello);
+    }
+
+    /// The transport says a browser left. The host frees its seat before
+    /// the match, or reports it gone during it; a guest that loses the host
+    /// has lost the match. A guest losing another guest waits for the
+    /// host's word.
+    pub fn left(&mut self, peer: Peer) -> Option<Event> {
+        let o = self.others.remove(&peer)?;
+        if !o.said {
+            return None;
+        }
+        if o.host {
+            self.status = HOST_LEFT;
+            return None;
+        }
+        if !self.host {
+            return None;
+        }
+        let seat = o.seat?;
+        if self.started {
+            Some(Event::Gone { seat })
+        } else {
+            self.seats &= !(1 << seat);
+            let seats = self.seats;
+            self.broadcast(&Msg::Roster { seats }, None);
+            None
+        }
+    }
+
+    /// This browser leaves: everyone is told.
+    pub fn leave(&mut self) {
+        self.broadcast(
+            &Msg::Bye {
+                why: LEFT_ROOM.to_string(),
+            },
+            None,
+        );
+        self.others.clear();
+    }
+
+    /// The host gives a newly accepted guest the lowest free seat, or turns
+    /// it away when the four are taken or the match has begun.
+    fn seat_guest(&mut self, peer: Peer) {
+        let free = (1..SEATS).find(|&s| !holds(self.seats, s));
+        match free {
+            Some(seat) if !self.started => {
+                self.seats |= 1 << seat;
+                if let Some(o) = self.others.get_mut(&peer) {
+                    o.seat = Some(seat);
+                }
+                self.send(peer, &Msg::Welcome { seat });
+                let seats = self.seats;
+                self.broadcast(&Msg::Roster { seats }, None);
+            }
+            _ => {
+                self.send(
+                    peer,
+                    &Msg::Bye {
+                        why: FULL.to_string(),
+                    },
+                );
+                self.others.remove(&peer);
+            }
+        }
+    }
+
+    /// The host starts the match with the seats held now.
+    pub fn start(&mut self) -> Seats {
+        self.started = true;
+        self.status = PLAYING;
+        let seats = self.seats;
+        self.broadcast(&Msg::Start { seats }, None);
+        seats
+    }
+
+    /// Text from a browser. Anything that cannot be a message, or that no
+    /// honest copy would send, changes the status and nothing else. The
+    /// host passes on what one guest sends to the others.
+    pub fn message(&mut self, from: Peer, text: &str) -> Option<Event> {
+        let o = *self.others.get(&from)?;
+        let Some(msg) = decode(text) else {
+            self.status = GARBLED;
+            return None;
+        };
+        match msg {
+            Msg::Hello {
+                protocol,
+                build,
+                host,
+            } => {
+                if o.said {
+                    return None;
+                }
+                // two hosts, or a guest meeting a guest before it has a
+                // host, are both allowed; another build is not
+                if protocol != PROTOCOL || build != self.build {
+                    self.send(
+                        from,
+                        &Msg::Bye {
+                            why: RELOAD.to_string(),
+                        },
+                    );
+                    self.others.remove(&from);
+                    self.status = RELOAD;
+                    return None;
+                }
+                if host && self.host {
+                    // one host to a room
+                    self.others.remove(&from);
+                    return None;
+                }
+                let me = self.others.get_mut(&from).expect("known above");
+                me.said = true;
+                me.host = host;
+                if self.host {
+                    self.seat_guest(from);
+                    if self.status == WAITING {
+                        self.status = LOBBY;
+                    }
+                }
+                None
+            }
+            Msg::Bye { why } => {
+                self.others.remove(&from);
+                // to a guest only the host's bye matters: the room was full,
+                // this build was turned away, or the host left. (The host's
+                // hello comes first on its ordered channel, so `o.host` is
+                // known by then.)
+                if o.host {
+                    self.status = REASONS.iter().copied().find(|r| *r == why).unwrap_or(HOST_LEFT);
+                }
+                if let (true, Some(seat)) = (self.host, o.seat) {
+                    if self.started {
+                        return Some(Event::Gone { seat });
+                    }
+                    self.seats &= !(1 << seat);
+                    let seats = self.seats;
+                    self.broadcast(&Msg::Roster { seats }, None);
+                }
+                None
+            }
+            _ if !o.said => {
+                // data before a hello: not one of ours
+                self.status = GARBLED;
+                None
+            }
+            Msg::Welcome { seat } if o.host && !self.host => {
+                if seat == 0 || seat >= SEATS {
+                    self.status = GARBLED;
+                    return None;
+                }
+                self.seat = Some(seat);
+                self.status = LOBBY;
+                None
+            }
+            Msg::Roster { seats } if o.host && !self.host => {
+                self.seats = seats;
+                None
+            }
+            Msg::Start { seats } if o.host && !self.host => {
+                if self.started || self.seat.is_none_or(|s| !holds(seats, s)) {
+                    return None;
+                }
+                self.seats = seats;
+                self.started = true;
+                self.status = PLAYING;
+                Some(Event::Start { seats })
+            }
+            Msg::Drop { seat, from: at } if o.host && !self.host => Some(Event::Drop { seat, from: at }),
+            Msg::Input { seat, tick, input } => {
+                if !self.started || !holds(self.seats, seat) || Some(seat) == self.seat {
+                    self.status = GARBLED;
+                    return None;
+                }
+                Some(Event::Input { seat, tick, input })
+            }
+            Msg::Sum { seat, tick, sum } => {
+                if !holds(self.seats, seat) || Some(seat) == self.seat {
+                    self.status = GARBLED;
+                    return None;
+                }
+                if self.theirs.contains_key(&(tick, seat)) {
+                    return None;
+                }
+                if self.host {
+                    self.broadcast(&Msg::Sum { seat, tick, sum }, Some(from));
+                }
+                self.theirs.insert((tick, seat), sum);
+                self.compare();
+                None
+            }
+            // a host-only message from a guest
+            _ => {
+                self.status = GARBLED;
+                None
+            }
+        }
+    }
+
+    /// The host passes a record it has newly taken in on to every guest but
+    /// the one it came from (`relay` is that guest's peer).
+    pub fn pass_on(&mut self, m: &Msg, relay: Peer) {
+        if self.host {
+            self.broadcast(m, Some(relay));
+        }
+    }
+
+    /// This browser's checksum of tick `tick`, sent and kept for comparing.
+    pub fn summed(&mut self, tick: u32, sum: u64) {
+        let Some(seat) = self.seat else { return };
+        self.mine.insert(tick, sum);
+        self.broadcast(&Msg::Sum { seat, tick, sum }, None);
+        self.compare();
+    }
+
+    /// Each checksum another seat has sent for a tick this browser has
+    /// summed: a mismatch is a desync.
+    fn compare(&mut self) {
+        let ready: Vec<(u32, usize)> = self
+            .theirs
+            .keys()
+            .filter(|(t, _)| self.mine.contains_key(t))
+            .copied()
+            .collect();
+        for k in ready {
+            let theirs = self.theirs.remove(&k);
+            if theirs != self.mine.get(&k.0).copied() {
+                self.status = DESYNC;
+            } else {
+                self.agreed = Some(self.agreed.map_or(k.0, |a| a.max(k.0)));
+            }
+        }
+        // a checksum of a tick long past no longer waits for its match
+        if let Some(&newest) = self.mine.keys().next_back() {
+            let keep = newest.saturating_sub(SUM_EVERY * 8);
+            self.mine = self.mine.split_off(&keep);
+        }
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use super::*;
+    use crate::input::FORWARD;
+
+    pub const HOST: Peer = 100;
+    pub const A: Peer = 101;
+    pub const B: Peer = 102;
+
+    /// Every message from `from`'s outbox handed to the browsers `to`
+    /// names, each under the peer id it has for `from`.
+    fn deliver(from: &mut Net, from_id: Peer, to: &mut [(&mut Net, Peer)]) {
+        for (dest, text) in from.take_outbox() {
+            for (links, id) in to.iter_mut() {
+                if *id == dest {
+                    links.message(from_id, &text);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn every_message_survives_encoding_and_decoding() {
+        let all = [
+            Msg::Hello {
+                protocol: PROTOCOL,
+                build: "b".into(),
+                host: true,
+            },
+            Msg::Welcome { seat: 2 },
+            Msg::Roster { seats: 0b1011 },
+            Msg::Start { seats: 0b11 },
+            Msg::Input {
+                seat: 3,
+                tick: 7,
+                input: Input {
+                    keys: FORWARD,
+                    buttons: 1,
+                    dx: -12,
+                    dy: 30,
+                    wheel: 0,
+                },
+            },
+            Msg::Sum {
+                seat: 1,
+                tick: 30,
+                sum: u64::MAX - 3,
+            },
+            Msg::Drop { seat: 2, from: 400 },
+            Msg::Bye { why: FULL.into() },
+        ];
+        for m in all {
+            assert_eq!(decode(&encode(&m)), Some(m));
+        }
+        assert_eq!(decode("{\"t\":\"nonsense\"}"), None);
+    }
+
+    #[test]
+    fn the_room_name_holds_the_app_the_protocol_and_the_code_and_no_build() {
+        assert_eq!(room_name("KQXRT"), "chumontillado-p1-KQXRT");
+    }
+
+    #[test]
+    fn the_host_seats_guests_in_turn_and_turns_away_a_fifth() {
+        let mut host = Net::new(true, "b");
+        let mut guests: Vec<Net> = (0..4).map(|_| Net::new(false, "b")).collect();
+        for (k, g) in guests.iter_mut().enumerate() {
+            let id = A + k as Peer;
+            host.connected(id);
+            g.connected(HOST);
+            deliver(g, id, &mut [(&mut host, HOST)]);
+            for (dest, text) in host.take_outbox() {
+                if dest == id {
+                    g.message(HOST, &text);
+                }
+            }
+        }
+        let seats: Vec<Option<usize>> = guests.iter().map(|g| g.seat).collect();
+        assert_eq!(seats, vec![Some(1), Some(2), Some(3), None]);
+        assert_eq!(guests[3].status, FULL, "the fifth is told the room is full");
+        assert_eq!(host.seats, 0b1111);
+        assert_eq!(
+            guests[1].seats, 0b0111,
+            "seat 2, as the roster stood when it was told"
+        );
+    }
+
+    #[test]
+    fn another_build_is_turned_away_and_both_ends_say_why() {
+        let mut host = Net::new(true, "new");
+        let mut guest = Net::new(false, "old");
+        host.connected(A);
+        guest.connected(HOST);
+        deliver(&mut guest, A, &mut [(&mut host, HOST)]);
+        deliver(&mut host, HOST, &mut [(&mut guest, A)]);
+        assert_eq!((host.status, guest.status), (RELOAD, RELOAD));
+        assert_eq!(host.seats, 0b1, "no seat given");
+    }
+
+    #[test]
+    fn garbage_changes_the_status_and_nothing_else_and_data_before_a_hello_is_refused() {
+        let mut host = Net::new(true, "b");
+        host.connected(A);
+        assert_eq!(
+            host.message(A, "{\"t\":\"sum\",\"seat\":1,\"tick\":0,\"sum\":1}"),
+            None
+        );
+        assert_eq!(host.status, GARBLED);
+        let mut host = Net::new(true, "b");
+        host.connected(A);
+        host.message(A, "not json");
+        assert_eq!((host.status, host.seats), (GARBLED, 0b1));
+        // a peer never connected is ignored outright
+        let mut host = Net::new(true, "b");
+        assert_eq!(host.message(B, "not json"), None);
+        assert_eq!(host.status, WAITING);
+    }
+
+    #[test]
+    fn a_guest_leaving_the_lobby_frees_its_seat_and_during_the_match_is_reported_gone() {
+        let mut host = Net::new(true, "b");
+        let mut g = Net::new(false, "b");
+        host.connected(A);
+        g.connected(HOST);
+        deliver(&mut g, A, &mut [(&mut host, HOST)]);
+        assert_eq!(host.seats, 0b11);
+        assert_eq!(host.left(A), None);
+        assert_eq!(host.seats, 0b1);
+        // again, and this time the match begins first
+        host.connected(B);
+        let mut g = Net::new(false, "b");
+        g.connected(HOST);
+        deliver(&mut g, B, &mut [(&mut host, HOST)]);
+        host.start();
+        assert_eq!(host.left(B), Some(Event::Gone { seat: 1 }));
+    }
+
+    #[test]
+    fn a_guest_that_loses_the_host_has_lost_the_match() {
+        let mut host = Net::new(true, "b");
+        let mut g = Net::new(false, "b");
+        host.connected(A);
+        g.connected(HOST);
+        deliver(&mut g, A, &mut [(&mut host, HOST)]);
+        deliver(&mut host, HOST, &mut [(&mut g, A)]);
+        g.left(HOST);
+        assert_eq!(g.status, HOST_LEFT);
+    }
+
+    #[test]
+    fn a_checksum_that_differs_from_this_browsers_is_a_desync() {
+        let mut host = Net::new(true, "b");
+        let mut g = Net::new(false, "b");
+        host.connected(A);
+        g.connected(HOST);
+        deliver(&mut g, A, &mut [(&mut host, HOST)]);
+        deliver(&mut host, HOST, &mut [(&mut g, A)]);
+        host.start();
+        deliver(&mut host, HOST, &mut [(&mut g, A)]);
+        host.summed(30, 7);
+        g.summed(30, 7);
+        deliver(&mut g, A, &mut [(&mut host, HOST)]);
+        assert_eq!((host.status, host.agreed), (PLAYING, Some(30)));
+        host.summed(60, 7);
+        g.summed(60, 8);
+        deliver(&mut g, A, &mut [(&mut host, HOST)]);
+        assert_eq!(host.status, DESYNC);
+    }
+}
