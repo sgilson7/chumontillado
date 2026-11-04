@@ -5,7 +5,7 @@
 use super::*;
 use crate::fx::int;
 use crate::geom::yaw_of;
-use crate::input::{CROUCH, FORWARD, JUMP, LEFT};
+use crate::input::{CROUCH, FORWARD, JUMP, LEFT, RIGHT};
 use crate::movement::{Mover, TUNING};
 
 fn keys(k: u32) -> Input {
@@ -73,17 +73,18 @@ fn air_strafing_with_the_wish_square_to_the_velocity_adds_the_cap_at_right_angle
 }
 
 #[test]
-fn holding_forward_in_the_air_past_the_cap_adds_nothing() {
+fn above_the_run_speed_a_wish_already_met_along_its_way_adds_nothing() {
     let w = World::practice();
     let mut m = Mover::new(&w.map);
     let mut b = body_at(v3(0, int(200), 0));
-    // 5 m/s forward: past the air's cap (0.8), under the run speed (8), so
-    // only the cap stops the wish adding speed along itself
-    b.velocity = v3(0, 0, -int(5));
+    // 12 m/s north; D held with the view at 30°, so the wish points 60° off
+    // the velocity: 12 × cos 60° = 6 m/s along it already. Past the air's
+    // cap (0.8), nothing is added; without the cap 8 − 6 = 2 would be
+    b.velocity = v3(0, 0, -int(12));
     for _ in 0..60 {
-        m.tick(&mut b, &keys(FORWARD), 0, 0);
+        m.tick(&mut b, &keys(RIGHT), fx::deg(30), fx::deg(30));
     }
-    assert_eq!(b.speed(), int(5));
+    assert_eq!(b.speed(), int(12));
 }
 
 #[test]
@@ -183,13 +184,8 @@ fn a_surf_ramp_gives_no_footing_and_speeds_a_surfer_along_it() {
     let mut grounded = 0;
     let mut widest = 0;
     for t in 0..30 {
-        // the wish into the ramp: east
-        m.tick(
-            &mut b,
-            &keys(FORWARD),
-            yaw_of(v3(ONE, 0, 0)),
-            yaw_of(v3(ONE, 0, 0)),
-        );
+        // a surfer's way: the view north along the ramp, D held into it (east)
+        m.tick(&mut b, &keys(RIGHT), 0, 0);
         if b.on_ground {
             grounded += 1;
         }
@@ -512,4 +508,82 @@ fn a_slide_a_third_of_a_second_after_the_last_boosts_again() {
     w.step(&[keys(FORWARD | CROUCH)]);
     let s = w.players[0].body.speed();
     assert!(s > int(11), "boosted again: {}", fx::decimal(s, 2));
+}
+
+#[test]
+fn under_the_run_speed_the_keys_steer_outright_in_the_air() {
+    let w = World::practice();
+    let mut m = Mover::new(&w.map);
+    // standing in the air, D held: the velocity goes straight toward 8 m/s
+    // east at 60 m/s² (T2), so 8 m/s in 8 / 60 = 0.133 s, 8 ticks
+    let mut b = body_at(v3(0, int(200), 0));
+    for _ in 0..8 {
+        m.tick(&mut b, &keys(RIGHT), 0, 0);
+    }
+    assert!(
+        near(b.velocity.x, int(8), ONE / 20),
+        "{}",
+        fx::decimal(b.velocity.x, 3)
+    );
+    assert!(b.velocity.z.abs() < ONE / 100);
+    // moving 6 m/s north, S held: north to 8 m/s south is 14 m/s of change,
+    // 14 / 60 = 0.233 s, so after 15 ticks it moves south at 8
+    let mut c = body_at(v3(0, int(200), 0));
+    c.velocity = v3(0, 0, -int(6));
+    for _ in 0..15 {
+        m.tick(&mut c, &keys(crate::input::BACK), 0, 0);
+    }
+    assert!(
+        near(c.velocity.z, int(8), ONE / 20),
+        "{}",
+        fx::decimal(c.velocity.z, 3)
+    );
+}
+
+#[test]
+fn above_the_run_speed_w_alone_turns_toward_the_view_and_keeps_the_speed() {
+    let w = World::practice();
+    let mut m = Mover::new(&w.map);
+    let mut b = body_at(v3(0, int(200), 0));
+    // 15 m/s north, the view 45° to the north-east, W held
+    b.velocity = v3(0, 0, -int(15));
+    let view = yaw_of(v3(ONE, 0, -ONE));
+    for _ in 0..30 {
+        m.tick(&mut b, &keys(FORWARD), view, view);
+    }
+    let s = b.speed();
+    assert!(near(s, int(15), ONE / 20), "{}", fx::decimal(s, 3));
+    // turned most of the way to the view: the east part at least 9 of the
+    // 10.6 that 45° would give
+    assert!(b.velocity.x > int(9), "{}", fx::decimal(b.velocity.x, 3));
+}
+
+#[test]
+fn once_on_a_ramp_holding_w_into_it_costs_no_speed_along_it() {
+    let w = World::practice();
+    let mut m = Mover::new(&w.map);
+    let (x, y) = (-ONE * 2625 / 1000, ONE * 35 / 10);
+    let mut b = body_at(v3(x - HALF - ONE * 3 / 10, y, int(10)));
+    b.velocity = v3(int(6), 0, -int(10));
+    let east = yaw_of(v3(ONE, 0, 0));
+    let mut along_at_contact = None;
+    let mut grounded = 0;
+    for _ in 0..30 {
+        m.tick(&mut b, &keys(FORWARD), east, east);
+        grounded += b.on_ground as i32;
+        if b.since_touch == 0 && along_at_contact.is_none() {
+            along_at_contact = Some(-b.velocity.z);
+        }
+    }
+    // W steers toward the view in the air, so before the face it turns the
+    // velocity a little toward the ramp (R3.1). On the face the air
+    // control waits (T2), and the speed along the ramp (north) holds
+    let at = along_at_contact.expect("reached the face");
+    assert_eq!(grounded, 0);
+    assert!(
+        -b.velocity.z >= at - ONE / 100,
+        "{} at contact, {} after",
+        fx::decimal(at, 2),
+        fx::decimal(-b.velocity.z, 2)
+    );
 }

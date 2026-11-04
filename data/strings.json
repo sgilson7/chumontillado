@@ -15,7 +15,7 @@
   "to_menu": "Back to the menu",
   "controls": "Controls",
   "key_move": "W A S D",
-  "control_move": "Move. In the air, A or D with the mouse turning the same way adds speed.",
+  "control_move": "Move, and steer in the air. Faster than a run, W alone turns you toward your view; A or D with the mouse turning the same way adds speed.",
   "key_look": "Mouse",
   "control_look": "Look",
   "key_jump": "Space",

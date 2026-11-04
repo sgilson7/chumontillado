@@ -26,6 +26,8 @@ One row per assumption, surprise or open item. **Kind** is *divergence* (what wa
 | R2.1 | finding | One slide jump after another failed for timing alone | Two of my rules blocked a chain. The slide's boost waited a second after the last slide began, and every jump's flight (0.62 s) was shorter. Crouch pressed on the way down, to ready the next slide, started a slam from any height over 1.5 m | Both changed in R2.2; a test chains five slide jumps with crouch and jump held | test `holding_crouch_and_jump_chains_slide_jumps_landing_after_landing` | done |
 | R2.2 | divergence | The Mockup page's numbers (jump 5.6 m/s, slide jump +1.5 m/s, 3 ticks) | T1 asked for a jump twice as high, a faster and higher slide jump, and more lenient timing | jump 5.6 → 7.92 m/s (height 0.87 → 1.74 m, so a slam's floor of 1.5 m lay inside a jump); slide jump +1.5 → +2.5 m/s along and +1.5 m/s up (new); its window 3 → 12 ticks (50 → 200 ms); the boost's rest 60 → 15 ticks; a slam's least height 1.5 → 3 m | `movement::TUNING`; five T1 break rows | done |
 | R2.3 | divergence | GitHub Pages would build the gh-pages branch as it built M1's | For commit 4c17385 Pages' branch builder failed twice with "Page build failed" and no reason, then sat at "building" for over 25 minutes, while GitHub's status page read operational. The branch held the same kind of files as the build that served | Pages now deploys through `.github/workflows/pages.yml`: on each push to main it checks out gh-pages and deploys it, logging each step. publish.sh is unchanged | `.github/workflows/pages.yml`; HANDOFF.md | done |
+| R3.1 | finding | W held toward a ramp would surf as well as a strafe key into it | Before the face, W's air control turns the velocity toward the view, into the ramp, and the face then removes that part: in the test, 10 m/s along the ramp became 8.9 | Kept: steering toward the view is what T2 asks for, and surfers hold the strafe key into the ramp; once on the face the control waits and costs nothing more | test `once_on_a_ramp_holding_w_into_it_costs_no_speed_along_it`; the surf test now surfs with D | done |
+| R3.2 | divergence | T2's air control could act on any face | Under the run speed the new steering pulled a slow surfer's velocity toward the key's direction, into the ramp, and stopped the surf | Both kinds of air control wait 3 ticks (50 ms) after a move meets any face (`AIR_CONTROL_AFTER`), so a surfer and a player against a wall get Source's rule alone. My choice of 3 ticks | break row "T2 the air control waits on a face" | done |
 
 ## Strings written by the agent
 
@@ -34,7 +36,7 @@ Each reader-visible string the agent wrote, with its key, for the person to read
 | Key | String |
 | --- | --- |
 | `title`, `tagline`, `menu_text`, `loading`, `no_webgl` | Chumontillado / A shooter in the cellars. Four players, one life a round. For now, the practice room: learn to move. / The practice room has a slope, two surf ramps, a shaft to climb and open floor to hop across. No weapons yet. |
-| `key_*`, `control_*` | the seven controls and what each does (M1) |
+| `key_*`, `control_*` | the seven controls and what each does (M1); `control_move` reworded for T2's steering |
 | `hud_*`, `hint_play` | the HUD's speed, wall jumps, state and best speed, and the first-ten-seconds hint |
 | `setting_*`, `degrees`, `percent`, `narrower` … `faster` | the settings' rows |
 | GLOSSARY.md (M1) | Hop, Practice room, Slam, Slide, Slide jump, Slope, Surf ramp, Wall jump |

@@ -82,6 +82,12 @@ pub struct Tuning {
     pub slam_bounce_ticks: i32,
     pub slam_bounce_pct: i32,
     pub slam_bounce_most: Fx,
+    /// T2: in the air below the run speed, the keys steer the velocity
+    /// toward the run speed in their direction this fast (m/s²)
+    pub air_steer: Fx,
+    /// T2: above it, W alone turns the velocity toward the view without
+    /// changing its speed, by this much at most (CPMA's air control, m/s²)
+    pub air_control: Fx,
 }
 
 pub const TUNING: Tuning = Tuning {
@@ -124,6 +130,9 @@ pub const TUNING: Tuning = Tuning {
     slam_bounce_ticks: 6,
     slam_bounce_pct: 60,
     slam_bounce_most: int(6),
+    // T2: 0 to 8 m/s in about 0.13 s, as quick as the ground
+    air_steer: int(60),
+    air_control: int(150),
 };
 
 /// The player's box: 0.64 m across (the shared envelope, CS-Q12: A), 1.85 m
@@ -145,6 +154,8 @@ const SAME_PLANE: Fx = ONE * 999 / 1000;
 /// How hard a surfer is pushed off a ramp hit twice in one tick: far too
 /// little to feel, enough to clear rounding (6 mm/s).
 const PUSH_OFF: Fx = ONE * 6 / 1000;
+/// T2: air control waits this many ticks after a face is met (50 ms).
+pub const AIR_CONTROL_AFTER: i32 = 3;
 pub const MINS: V3 = v3(-HALF_WIDTH, 0, -HALF_WIDTH);
 
 /// Everything that moves with a player from tick to tick.
@@ -169,6 +180,10 @@ pub struct Body {
     pub slam_from: Option<Fx>,
     pub slam_fell: Fx,
     pub since_slam: i32,
+    /// ticks since a move last met a face (a ramp, a wall): T2's air
+    /// control waits `AIR_CONTROL_AFTER` of them, so it cannot turn a surfer
+    /// into the ramp or slow one along it
+    pub since_touch: i32,
 }
 
 impl Body {
@@ -179,6 +194,7 @@ impl Body {
             since_slide: 1_000,
             since_slide_began: 1_000,
             since_slam: 1_000,
+            since_touch: 1_000,
             ..Body::default()
         }
     }
@@ -312,6 +328,7 @@ impl<'a> Mover<'a> {
         b.since_slide = b.since_slide.saturating_add(1);
         b.since_slide_began = b.since_slide_began.saturating_add(1);
         b.since_slam = b.since_slam.saturating_add(1);
+        b.since_touch = b.since_touch.saturating_add(1);
 
         self.duck(b, crouch);
         if !b.on_ground
@@ -563,11 +580,58 @@ impl<'a> Mover<'a> {
         for k in 1..=n {
             let y = yaw_from.wrapping_add(turn * k / n);
             let (dir, speed) = wish(y, f, s);
-            if speed > 0 {
+            if speed == 0 {
+                continue;
+            }
+            let free = b.since_touch > AIR_CONTROL_AFTER;
+            if free && b.velocity.len_xz() < self.t.run {
+                // T2: under the run speed, off any face, the keys steer
+                self.air_steer(b, dir, dt);
+            } else {
+                // Source's rule: the strafe's gain, and the surf's
                 self.air_accelerate(b, dir, speed, dt);
+                if free && f > 0 && s == 0 {
+                    self.air_control(b, dir, dt);
+                }
             }
         }
         self.try_move(b);
+    }
+
+    /// T2: under the run speed, the velocity across the ground moves
+    /// straight toward the run speed in the wished direction, at most
+    /// `air_steer × dt` a step: stop, reverse or sidestep in the air.
+    fn air_steer(&self, b: &mut Body, dir: V3, dt: Fx) {
+        let flat = v3(b.velocity.x, 0, b.velocity.z);
+        let diff = dir.scale(self.t.run).sub(flat);
+        let gap = diff.len();
+        if gap == 0 {
+            return;
+        }
+        let step = fx::mul(self.t.air_steer, dt).min(gap);
+        let d = diff.scale(fx::div(step, gap));
+        b.velocity.x += d.x;
+        b.velocity.z += d.z;
+    }
+
+    /// T2: CPMA's air control. With W alone held, the velocity across the
+    /// ground turns toward the view, more the closer it already points
+    /// there (the square of the cosine), and keeps its speed.
+    fn air_control(&self, b: &mut Body, dir: V3, dt: Fx) {
+        let flat = v3(b.velocity.x, 0, b.velocity.z);
+        let speed = flat.len();
+        if speed == 0 {
+            return;
+        }
+        let along = flat.norm();
+        let dot = along.dot(dir);
+        if dot <= 0 {
+            return;
+        }
+        let k = fx::mul(fx::mul(fx::mul(self.t.air_control, dot), dot), dt);
+        let turned = along.scale(speed).add(dir.scale(k)).norm().scale(speed);
+        b.velocity.x = turned.x;
+        b.velocity.z = turned.z;
     }
 
     fn walk_move(&mut self, b: &mut Body, yaw: i32, f: Fx, s: Fx) {
@@ -673,6 +737,8 @@ impl<'a> Mover<'a> {
                 break;
             }
             time_left -= fx::mul(time_left, t.fraction);
+            // a face was met: air control waits (T2)
+            b.since_touch = 0;
             if count >= MAX_CLIP_PLANES {
                 b.velocity = V3::ZERO;
                 break;

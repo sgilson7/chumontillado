@@ -25,7 +25,7 @@
     "file": "crates/core/src/movement.rs",
     "find": "        let capped = speed.min(self.t.air_cap);",
     "replace": "        let capped = speed;",
-    "test": "holding_forward_in_the_air_past_the_cap_adds_nothing"
+    "test": "above_the_run_speed_a_wish_already_met_along_its_way_adds_nothing"
   },
   {
     "name": "M1 air: the acceleration uses the uncapped wish speed",
@@ -243,5 +243,26 @@
     "find": "    slam_above: int(3),",
     "replace": "    slam_above: ONE * 15 / 10,",
     "test": "crouching_on_the_way_down_from_a_jump_readies_a_slide_and_does_not_slam"
+  },
+  {
+    "name": "T2 the keys steer in the air under the run speed",
+    "file": "crates/core/src/movement.rs",
+    "find": "    air_steer: int(60),",
+    "replace": "    air_steer: int(20),",
+    "test": "under_the_run_speed_the_keys_steer_outright_in_the_air"
+  },
+  {
+    "name": "T2 W alone turns toward the view",
+    "file": "crates/core/src/movement.rs",
+    "find": "    air_control: int(150),",
+    "replace": "    air_control: int(15),",
+    "test": "above_the_run_speed_w_alone_turns_toward_the_view_and_keeps_the_speed"
+  },
+  {
+    "name": "T2 the air control waits on a face",
+    "file": "crates/core/src/movement.rs",
+    "find": "            let free = b.since_touch > AIR_CONTROL_AFTER;",
+    "replace": "            let free = true;",
+    "test": "once_on_a_ramp_holding_w_into_it_costs_no_speed_along_it"
   }
 ]
