@@ -32,6 +32,10 @@ flat out float vFade;
 out vec3 vNormal;
 out vec4 vColor;
 out vec3 vLocal;
+// T4: the shape's size along its own axes and its unit mesh's normal, for
+// the surfaces' rim
+flat out vec3 vSize;
+out vec3 vLocalNormal;
 
 void main() {
   vec3 a = iA.xyz;
@@ -47,6 +51,8 @@ void main() {
   vWorld = w;
   vColor = vec4(iD.rgb * aColor, iD.a);
   vLocal = p;
+  vSize = vec3(length(a), length(b), length(c));
+  vLocalNormal = n;
   vFade = iD.a;
   gl_Position = uVP * vec4(w - uEye, 1.0);
   gl_Position.z += (uModeA.y * uBias.x - (uModeA.z + uModeB.x) * uBias.y) * uQ * gl_Position.w;

@@ -159,6 +159,21 @@ pub fn prism(corners: [(Fx, Fx); 3], along_z: bool, from: Fx, to: Fx, surface: S
     }
 }
 
+impl Surface {
+    /// The surface's row in the look's grit table (`data/look.json`,
+    /// `grit.materials`): 1 floor, 2 wall, 3 ramp, 4 slope, 5 block, 6 trim.
+    pub fn material(self) -> i32 {
+        match self {
+            Surface::Floor => 1,
+            Surface::Wall => 2,
+            Surface::Ramp => 3,
+            Surface::Slope => 4,
+            Surface::Block => 5,
+            Surface::Trim => 6,
+        }
+    }
+}
+
 impl Brush {
     /// Whether `p` lies inside the brush or on its face.
     pub fn holds(&self, p: V3) -> bool {
@@ -218,12 +233,14 @@ impl Map {
     }
 
     /// The static scene: one group for the whole map, each brush in its
-    /// surface's colour with an ink outline.
+    /// surface's colour and material (T4: tiles, brick, planks), with an
+    /// ink outline.
     pub fn groups(&self, colour: impl Fn(Surface) -> Rgb, ink: Rgb) -> Vec<Group> {
         let mut g = Group::new("map", V3::ZERO, int(200));
         for b in &self.brushes {
             let (mesh, at) = b.drawn();
-            g.shapes.inked(mesh, at, colour(b.surface), ink);
+            g.shapes
+                .surface(mesh, at, colour(b.surface), b.surface.material(), ink);
         }
         vec![g]
     }
@@ -439,6 +456,38 @@ mod tests {
                 .signum();
             assert_eq!(det, 1, "brush {k} ({:?}) draws inside out", b.surface);
         }
+    }
+
+    #[test]
+    fn every_brush_is_drawn_as_a_surface_of_its_own_material_with_an_outline() {
+        let m = practice();
+        let g = &m.groups(|_| [ONE; 3], [0; 3])[0];
+        let surfaces: Vec<_> = g
+            .shapes
+            .list
+            .iter()
+            .filter(|s| s.pass == crate::render::Pass::Surface)
+            .collect();
+        assert_eq!(surfaces.len(), m.brushes.len());
+        for (b, s) in m.brushes.iter().zip(&surfaces) {
+            assert_eq!(s.value, b.surface.material() * ONE, "{:?}", b.surface);
+        }
+        // the floor is tile (1), the walls brick (2), the ramps planks (3)
+        assert_eq!(
+            (
+                Surface::Floor.material(),
+                Surface::Wall.material(),
+                Surface::Ramp.material()
+            ),
+            (1, 2, 3)
+        );
+        let inks = g
+            .shapes
+            .list
+            .iter()
+            .filter(|s| s.pass == crate::render::Pass::Ink)
+            .count();
+        assert_eq!(inks, m.brushes.len());
     }
 
     #[test]

@@ -103,6 +103,150 @@
       40,
       30,
       22
+    ],
+    "steel": [
+      120,
+      126,
+      132
+    ],
+    "dark_steel": [
+      52,
+      56,
+      60
+    ],
+    "wood": [
+      122,
+      78,
+      42
+    ],
+    "brass": [
+      176,
+      138,
+      62
+    ],
+    "bone": [
+      226,
+      214,
+      188
+    ],
+    "blue": [
+      60,
+      95,
+      134
+    ],
+    "ochre": [
+      199,
+      154,
+      58
+    ],
+    "umber": [
+      74,
+      53,
+      39
+    ],
+    "stroke": [
+      179,
+      54,
+      31
+    ],
+    "tracer": [
+      255,
+      226,
+      170
+    ],
+    "flash": [
+      255,
+      244,
+      214
+    ],
+    "mark": [
+      30,
+      24,
+      20
+    ],
+    "straw": [
+      205,
+      170,
+      96
+    ],
+    "figure": [
+      38,
+      32,
+      28
+    ],
+    "head": [
+      214,
+      190,
+      160
+    ]
+  },
+  "grit": {
+    "_note": "T4: every map surface's texture (scene.frag's grit). Lengths in cm, strengths in percent. materials: by map::Surface::material's number (0 unused, 1 floor, 2 wall, 3 ramp, 4 slope, 5 block, 6 trim): tiles, bricks, planks, the pattern's scale.",
+    "edge_cm": 8,
+    "edge_dark_pct": 45,
+    "joint_cm": 2,
+    "joint_dark_pct": 32,
+    "mottle_per_m_hundredths": 60,
+    "mottle_pct": 16,
+    "speck_per_m": 11,
+    "speck_pct": 7,
+    "tile_cm": 100,
+    "brick_high_cm": 30,
+    "brick_long_cm": 70,
+    "plank_cm": 28,
+    "cell_pct": 14,
+    "grain_along_per_m_hundredths": 40,
+    "grain_across_per_m": 14,
+    "grain_pct": 16,
+    "hash_thousandths": [
+      127100,
+      311700,
+      43758545
+    ],
+    "far_m": 1000,
+    "materials": [
+      [
+        0,
+        0,
+        0,
+        100
+      ],
+      [
+        100,
+        0,
+        0,
+        100
+      ],
+      [
+        0,
+        100,
+        0,
+        100
+      ],
+      [
+        0,
+        0,
+        100,
+        100
+      ],
+      [
+        100,
+        0,
+        0,
+        55
+      ],
+      [
+        0,
+        0,
+        100,
+        150
+      ],
+      [
+        0,
+        0,
+        0,
+        100
+      ]
     ]
   }
 }

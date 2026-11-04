@@ -4,7 +4,7 @@ Stage 9, written by the agent. `C5 Consolidate in your own words`. A fresh sessi
 
 ## What this is
 
-Chumontillado is a first-person movement shooter for up to four players online, one life a round, built in the browser on Chumworld Arena's engine. M1 is the practice room: every move (hop, surf, slide, slide jump, wall jump, slam) with a speed readout, and no weapons yet. It is published at https://sgilson7.github.io/chumontillado/. The design is the journal's (../chumontillado-journal/, https://claude.ai/artifact/5F9AxuvUdChSWFCDBaygSJ).
+Chumontillado is a first-person movement shooter for up to four players online, one life a round, built in the browser on Chumworld Arena's engine. M1 is the practice room's movement (hop, surf, slide, slide jump, wall jump, slam); M2 adds the five hitscan guns, straw targets and a bot that hops round the room, or shoots back in a duel. Every map surface is textured (T4). It is published at https://sgilson7.github.io/chumontillado/. The design is the journal's (../chumontillado-journal/, https://claude.ai/artifact/5F9AxuvUdChSWFCDBaygSJ).
 
 ## Rules that hold it up
 
@@ -19,7 +19,9 @@ Chumontillado is a first-person movement shooter for up to four players online, 
 | --- | --- |
 | `crates/core/src/movement.rs` | Source's movement (CSSurf's port) and the journal's moves |
 | `crates/core/src/trace.rs`, `map.rs` | the box sweep; brushes as planes; the practice room |
-| `crates/core/src/world.rs` | the players and one tick; tests in `world/tests.rs` |
+| `crates/core/src/world.rs` | the players, targets and shots, and one tick; tests in `world/tests.rs` |
+| `crates/core/src/weapons.rs`, `arms.rs` | the guns' numbers and rays; what a player holds and fires |
+| `crates/core/src/pilot.rs` | the bot: a record made from the world |
 | `crates/core/src/game.rs`, `api.rs` | screens, settings, clock and frame; the view model and `act` |
 | the arena's modules | `fx`, `geom`, `rng`, `ticks`, `mesh`, `prim`, `render`, `look`, `sky`, `camera`, `input`, `flicker`, `page`, `glossary` |
 | `web/` | the page, drawing what the core returns |
@@ -44,7 +46,8 @@ Chumontillado is a first-person movement shooter for up to four players online, 
 
 - R1.1 (person): the name, Chumontillado.
 - R1.14 (person): how the movement feels, from play.
+- R5.10 (person): how each gun feels, from play (`weapons::GUNS`).
 
 ## Check
 
-`./scripts/check.sh` on 2026-11-04 at M1: BUILDER CHECK PASSED (format, lint, 140 tests, the WebAssembly build and import audit, the art check, the notebook, the journal, and the browser check in Chromium, Firefox and WebKit).
+`./scripts/check.sh` on 2026-11-04 at M2: BUILDER CHECK PASSED (format, lint, 176 tests, the WebAssembly build and import audit, the art check, the notebook, the journal, and the browser check in Chromium, Firefox and WebKit).

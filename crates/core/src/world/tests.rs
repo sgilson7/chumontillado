@@ -591,3 +591,154 @@ fn once_on_a_ramp_holding_w_into_it_costs_no_speed_along_it() {
         fx::decimal(-b.velocity.z, 2)
     );
 }
+
+// ---- M2: the guns ----------------------------------------------------------
+
+fn fire() -> Input {
+    Input {
+        buttons: crate::input::FIRE,
+        ..Input::default()
+    }
+}
+
+/// The room, settled, the player still at the spawn facing north.
+fn settled(bot: Bot) -> World {
+    let mut w = World::room(bot);
+    run(&mut w, Input::default(), 30);
+    w
+}
+
+/// The pitch (angle units) that aims from the spawn's eye at a height
+/// `y` m on the straw target 20 m north (at (8, −4)).
+fn pitch_at(y_hundredths: i32) -> i32 {
+    // atan2 gives 0 to a whole turn; a pitch is signed
+    fx::wrap(fx::atan2(y_hundredths * ONE / 100 - ONE * 165 / 100, int(20)))
+}
+
+#[test]
+fn a_pistol_shot_takes_fifty_from_a_straw_head_and_twenty_five_from_its_body() {
+    // level from the eye (1.65 m), 20 m north: the target's head, at 1.65
+    let mut w = settled(Bot::Moves);
+    w.step(&[fire()]);
+    assert_eq!(w.dummies[0].health, 50, "a headshot: 25 × 2");
+    assert!(w.players[0].hit_mark > 0);
+    // aimed at 1.1 m, the body
+    let mut w = settled(Bot::Moves);
+    w.players[0].aim.pitch = pitch_at(110);
+    w.step(&[fire()]);
+    assert_eq!(w.dummies[0].health, 75);
+}
+
+#[test]
+fn a_rifle_headshot_fells_a_straw_target_and_it_stands_again_full() {
+    let mut w = settled(Bot::Moves);
+    w.step(&[keys(crate::input::SLOT_4)]);
+    run(&mut w, Input::default(), crate::arms::RAISE as usize);
+    w.step(&[fire()]);
+    // 70 × 2 = 140, past its 100
+    assert_eq!(w.dummies[0].down, TARGET_DOWN);
+    run(&mut w, Input::default(), TARGET_DOWN as usize);
+    assert_eq!((w.dummies[0].down, w.dummies[0].health), (0, HEALTH));
+}
+
+#[test]
+fn a_block_between_stops_the_shot() {
+    let mut w = settled(Bot::Moves);
+    // behind the block at (10, −12), 2 m high, crouched low, aiming level
+    // north at the target at (14, −24) would pass; from (10, 0.3 below the
+    // block's top) the block is in the way of one at (10, −20)
+    w.dummies[0].feet = v3(int(10), 0, int(-20));
+    w.players[0].body.origin = v3(int(10), 0, int(-6));
+    w.players[0].aim.pitch = fx::wrap(fx::atan2(-(ONE * 65 / 100), int(14)));
+    w.step(&[fire()]);
+    assert_eq!(w.dummies[0].health, HEALTH);
+    assert_eq!(w.marks.len(), 1, "the shot marks the block");
+}
+
+#[test]
+fn the_shotgun_close_up_nearly_empties_a_target_and_throws_you_up_off_the_floor() {
+    let mut w = settled(Bot::Moves);
+    w.players[0].body.origin = v3(int(8), 0, -ONE);
+    w.step(&[keys(crate::input::SLOT_2)]);
+    run(&mut w, Input::default(), crate::arms::RAISE as usize);
+    // 3 m from the target, aimed at its chest (1.15 m): the ring's pellets
+    // are 3 × tan 5° = 0.26 m out, inside the body's 0.32, so all eight meet
+    // it: at least 8 × 12 = 96
+    w.players[0].aim.pitch = fx::wrap(fx::atan2(-(ONE / 2), int(3)));
+    w.step(&[fire()]);
+    let d = &w.dummies[0];
+    assert!(d.down > 0 || d.health <= 4, "{} left", d.health);
+    // in the air, aimed straight down: up by the kick, 6 m/s
+    let mut w = settled(Bot::Moves);
+    w.step(&[keys(crate::input::SLOT_2)]);
+    run(&mut w, Input::default(), crate::arms::RAISE as usize);
+    w.players[0].body.origin.y = int(3);
+    w.players[0].body.on_ground = false;
+    w.players[0].body.velocity = V3::ZERO;
+    w.players[0].aim.pitch = crate::camera::PITCH_MIN;
+    w.step(&[fire()]);
+    // + 6 × sin 89° ≈ 6.0, less a tick's gravity (0.3)
+    let vy = w.players[0].body.velocity.y;
+    assert!(near(vy, ONE * 57 / 10, ONE / 10), "{}", fx::decimal(vy, 2));
+}
+
+#[test]
+fn in_a_duel_the_bot_shoots_the_player_and_in_the_practice_room_it_never_does() {
+    let mut duel = settled(Bot::Shoots);
+    let mut hurt = false;
+    for _ in 0..900 {
+        duel.step(&[Input::default()]);
+        hurt |= duel.players[0].health < HEALTH || !duel.players[0].alive();
+    }
+    assert!(hurt, "fifteen seconds in its sight");
+    let mut room = settled(Bot::Moves);
+    for _ in 0..900 {
+        room.step(&[Input::default()]);
+        assert_eq!(room.players[0].health, HEALTH);
+    }
+}
+
+#[test]
+fn a_player_who_goes_down_stands_again_at_the_spawn_full() {
+    let mut w = settled(Bot::Moves);
+    w.players[0].body.origin = v3(int(20), 0, int(-10));
+    w.players[0].health = 0;
+    w.players[0].dead = RESPAWN;
+    run(&mut w, Input::default(), RESPAWN as usize);
+    let p = &w.players[0];
+    assert!(p.alive());
+    assert_eq!((p.health, p.body.origin), (HEALTH, w.map.spawns[0].0));
+}
+
+#[test]
+fn the_walls_keep_at_most_forty_eight_marks() {
+    let mut w = settled(Bot::Moves);
+    // straight up at the sky: nothing to mark; at the floor, a mark a shot
+    w.players[0].aim.pitch = crate::camera::PITCH_MIN;
+    w.step(&[keys(crate::input::SLOT_3)]);
+    run(&mut w, Input::default(), crate::arms::RAISE as usize);
+    // twelve shots a second: five seconds, sixty shots
+    for _ in 0..300 {
+        w.players[0].arms.rounds[2] = 30;
+        w.step(&[fire()]);
+    }
+    assert_eq!(w.marks.len(), MARKS_MOST);
+}
+
+#[test]
+fn the_same_records_with_shots_give_the_same_world() {
+    let script = |t: u64| Input {
+        keys: [FORWARD, FORWARD | JUMP, LEFT | JUMP, CROUCH][(t / 23 % 4) as usize],
+        buttons: if t % 7 < 2 { crate::input::FIRE } else { 0 },
+        dx: ((t * 37) % 400) as i32 - 200,
+        ..Input::default()
+    };
+    let play = || {
+        let mut w = World::room(Bot::Shoots);
+        for t in 0..900 {
+            w.step(&[script(t)]);
+        }
+        w
+    };
+    assert_eq!(play(), play());
+}

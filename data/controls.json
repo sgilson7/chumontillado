@@ -12,7 +12,14 @@
   "ShiftLeft": "crouch",
   "ShiftRight": "crouch",
   "KeyC": "crouch",
-  "KeyR": "reset",
+  "KeyR": "reload",
   "Mouse0": "fire",
-  "Mouse2": "alt"
+  "Mouse2": "alt",
+  "Backspace": "reset",
+  "Digit1": "slot_1",
+  "Digit2": "slot_2",
+  "Digit3": "slot_3",
+  "Digit4": "slot_4",
+  "Digit5": "slot_5",
+  "KeyQ": "last"
 }

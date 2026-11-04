@@ -27,8 +27,17 @@ pub const JUMP: u32 = 1 << 4;
 /// Shift or C: crouch (not Ctrl, whose W closes the tab); at speed on the ground, a slide; a fresh press in the
 /// air, a slam.
 pub const CROUCH: u32 = 1 << 5;
-/// R: back to the room's start (M1's practice room).
+/// Backspace: back to the room's start (M1's practice room; R until M2).
 pub const RESET: u32 = 1 << 6;
+/// M2: R reloads; 1 to 5 take a gun; Q takes the last one again.
+pub const RELOAD: u32 = 1 << 7;
+pub const SLOT_1: u32 = 1 << 8;
+pub const SLOT_2: u32 = 1 << 9;
+pub const SLOT_3: u32 = 1 << 10;
+pub const SLOT_4: u32 = 1 << 11;
+pub const SLOT_5: u32 = 1 << 12;
+pub const LAST: u32 = 1 << 13;
+pub const SLOTS: [u32; 5] = [SLOT_1, SLOT_2, SLOT_3, SLOT_4, SLOT_5];
 
 /// Buttons sit above the keys in the page's bit set.
 pub const BUTTON_SHIFT: u32 = 24;
@@ -50,6 +59,13 @@ pub const ACTIONS: &[(&str, u32)] = &[
     ("jump", JUMP),
     ("crouch", CROUCH),
     ("reset", RESET),
+    ("reload", RELOAD),
+    ("slot_1", SLOT_1),
+    ("slot_2", SLOT_2),
+    ("slot_3", SLOT_3),
+    ("slot_4", SLOT_4),
+    ("slot_5", SLOT_5),
+    ("last", LAST),
     ("fire", FIRE << BUTTON_SHIFT),
     ("alt", ALT << BUTTON_SHIFT),
 ];

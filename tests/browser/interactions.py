@@ -53,7 +53,9 @@ def run(page, check, engine):
     page.keyboard.press("Escape")
     page.wait_for_selector('body[data-screen="paused"]', timeout=10000)
     rows = page.locator("#paused table.controls tr").count()
-    check(rows == 7, f"the pause lists the seven controls ({rows})")
+    # api::CONTROLS: move, look, fire, reload, guns, jump, crouch, wall jump,
+    # start again, pause (M2)
+    check(rows == 10, f"the pause lists the ten controls ({rows})")
     page.click('#paused button[data-action="screen.settings"]')
     page.wait_for_selector('body[data-screen="settings"]', timeout=10000)
     page.click('#setting-fov button[data-value="1"]')

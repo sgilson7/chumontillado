@@ -285,5 +285,159 @@
     "find": "    slide_jump_up: ONE * 5 / 10,",
     "replace": "    slide_jump_up: ONE * 15 / 10,",
     "test": "a_jump_out_of_a_slide_adds_speed_along_and_up"
+  },
+  {
+    "name": "R5.3 the bot's pitch is signed",
+    "file": "crates/core/src/pilot.rs",
+    "find": "                fx::wrap(fx::atan2(to.y, to.len_xz())),",
+    "replace": "                fx::atan2(to.y, to.len_xz()),",
+    "test": "a_player_below_makes_it_look_down_and_one_above_up"
+  },
+  {
+    "name": "M2 a head takes twice a body's damage",
+    "file": "crates/core/src/weapons.rs",
+    "find": "pub const HEAD_PCT: i32 = 200;",
+    "replace": "pub const HEAD_PCT: i32 = 100;",
+    "test": "damage_is_the_rosters_with_a_head_doubled_and_the_pincel_charged"
+  },
+  {
+    "name": "M2 only the Pincel passes through bodies",
+    "file": "crates/core/src/weapons.rs",
+    "find": "    if !pierce {\n        hits.truncate(1);\n    }",
+    "replace": "",
+    "test": "a_shot_hits_the_nearest_body_before_the_wall_and_a_head_counts_as_one"
+  },
+  {
+    "name": "M2 a wall stops a shot",
+    "file": "crates/core/src/weapons.rs",
+    "find": "            if at < wall {",
+    "replace": "            if at >= 0 {",
+    "test": "a_block_between_stops_the_shot"
+  },
+  {
+    "name": "M2 the Pincel's charge",
+    "file": "crates/core/src/weapons.rs",
+    "find": "        g.damage + (g.charged_damage - g.damage) * charged.clamp(0, g.charge) / g.charge",
+    "replace": "        g.damage",
+    "test": "damage_is_the_rosters_with_a_head_doubled_and_the_pincel_charged"
+  },
+  {
+    "name": "M2 a semi-automatic fires once a press",
+    "file": "crates/core/src/arms.rs",
+    "find": "        } else {\n            held && !was\n        };",
+    "replace": "        } else {\n            held\n        };",
+    "test": "the_pistol_fires_once_a_press_and_no_faster_than_four_a_second"
+  },
+  {
+    "name": "M2 an empty gun reloads when fired",
+    "file": "crates/core/src/arms.rs",
+    "find": "        if (fresh(RELOAD) && rounds < g.magazine) || (rounds == 0 && held) {",
+    "replace": "        if fresh(RELOAD) && rounds < g.magazine {",
+    "test": "an_empty_gun_reloads_when_fired_and_r_reloads_a_part_used_one"
+  },
+  {
+    "name": "M2 the Pincel fires on release",
+    "file": "crates/core/src/arms.rs",
+    "find": "                was && self.charge > 0",
+    "replace": "                held",
+    "test": "the_pincel_charges_while_held_and_fires_on_release"
+  },
+  {
+    "name": "M2 a gun is raised before it fires",
+    "file": "crates/core/src/arms.rs",
+    "find": "        if self.raise > 0 || self.cooldown > 0 || rounds == 0 {",
+    "replace": "        if self.cooldown > 0 || rounds == 0 {",
+    "test": "a_switch_raises_the_gun_before_it_fires_and_q_takes_the_last_again"
+  },
+  {
+    "name": "M2 the shooter's hit mark",
+    "file": "crates/core/src/world.rs",
+    "find": "                self.players[id].hit_mark = MARK;",
+    "replace": "",
+    "test": "a_pistol_shot_takes_fifty_from_a_straw_head_and_twenty_five_from_its_body"
+  },
+  {
+    "name": "M2 a straw target falls and stands again",
+    "file": "crates/core/src/world.rs",
+    "find": "                        dummy.down = TARGET_DOWN;",
+    "replace": "                        dummy.down = 0;",
+    "test": "a_rifle_headshot_fells_a_straw_target_and_it_stands_again_full"
+  },
+  {
+    "name": "M2 the shotgun's kick in the air",
+    "file": "crates/core/src/world.rs",
+    "find": "        if g.kick > 0 && !p.body.on_ground {",
+    "replace": "        if false {",
+    "test": "the_shotgun_close_up_nearly_empties_a_target_and_throws_you_up_off_the_floor"
+  },
+  {
+    "name": "M2 a downed player stands again",
+    "file": "crates/core/src/world.rs",
+    "find": "                    if p.dead == 0 {\n                        p.respawn();\n                    }",
+    "replace": "",
+    "test": "a_player_who_goes_down_stands_again_at_the_spawn_full"
+  },
+  {
+    "name": "M2 the walls keep at most 48 marks",
+    "file": "crates/core/src/world.rs",
+    "find": "                if self.marks.len() >= MARKS_MOST {\n                    self.marks.remove(0);\n                }",
+    "replace": "",
+    "test": "the_walls_keep_at_most_forty_eight_marks"
+  },
+  {
+    "name": "M2 the practice room's bot never shoots",
+    "file": "crates/core/src/pilot.rs",
+    "find": "    let target = if p.shoots { v.chest } else { None };",
+    "replace": "    let target = v.chest;",
+    "test": "a_bot_that_only_moves_never_fires"
+  },
+  {
+    "name": "M2 the bot waits its reaction",
+    "file": "crates/core/src/pilot.rs",
+    "find": "    let fire = aimed && p.seen >= REACTION && v.tick.is_multiple_of(2);",
+    "replace": "    let fire = aimed && v.tick.is_multiple_of(2);",
+    "test": "it_waits_its_reaction_then_fires_only_with_its_aim_close"
+  },
+  {
+    "name": "M2 the bot's mouse turns the way it means",
+    "file": "crates/core/src/pilot.rs",
+    "find": "    -((d as i64 * 10_000) / LOOK_UNITS_PER_100_PX) as i32",
+    "replace": "    ((d as i64 * 10_000) / LOOK_UNITS_PER_100_PX) as i32",
+    "test": "the_mouse_movement_for_a_turn_turns_the_view_by_it"
+  },
+  {
+    "name": "M2 the bot shoots in a duel",
+    "file": "crates/core/src/pilot.rs",
+    "find": "    let fire = aimed && p.seen >= REACTION && v.tick.is_multiple_of(2);",
+    "replace": "    let fire = false;",
+    "test": "in_a_duel_the_bot_shoots_the_player_and_in_the_practice_room_it_never_does"
+  },
+  {
+    "name": "M2 the HUD's rounds",
+    "file": "crates/core/src/api.rs",
+    "find": "                .replace(\"{n}\", &p.arms.rounds[p.arms.gun as usize].to_string())",
+    "replace": "                .replace(\"{n}\", &p.arms.gun.stats().magazine.to_string())",
+    "test": "the_hud_names_the_gun_and_counts_its_rounds"
+  },
+  {
+    "name": "M2 the shotgun's ring",
+    "file": "crates/core/src/weapons.rs",
+    "find": "            yaw + fx::mul(fx::cos(a), g.spread),\n            pitch + fx::mul(fx::sin(a), g.spread),",
+    "replace": "            yaw,\n            pitch,",
+    "test": "the_shotgun_throws_eight_pellets_on_a_fixed_ring_and_the_pistol_one_true"
+  },
+  {
+    "name": "T4 a map's surfaces carry their material",
+    "file": "crates/core/src/map.rs",
+    "find": "                .surface(mesh, at, colour(b.surface), b.surface.material(), ink);",
+    "replace": "                .surface(mesh, at, colour(b.surface), 0, ink);",
+    "test": "every_brush_is_drawn_as_a_surface_of_its_own_material_with_an_outline"
+  },
+  {
+    "name": "T4 the grit reaches the shader",
+    "file": "crates/core/src/look.rs",
+    "find": "            cm(g.edge_cm),\n            pct(g.edge_dark_pct),",
+    "replace": "            cm(g.edge_cm),\n            pct(g.joint_dark_pct),",
+    "test": "the_grit_reaches_the_shader_in_metres_and_shares_with_one_column_a_material"
   }
 ]

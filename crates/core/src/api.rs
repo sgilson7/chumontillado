@@ -124,6 +124,9 @@ fn panel(id: &str) -> Panel {
 pub const CONTROLS: &[(&str, &str)] = &[
     ("key_move", "control_move"),
     ("key_look", "control_look"),
+    ("key_fire", "control_fire"),
+    ("key_reload", "control_reload"),
+    ("key_guns", "control_guns"),
     ("key_jump", "control_jump"),
     ("key_crouch", "control_crouch"),
     ("key_wall", "control_wall"),
@@ -164,8 +167,15 @@ fn settings(g: &Game) -> Vec<Setting> {
     ]
 }
 
+/// The Pincel's charge, percent of full.
+fn charge_pct(a: &crate::arms::Arms) -> i32 {
+    let full = a.gun.stats().charge.max(1);
+    a.charge * 100 / full
+}
+
 /// The lines over the play view: speed, wall jumps left, what the body is
-/// doing, the best speed, and the hint.
+/// doing, the best speed, the hint, and (M2) health, the gun, its rounds,
+/// a reload, the Pincel's charge, being down, and the hit and kill marks.
 pub fn hud(g: &Game) -> Vec<Hud> {
     let playing = g.screen == Screen::Play;
     let p = &g.world.players[0];
@@ -207,6 +217,37 @@ pub fn hud(g: &Game) -> Vec<Hud> {
             playing,
         ),
         line("hint", g.strings.get("hint_play"), playing && g.world.tick < 600),
+        // M2: health, the gun and its rounds, reloading, the Pincel's charge
+        line(
+            "health",
+            g.strings.get("hud_health").replace("{n}", &p.health.to_string()),
+            playing,
+        ),
+        line("gun", g.strings.get(p.arms.gun.stats().name), playing),
+        line(
+            "ammo",
+            g.strings
+                .get("hud_ammo")
+                .replace("{n}", &p.arms.rounds[p.arms.gun as usize].to_string())
+                .replace("{of}", &p.arms.gun.stats().magazine.to_string()),
+            playing,
+        ),
+        line(
+            "reload",
+            g.strings.get("hud_reloading"),
+            playing && p.arms.reloading > 0,
+        ),
+        line(
+            "charge",
+            g.strings
+                .get("hud_charge")
+                .replace("{n}", &charge_pct(&p.arms).to_string()),
+            playing && p.arms.charge > 0,
+        ),
+        line("dead", g.strings.get("hud_dead"), playing && !p.alive()),
+        // the hit mark and the kill mark round the crosshair: drawn, not read
+        line("mark", String::new(), playing && p.hit_mark > 0),
+        line("kill", String::new(), playing && p.kill_mark > 0),
     ]
 }
 
@@ -226,6 +267,7 @@ pub fn ui(g: &Game) -> Ui {
             p.text = g.strings.get("menu_text");
             p.actions = vec![
                 action(g, "menu.practice", "", "practice", true),
+                action(g, "menu.duel", "", "duel", true),
                 action(g, "screen.settings", "", "settings", false),
             ];
             panels.push(p);
@@ -343,6 +385,20 @@ mod tests {
         assert_eq!(h[0].text, "17.3 m/s");
         assert_eq!(h[1].text, "Wall jumps: 2");
         assert!(h[0].shown && h[1].shown);
+    }
+
+    #[test]
+    fn the_hud_names_the_gun_and_counts_its_rounds() {
+        let mut g = game();
+        g.act("menu.practice", "").unwrap();
+        g.world.players[0].arms.rounds[0] = 3;
+        let h = hud(&g);
+        let line = |id: &str| h.iter().find(|l| l.id == id).unwrap().clone();
+        assert_eq!(line("gun").text, "Service pistol");
+        assert_eq!(line("ammo").text, "3 / 8");
+        assert!(!line("reload").shown && !line("mark").shown);
+        g.world.players[0].hit_mark = 4;
+        assert!(hud(&g).iter().find(|l| l.id == "mark").unwrap().shown);
     }
 
     #[test]

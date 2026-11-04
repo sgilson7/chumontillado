@@ -17,7 +17,7 @@ use crate::page::{self, Strings};
 use crate::prim::MeshTable;
 use crate::render::{self, Frame, Group, Scene, Shapes};
 use crate::ticks::Clock;
-use crate::world::World;
+use crate::world::{Bot, World};
 
 /// Software drawing (a CPU in place of a graphics card) draws a share of the
 /// pixels, percent.
@@ -54,6 +54,8 @@ pub struct Game {
     pub look: Look,
     pub meshes: MeshTable,
     pub world: World,
+    /// the room's bot: moving only (Practice room) or shooting (Duel)
+    pub bot: Bot,
     pub screen: Screen,
     /// the screen the settings return to
     pub settings_from: Screen,
@@ -90,6 +92,7 @@ impl Game {
             look,
             meshes: MeshTable::default(),
             world,
+            bot: Bot::Moves,
             screen: Screen::Title,
             settings_from: Screen::Menu,
             clock: Clock::default(),
@@ -223,6 +226,16 @@ impl Game {
         }
         let mut moving = Shapes::default();
         moving.sky(cam.eye);
+        let first_person = matches!(self.screen, Screen::Play | Screen::Paused)
+            || self.screen == Screen::Settings && self.settings_from == Screen::Paused;
+        let pending = if first_person {
+            self.pending.peek()
+        } else {
+            Mouse::default()
+        };
+        self.world
+            .draw(0, first_person, self.alpha, pending, &self.look, &mut moving);
+        crate::render::keep_visible(&mut moving.list, cam.eye);
         self.frame = Frame::build(&self.scene, &moving, &cam, self.aspect);
     }
 
@@ -235,9 +248,10 @@ impl Game {
         }
     }
 
-    /// The practice room from its start.
-    fn practice(&mut self) {
-        self.world = World::practice();
+    /// The practice room from its start, its bot moving only or shooting.
+    fn practice(&mut self, bot: Bot) {
+        self.bot = bot;
+        self.world = World::room(bot);
         for p in &mut self.world.players {
             p.aim.pct = self.look_pct;
         }
@@ -250,9 +264,10 @@ impl Game {
         let v = value.trim();
         match name {
             "title.begin" => self.show(Screen::Menu),
-            "menu.practice" => self.practice(),
+            "menu.practice" => self.practice(Bot::Moves),
+            "menu.duel" => self.practice(Bot::Shoots),
             "play.resume" => self.show(Screen::Play),
-            "play.restart" => self.practice(),
+            "play.restart" => self.practice(self.bot),
             "screen.menu" => self.show(Screen::Menu),
             "screen.settings" => {
                 if self.screen != Screen::Settings {

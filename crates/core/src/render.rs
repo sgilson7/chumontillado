@@ -59,14 +59,18 @@ pub enum Pass {
     Ink = 3,
     Shade = 4,
     Glow = 5,
-    // (CHUMWORLD's Water = 6, its river's program, is left behind, R2.6)
+    /// T4: a map's surface: lit as a solid, with the material's texture
+    /// (tiles, brick, planks, mottle) and a dark rim at each face's edge,
+    /// its material's number in the value
+    Surface = 6,
 }
 
 impl Pass {
     /// Draw order within a layer: every opaque pass before the blended ones.
-    pub const ORDER: [Pass; 6] = [
+    pub const ORDER: [Pass; 7] = [
         Pass::Sky,
         Pass::Solid,
+        Pass::Surface,
         Pass::Dither,
         Pass::Ink,
         Pass::Shade,
@@ -75,7 +79,7 @@ impl Pass {
 
     /// Drawn as an opaque, lit surface that writes depth.
     pub fn opaque(self) -> bool {
-        matches!(self, Pass::Solid | Pass::Dither)
+        matches!(self, Pass::Solid | Pass::Dither | Pass::Surface)
     }
 }
 
@@ -179,6 +183,20 @@ impl Shapes {
         });
     }
 
+    /// T4: a map's surface in material `material` (its row in the look's
+    /// grit table), with an ink outline.
+    pub fn surface(&mut self, mesh: impl Into<MeshId>, at: Affine, rgb: Rgb, material: i32, ink: Rgb) {
+        let mesh = mesh.into();
+        self.push(Shape {
+            mesh,
+            at,
+            rgb,
+            value: material * ONE,
+            pass: Pass::Surface,
+        });
+        self.outline(mesh, &at, ink, ONE);
+    }
+
     /// A lit solid with an ink outline in `ink`.
     pub fn inked(&mut self, mesh: impl Into<MeshId>, at: Affine, rgb: Rgb, ink: Rgb) {
         let mesh = mesh.into();
@@ -272,7 +290,7 @@ pub const KEEP_VISIBLE_LONGEST: Fx = ONE * 12 / 100;
 pub fn keep_visible(shapes: &mut [Shape], eye: V3) {
     for s in shapes.iter_mut() {
         let ink = match s.pass {
-            Pass::Solid | Pass::Dither => false,
+            Pass::Solid | Pass::Dither | Pass::Surface => false,
             Pass::Ink => true,
             _ => continue,
         };
@@ -626,7 +644,7 @@ pub fn pass_states() -> serde_json::Value {
         let flag = |b: bool| b as i32;
         let (blend, write, test, cull): (Option<[&str; 2]>, bool, bool, Option<&str>) = match p {
             Pass::Sky => (None, false, false, None),
-            Pass::Solid | Pass::Dither => (None, true, true, Some("BACK")),
+            Pass::Solid | Pass::Dither | Pass::Surface => (None, true, true, Some("BACK")),
             Pass::Ink => (None, true, true, Some("FRONT")),
             Pass::Shade => (
                 Some(["SRC_ALPHA", "ONE_MINUS_SRC_ALPHA"]),
@@ -640,7 +658,8 @@ pub fn pass_states() -> serde_json::Value {
             "id": p as u32,
             // sky, ink, glow, dither; then shade
             "mode_a": [flag(p == Pass::Sky), flag(p == Pass::Ink), flag(p == Pass::Glow), flag(p == Pass::Dither)],
-            "mode_b": [flag(p == Pass::Shade), 0, 0, 0],
+            // shade, surface (T4)
+            "mode_b": [flag(p == Pass::Shade), flag(p == Pass::Surface), 0, 0],
             "blend": blend,
             "depth_write": write,
             "depth_test": test,
@@ -942,7 +961,15 @@ mod tests {
             let blended = !s["blend"].is_null();
             assert_eq!(s["depth_write"], !blended && p != Pass::Sky, "{p:?}");
         }
-        assert_eq!(list[Pass::Ink as usize]["cull"], "FRONT", "the inverted hull");
+        // the page finds a pass by its id, not its place in the draw order
+        let ink = list.iter().find(|s| s["id"] == Pass::Ink as u32).unwrap();
+        assert_eq!(ink["cull"], "FRONT", "the inverted hull");
+        // T4: a surface is drawn like a solid, with the surface flag on
+        let surface = list.iter().find(|s| s["id"] == Pass::Surface as u32).unwrap();
+        assert_eq!(
+            (surface["cull"].as_str(), surface["mode_b"][1].as_i64()),
+            (Some("BACK"), Some(1))
+        );
     }
 
     #[test]

@@ -56,6 +56,23 @@ pub const REQUIRED: &[&str] = &[
     "hud_sliding",
     "hud_slamming",
     "hint_play",
+    "duel",
+    "key_fire",
+    "control_fire",
+    "key_reload",
+    "control_reload",
+    "key_guns",
+    "control_guns",
+    "gun_pistol",
+    "gun_shotgun",
+    "gun_machine_pistol",
+    "gun_rifle",
+    "gun_pincel",
+    "hud_health",
+    "hud_ammo",
+    "hud_reloading",
+    "hud_charge",
+    "hud_dead",
 ];
 
 /// The reader-visible strings the page needs. They live in data, not source.

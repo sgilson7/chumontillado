@@ -50,6 +50,26 @@ pub struct Palette {
     pub block: [i32; 3],
     pub trim: [i32; 3],
     pub shadow: [i32; 3],
+    /// M2: the guns drawn true (steel, blackened steel, wood, brass) and the
+    /// painted Pincel (bone, smalt, ochre, umber, vermilion: its stroke)
+    pub steel: [i32; 3],
+    pub dark_steel: [i32; 3],
+    pub wood: [i32; 3],
+    pub brass: [i32; 3],
+    pub bone: [i32; 3],
+    pub blue: [i32; 3],
+    pub ochre: [i32; 3],
+    pub umber: [i32; 3],
+    pub stroke: [i32; 3],
+    /// a tracer, a muzzle's flash and a body's flash when hit, a mark on a
+    /// wall
+    pub tracer: [i32; 3],
+    pub flash: [i32; 3],
+    pub mark: [i32; 3],
+    /// the straw targets, and the bot's body and head (M6 brings the skins)
+    pub straw: [i32; 3],
+    pub figure: [i32; 3],
+    pub head: [i32; 3],
 }
 
 /// `data/look.json`. Fields starting with `_` there are notes.
@@ -78,6 +98,43 @@ pub struct Look {
     pub ink: [i32; 3],
     pub ink_bias_millionths: [i32; 2],
     pub palette: Palette,
+    pub grit: Grit,
+}
+
+/// T4: the texture every map surface carries, so a face reads as tile, brick
+/// or plank and its edges show (`scene.frag`'s grit). Lengths in
+/// centimetres, strengths in percent.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct Grit {
+    /// the dark rim along each face's edge: its width and how dark
+    pub edge_cm: i32,
+    pub edge_dark_pct: i32,
+    /// the joints between tiles, bricks and planks
+    pub joint_cm: i32,
+    pub joint_dark_pct: i32,
+    /// a soft mottle (cycles a metre, hundredths) and a fine speckle
+    pub mottle_per_m_hundredths: i32,
+    pub mottle_pct: i32,
+    pub speck_per_m: i32,
+    pub speck_pct: i32,
+    /// the patterns' sizes: a tile, a brick's height and length, a plank
+    pub tile_cm: i32,
+    pub brick_high_cm: i32,
+    pub brick_long_cm: i32,
+    pub plank_cm: i32,
+    /// each tile's, brick's or plank's own shade; a plank's grain, stretched
+    /// along and across, and how strong
+    pub cell_pct: i32,
+    pub grain_along_per_m_hundredths: i32,
+    pub grain_across_per_m: i32,
+    pub grain_pct: i32,
+    /// the hash's two weights and its scale (thousandths), and a distance
+    /// past any face (m) that rules an axis out of the rim
+    pub hash_thousandths: [i32; 3],
+    pub far_m: i32,
+    /// by material number (`map::Surface::material`): how much of tiles,
+    /// bricks and planks, and the pattern's scale, percent each
+    pub materials: Vec<[i32; 4]>,
 }
 
 /// The 4 × 4 ordered-dither matrix (Bayer's): each cell's rank, 0 to 15.
@@ -130,7 +187,22 @@ pub const UNIFORMS: &[(&str, &str, usize)] = &[
     ("uBias", "uniform2fv", 2),
     ("uBayer", "uniformMatrix4fv", 16),
     ("uBayerSize", "uniform1fv", 1),
+    // T4: the surfaces' grit
+    ("uGrit", "uniform4fv", 4),
+    ("uGrit2", "uniform4fv", 4),
+    ("uCourse", "uniform4fv", 4),
+    ("uTint", "uniform4fv", 4),
+    ("uHash", "uniform4fv", 4),
+    ("uMaterialA", "uniformMatrix4fv", 16),
+    ("uMaterialB", "uniformMatrix4fv", 16),
+    ("uMatSplit", "uniform1fv", 1),
 ];
+
+/// T4: the rows of the grit's material table the shader holds: two mat4
+/// uniforms of four columns each (a shader may hold no number but 0 and 1,
+/// so no array size).
+pub const MATERIALS: usize = 8;
+const MATERIALS_PER_MATRIX: usize = 4;
 
 impl Look {
     pub fn parse(json: &str) -> Result<Look, String> {
@@ -138,6 +210,11 @@ impl Look {
             serde_json::from_str(json).map_err(|e| format!("The look file could not be read: {e}"))?;
         if l.sun_toward == [0, 0, 0] {
             return Err("The look file's sun has no direction.".into());
+        }
+        if l.grit.materials.len() > MATERIALS {
+            return Err(format!(
+                "The look file's grit has more than {MATERIALS} materials."
+            ));
         }
         Ok(l)
     }
@@ -210,6 +287,46 @@ impl Look {
             }
         }
         out.push(fx::int(BAYER_SIZE));
+        // T4: the grit, lengths from centimetres to metres
+        let g = &self.grit;
+        let cm = |c: i32| c * ONE / 100;
+        out.extend([
+            cm(g.edge_cm),
+            pct(g.edge_dark_pct),
+            cm(g.joint_cm),
+            pct(g.joint_dark_pct),
+        ]);
+        out.extend([
+            pct(g.mottle_per_m_hundredths),
+            pct(g.mottle_pct),
+            fx::int(g.speck_per_m),
+            pct(g.speck_pct),
+        ]);
+        out.extend([
+            cm(g.tile_cm),
+            cm(g.brick_high_cm),
+            cm(g.brick_long_cm),
+            cm(g.plank_cm),
+        ]);
+        out.extend([
+            pct(g.cell_pct),
+            pct(g.grain_along_per_m_hundredths),
+            fx::int(g.grain_across_per_m),
+            pct(g.grain_pct),
+        ]);
+        let th = |t: i32| (t as i64 * ONE as i64 / 1000) as i32;
+        out.extend([
+            th(g.hash_thousandths[0]),
+            th(g.hash_thousandths[1]),
+            th(g.hash_thousandths[2]),
+            fx::int(g.far_m),
+        ]);
+        // column by column, as WebGL reads a mat4: one material a column
+        for k in 0..MATERIALS {
+            let row = g.materials.get(k).copied().unwrap_or([0, 0, 0, 100]);
+            out.extend(row.map(pct));
+        }
+        out.push(fx::int(MATERIALS_PER_MATRIX as i32));
         out
     }
 }
@@ -217,6 +334,23 @@ impl Look {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+
+    #[test]
+    fn the_grit_reaches_the_shader_in_metres_and_shares_with_one_column_a_material() {
+        let l = Look::parse(include_str!("../../../data/look.json")).unwrap();
+        let u = l.uniforms();
+        // the grit's values are the last 4 × 5 + 16 + 16 + 1 = 53
+        let g = &u[u.len() - 53..];
+        // the rim: 8 cm and 45%; a tile, 100 cm; a brick 30 cm high
+        assert_eq!((g[0], g[1]), (ONE * 8 / 100, ONE * 45 / 100));
+        assert_eq!((g[8], g[9]), (ONE, ONE * 30 / 100));
+        // material 2 (a wall): all brick, at scale 100%, as column 2 of A
+        assert_eq!(&g[20 + 8..20 + 12], &[0, ONE, 0, ONE]);
+        // the split: four materials a matrix
+        assert_eq!(*u.last().unwrap(), fx::int(4));
+        let n: usize = UNIFORMS.iter().map(|(_, _, len)| len).sum();
+        assert_eq!(u.len(), n, "every uniform's values, in order");
+    }
 
     pub fn look() -> Look {
         Look::parse(include_str!("../../../data/look.json")).expect("data/look.json")
@@ -284,5 +418,9 @@ pub(crate) mod tests {
         let mut w: serde_json::Value = serde_json::from_str(include_str!("../../../data/look.json")).unwrap();
         w["palette"].as_object_mut().unwrap().remove("ramp");
         assert!(Look::parse(&w.to_string()).unwrap_err().contains("ramp"));
+        // T4: the grit's material table fits the shader's two matrices
+        let mut x: serde_json::Value = serde_json::from_str(include_str!("../../../data/look.json")).unwrap();
+        x["grit"]["materials"] = serde_json::json!(vec![[0, 0, 0, 100]; MATERIALS + 1]);
+        assert!(Look::parse(&x.to_string()).unwrap_err().contains("materials"));
     }
 }

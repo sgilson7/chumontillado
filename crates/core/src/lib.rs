@@ -15,6 +15,7 @@
 //! `movement.rs` how a player moves.
 
 pub mod api;
+pub mod arms;
 pub mod camera;
 pub mod flicker;
 pub mod fx;
@@ -27,10 +28,12 @@ pub mod map;
 pub mod mesh;
 pub mod movement;
 pub mod page;
+pub mod pilot;
 pub mod prim;
 pub mod render;
 pub mod rng;
 pub mod sky;
 pub mod ticks;
 pub mod trace;
+pub mod weapons;
 pub mod world;

@@ -26,7 +26,7 @@ pub const FOV_MAX: i32 = 120;
 pub const FOV_START: i32 = 105;
 /// Turning: 0.12° a CSS pixel of mouse movement, held as angle units per
 /// 100 pixels (12°); the record carries hundredths of a pixel.
-const LOOK_UNITS_PER_100_PX: i64 = fx::TURN as i64 * 12 / 360;
+pub const LOOK_UNITS_PER_100_PX: i64 = fx::TURN as i64 * 12 / 360;
 
 /// Where the player looks: heading and pitch, and the part of an angle unit
 /// the mouse has moved that has not yet turned the view (so the same
