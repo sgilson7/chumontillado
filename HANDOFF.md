@@ -28,7 +28,7 @@ Chumontillado is a first-person movement shooter for up to four players online, 
 
 - `cargo test`: the core's tests. `python3 scripts/break_tests.py`: 28 of 28 caught.
 - `./scripts/check.sh`: BUILDER CHECK PASSED (recorded below).
-- `./scripts/publish.sh`, with `GIT_AUTHOR_NAME`/`GIT_COMMITTER_NAME` set (this machine has no git identity).
+- `./scripts/publish.sh`, with `GIT_AUTHOR_NAME`/`GIT_COMMITTER_NAME` set (this machine has no git identity), then `git push origin main`: the push runs `.github/workflows/pages.yml`, which deploys the gh-pages branch (R2.3). Pages' own branch builder hung, so it is not used.
 
 ## What will bite within the hour
 

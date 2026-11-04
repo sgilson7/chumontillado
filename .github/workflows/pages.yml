@@ -1,0 +1,33 @@
+# Deploys the gh-pages branch (which scripts/publish.sh fills with dist/) to
+# GitHub Pages. Pages' branch builder failed twice with no reason and then
+# hung on one commit (SECOND-ORDER.md R2.3); this workflow publishes the same
+# files and logs each step. It builds nothing: the site was built and checked
+# locally by scripts/check.sh before publish.sh pushed it.
+name: pages
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - id: deployment
+        uses: actions/deploy-pages@v4
