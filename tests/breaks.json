@@ -439,5 +439,33 @@
     "find": "            cm(g.edge_cm),\n            pct(g.edge_dark_pct),",
     "replace": "            cm(g.edge_cm),\n            pct(g.joint_dark_pct),",
     "test": "the_grit_reaches_the_shader_in_metres_and_shares_with_one_column_a_material"
+  },
+  {
+    "name": "T5 a body is 0.96 m across",
+    "file": "crates/core/src/weapons.rs",
+    "find": "pub const BODY_R: Fx = ONE * 48 / 100;",
+    "replace": "pub const BODY_R: Fx = ONE * 32 / 100;",
+    "test": "a_shot_four_tenths_of_a_metre_beside_a_body_hits_it_and_one_six_tenths_off_misses"
+  },
+  {
+    "name": "T5 the drawn bot stays inside the envelope",
+    "file": "crates/core/src/world.rs",
+    "find": "        (Mesh::Facet, 72, [92, 140, 66], pal.figure),",
+    "replace": "        (Mesh::Facet, 72, [120, 140, 66], pal.figure),",
+    "test": "the_drawn_bot_and_straw_target_stay_inside_the_hit_envelope"
+  },
+  {
+    "name": "T6 the view carries the origin",
+    "file": "crates/core/src/render.rs",
+    "find": "        view.extend([origin.x, origin.y, origin.z]);",
+    "replace": "        view.extend([0, 0, 0]);",
+    "test": "the_view_carries_the_origin_last_so_a_texture_can_be_pinned_to_the_world"
+  },
+  {
+    "name": "R6.2 the bot's body is drawn as wide as meant",
+    "file": "crates/core/src/world.rs",
+    "find": "        (Mesh::Facet, 72, [92, 140, 66], pal.figure),",
+    "replace": "        (Mesh::Capsule, 72, [92, 140, 66], pal.figure),",
+    "test": "the_drawn_bot_and_straw_target_stay_inside_the_hit_envelope"
   }
 ]

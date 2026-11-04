@@ -17,6 +17,9 @@ flat in float vFade;
 flat in vec3 vSize;
 in vec3 vLocalNormal;
 uniform vec3 uEye;
+// T6: the origin positions are measured from, which jumps as the eye moves;
+// a surface's texture reads the true world position, so it stays put
+uniform vec3 uOrigin;
 uniform vec4 uModeA;
 uniform vec4 uModeB;
 uniform float uQ;
@@ -108,7 +111,8 @@ float grit(vec3 n) {
   int split = int(uMatSplit + uK.x);
   vec4 m = k < split ? uMaterialA[k] : uMaterialB[k - split];
   vec3 an = abs(n);
-  vec2 uv = an.y > max(an.x, an.z) ? vWorld.xz : (an.x > an.z ? vWorld.zy : vWorld.xy);
+  vec3 w = vWorld + uOrigin;
+  vec2 uv = an.y > max(an.x, an.z) ? w.xz : (an.x > an.z ? w.zy : w.xy);
   uv *= m.w;
   // how far one pixel reaches across the surface here
   float px = length(fwidth(uv));

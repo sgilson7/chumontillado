@@ -447,14 +447,26 @@ fn bar(a: V3, b: V3, thick: Fx) -> Affine {
 
 /// The bot's figure (M6 brings the skins): a dark body, a pale head under
 /// a tall hat, gone pale for a moment when hit.
-fn draw_figure(out: &mut Shapes, feet: V3, yaw: i32, ducked: bool, flashed: bool, pal: &Palette, ink: Rgb) {
+pub(crate) fn draw_figure(
+    out: &mut Shapes,
+    feet: V3,
+    yaw: i32,
+    ducked: bool,
+    flashed: bool,
+    pal: &Palette,
+    ink: Rgb,
+) {
     let k = if ducked { ONE * 62 / 100 } else { ONE };
     let turn = Affine::translate(feet).then(&Affine::rot_y(yaw));
     let colour = |c: [i32; 3]| if flashed { rgb(pal.flash) } else { rgb(c) };
     let parts = [
-        (Mesh::Capsule, 72, [56, 144, 40], pal.figure),
-        (Mesh::Facet, 163, [30, 34, 30], pal.head),
-        (Mesh::Cyl, 190, [24, 26, 24], pal.figure),
+        // T5: as wide as the hit envelope allows (the body 0.92 of its 0.96 m,
+        // the head 0.52 of 0.56), and no hat above it, which a shot would
+        // pass through
+        // (a faceted ball fills its box; the capsule mesh is only 0.36 of it
+        // across, which drew the body a third as wide as meant, R6.2)
+        (Mesh::Facet, 72, [92, 140, 66], pal.figure),
+        (Mesh::Facet, 165, [52, 54, 52], pal.head),
     ];
     for (mesh, y, size, c) in parts {
         let a = turn
@@ -469,7 +481,7 @@ fn draw_figure(out: &mut Shapes, feet: V3, yaw: i32, ducked: bool, flashed: bool
 }
 
 /// A straw target on its post, lying on its back while down.
-fn draw_dummy(out: &mut Shapes, d: &Dummy, pal: &Palette, ink: Rgb) {
+pub(crate) fn draw_dummy(out: &mut Shapes, d: &Dummy, pal: &Palette, ink: Rgb) {
     let base = if d.down > 0 {
         Affine::translate(d.feet).then(&Affine::rot_x(-fx::QUARTER_TURN))
     } else {
@@ -478,10 +490,12 @@ fn draw_dummy(out: &mut Shapes, d: &Dummy, pal: &Palette, ink: Rgb) {
     let straw = if d.flash > 0 { pal.flash } else { pal.straw };
     // (mesh, centre, size) in centimetres, and colour
     let parts = [
-        (Mesh::Cyl, [0, 50, 0], [10, 100, 10], pal.wood),
-        (Mesh::Facet, [0, 115, 0], [56, 70, 38], straw),
-        (Mesh::Facet, [0, 165, 0], [30, 32, 30], straw),
-        (Mesh::Cyl, [0, 120, -19], [20, 2, 20], pal.stroke),
+        // T5: filling the hit envelope; the red disc on the chest faces the
+        // room's spawn (+z)
+        (Mesh::Cyl, [0, 25, 0], [12, 50, 12], pal.wood),
+        (Mesh::Facet, [0, 98, 0], [88, 96, 64], straw),
+        (Mesh::Facet, [0, 165, 0], [52, 54, 52], straw),
+        (Mesh::Cube, [0, 105, 31], [26, 26, 3], pal.stroke),
     ];
     let cm = |c: i32| c * ONE / 100;
     for (mesh, at, size, c) in parts {

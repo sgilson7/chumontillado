@@ -65,6 +65,8 @@ export function makeRenderer(canvas, N, shaders, meshList, meshData) {
   for (const a of vertexAttributes) gl.vertexAttribDivisor(a.loc, 0);
   const uVP = gl.getUniformLocation(program, "uVP");
   const uEye = gl.getUniformLocation(program, "uEye");
+  // T6: where the positions are measured from, for the surfaces' texture
+  const uOrigin = gl.getUniformLocation(program, "uOrigin");
   const uModeA = gl.getUniformLocation(program, "uModeA");
   const uModeB = gl.getUniformLocation(program, "uModeB");
 
@@ -127,6 +129,7 @@ export function makeRenderer(canvas, N, shaders, meshList, meshData) {
       gl.depthMask(true);
       gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       gl.uniform3fv(uEye, view.subarray(...N.view.eye));
+      gl.uniform3fv(uOrigin, view.subarray(...N.view.origin));
       let layer = -1;
       let pass = -1;
       for (let i = 0; i < draws.length; i += N.draw_values) {

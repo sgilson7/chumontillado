@@ -162,9 +162,12 @@ pub struct Target {
     pub head: V3,
 }
 
-/// The body's radius (the envelope's, 0.32 m) and the head's (0.16 m).
-pub const BODY_R: Fx = ONE * 32 / 100;
-pub const HEAD_R: Fx = ONE * 16 / 100;
+/// The body's radius and the head's: the shared hit envelope (CS-Q12),
+/// 0.96 m across and a head 0.56 m across. T5 widened them from the Roster
+/// page's 0.64 m and 0.32 m, under which a body at the arena's distances was
+/// a sliver (R6.1). The movement box stays 0.64 m (`movement::HALF_WIDTH`).
+pub const BODY_R: Fx = ONE * 48 / 100;
+pub const HEAD_R: Fx = ONE * 28 / 100;
 
 impl Target {
     /// A standing or crouched body with its feet at `feet` and its eye
@@ -333,11 +336,12 @@ mod tests {
 
     #[test]
     fn a_ray_meets_a_ball_at_its_near_side_and_misses_one_off_to_the_side() {
-        // from the origin along −z to a ball 10 m off of radius 0.16
+        // from the origin along −z to a ball 10 m off of the head's radius,
+        // 0.28 (T5); one 0.35 m to the side is missed
         let t = ray_ball(V3::ZERO, v3(0, 0, -ONE), v3(0, 0, -int(10)), HEAD_R).unwrap();
         assert!(near(t, int(10) - HEAD_R, 8), "{}", fx::decimal(t, 4));
         assert_eq!(
-            ray_ball(V3::ZERO, v3(0, 0, -ONE), v3(ONE / 5, 0, -int(10)), HEAD_R),
+            ray_ball(V3::ZERO, v3(0, 0, -ONE), v3(ONE * 35 / 100, 0, -int(10)), HEAD_R),
             None
         );
         // behind the ray
@@ -397,6 +401,29 @@ mod tests {
         let (hits, stop) = cast(&m, &mut s, o, d, int(100), &[Some(far_one), Some(near_one)], true);
         assert_eq!(hits.iter().map(|h| h.who).collect::<Vec<_>>(), vec![1, 0]);
         assert!(near(stop, int(48), ONE / 100), "{}", fx::decimal(stop, 3));
+    }
+
+    #[test]
+    fn a_shot_four_tenths_of_a_metre_beside_a_body_hits_it_and_one_six_tenths_off_misses() {
+        // T5: the body is 0.96 m across (radius 0.48)
+        let m = practice();
+        let mut s = Scratch::default();
+        let d = v3(0, 0, -ONE);
+        let body = [Some(Target::of(v3(int(8), 0, -int(2)), ONE * 165 / 100))];
+        let mut at = |dx: Fx| {
+            cast(
+                &m,
+                &mut s,
+                v3(int(8) + dx, ONE, int(16)),
+                d,
+                int(100),
+                &body,
+                false,
+            )
+            .0
+        };
+        assert_eq!(at(ONE * 4 / 10).len(), 1);
+        assert!(at(ONE * 6 / 10).is_empty());
     }
 
     #[test]

@@ -339,7 +339,7 @@ pub fn numbers() -> String {
         "buffers": { "static": render::STATIC_BUFFER, "dynamic": render::DYNAMIC_BUFFER },
         "passes": render::pass_states(),
         "uniforms": look::UNIFORMS.iter().chain(crate::sky::UNIFORMS).map(|(n, call, len)| serde_json::json!([n, call, len, call.contains("Matrix")])).collect::<Vec<_>>(),
-        "view": { "layers": [[0, 16], [16, 32], [32, 48]], "eye": [48, 51] },
+        "view": { "layers": [[0, 16], [16, 32], [32, 48]], "eye": [48, 51], "origin": [51, 54] },
     })
     .to_string()
 }

@@ -742,3 +742,54 @@ fn the_same_records_with_shots_give_the_same_world() {
     };
     assert_eq!(play(), play());
 }
+
+#[test]
+fn the_drawn_bot_and_straw_target_stay_inside_the_hit_envelope() {
+    // CS-5: nothing solid drawn outside what a shot meets: within the body's
+    // radius across, and no higher than the top of the head
+    use crate::render::Pass;
+    use crate::weapons::{BODY_R, HEAD_R};
+    let look = crate::look::Look::parse(include_str!("../../../../data/look.json")).unwrap();
+    let mut shapes = crate::render::Shapes::default();
+    draw_figure(&mut shapes, V3::ZERO, 0, false, false, &look.palette, look.ink());
+    // the bot alone must fill most of the envelope (R6.2)
+    let bot_parts = shapes.list.len();
+    let dummy = Dummy {
+        feet: V3::ZERO,
+        health: HEALTH,
+        down: 0,
+        flash: 0,
+    };
+    draw_dummy(&mut shapes, &dummy, &look.palette, look.ink());
+    let top = ONE * 165 / 100 + HEAD_R;
+    // every vertex of every solid part, where it is drawn: the meshes' own
+    // shapes, not their boxes (the capsule fills a third of its box, R6.2)
+    let table = crate::prim::MeshTable::default();
+    let mut widest = 0;
+    for (k, sh) in shapes
+        .list
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| s.pass == Pass::Solid)
+    {
+        let v = table.vertices(sh.mesh);
+        for p in v.chunks(crate::prim::VERTEX_VALUES) {
+            let at = sh.at.apply(v3(p[0], p[1], p[2]));
+            if k < bot_parts {
+                widest = widest.max(at.len_xz());
+            }
+            assert!(
+                at.len_xz() <= BODY_R,
+                "a part reaches {} out",
+                fx::decimal(at.len_xz(), 3)
+            );
+            assert!(at.y <= top, "a part reaches {} up", fx::decimal(at.y, 3));
+        }
+    }
+    // and the bot fills most of it: its body at least 0.4 m out
+    assert!(
+        widest >= ONE * 4 / 10,
+        "the widest part reaches only {}",
+        fx::decimal(widest, 3)
+    );
+}

@@ -42,6 +42,18 @@ Chumontillado is a first-person movement shooter for up to four players online, 
 
 ../chumontillado-journal/, published at https://claude.ai/artifact/5F9AxuvUdChSWFCDBaygSJ. Newest entry: M1, the practice room.
 
+## Where work stopped (2026-11-04)
+
+M2 is live with T1 to T6. Next, in order:
+
+1. **M3:** the five projectile guns (Drum launcher, Trabuco, Toro, Campana, Collage), the three melee weapons (katana with its lunge and its 6-tick parry of projectiles, CS-Q15; navaja; guadaña with its hook), and weapon jumps at 30% self-damage (CS-Q16). Projectiles need their own deterministic flight in `world.rs` and a test like the hitscan ones.
+2. **M4:** four seats online with rollback. Bring the arena's `online.rs` and `rollback.rs` (e78945b) and the shim's online calls back. This is also where a hit shown and then taken back (R5.2, CS-Q5: B) and the exact aim at the click (R5.6) belong.
+3. **M5:** rounds, the three maps (every surface textured, T4), the lobby, positions through walls at 75 s (CS-Q18: C).
+4. **M6:** the four skins inside the 0.96 m envelope (R6.1), sound, and the Kuwahara video (R1.13).
+5. **Final pass:** animations (T7, R6.4).
+
+Before trusting a test run, check it compiled: filter for `error` lines as well as failures (R6.5).
+
 ## Open for the person
 
 - R1.1 (person): the name, Chumontillado.
@@ -50,4 +62,4 @@ Chumontillado is a first-person movement shooter for up to four players online, 
 
 ## Check
 
-`./scripts/check.sh` on 2026-11-04 at M2: BUILDER CHECK PASSED (format, lint, 176 tests, the WebAssembly build and import audit, the art check, the notebook, the journal, and the browser check in Chromium, Firefox and WebKit).
+`./scripts/check.sh` on 2026-11-04 after T5 and T6: BUILDER CHECK PASSED (format, lint, 179 tests, the WebAssembly build and import audit, the art check, the notebook, the journal, and the browser check in Chromium, Firefox and WebKit).

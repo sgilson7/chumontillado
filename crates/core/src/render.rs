@@ -549,7 +549,9 @@ pub struct Frame {
     pub draws: Vec<u32>,
 }
 
-pub const VIEW_VALUES: usize = 16 + 16 + 16 + 3;
+/// Each layer's matrix, the eye (relative to the origin), and (T6) the
+/// origin itself, so a surface's texture can be pinned to the world.
+pub const VIEW_VALUES: usize = 16 + 16 + 16 + 3 + 3;
 
 impl Frame {
     /// Builds the frame: for each layer, for each pass, the static groups'
@@ -562,6 +564,8 @@ impl Frame {
         }
         let e = cam.eye.sub(origin);
         view.extend([e.x, e.y, e.z]);
+        // T6: the origin, so the shader can put a point back in the world
+        view.extend([origin.x, origin.y, origin.z]);
 
         let groups: Vec<(bool, bool, bool)> = scene
             .groups
@@ -863,6 +867,29 @@ mod tests {
         let layers: Vec<u32> = f.draws.chunks(DRAW_VALUES).map(|d| d[5]).collect();
         assert_eq!(layers, vec![Layer::Near as u32, Layer::Eye as u32]);
         assert_eq!(f.view.len(), VIEW_VALUES);
+    }
+
+    #[test]
+    fn the_view_carries_the_origin_last_so_a_texture_can_be_pinned_to_the_world() {
+        // T6: positions reach the page relative to an origin that jumps in
+        // 256 m steps; the origin's own values let the shader add it back
+        let c = Camera {
+            eye: v3(int(300), int(2), -int(40)),
+            fwd: v3(0, 0, -ONE),
+            fov: fx::deg(60),
+            roll: 0,
+        };
+        let origin = origin_for(c.eye);
+        assert_eq!(origin, v3(int(256), 0, -int(256)));
+        let scene = Scene::build(&[], origin, 1);
+        let f = Frame::build(&scene, &Shapes::default(), &c, ONE);
+        let n = f.view.len();
+        assert_eq!(&f.view[n - 3..], &[int(256), 0, -int(256)]);
+        assert_eq!(
+            &f.view[n - 6..n - 3],
+            &[int(44), int(2), int(216)],
+            "the eye, relative"
+        );
     }
 
     #[test]
