@@ -32,7 +32,7 @@ fn script(seat: usize, t: u32) -> Input {
 /// The world a browser reaches with every seat's record on time, the seats
 /// `seats` holds by people and seat `gone` (if any) its bot's from `from`.
 fn truth(seats: Seats, ticks: u32, gone: Option<(usize, u32)>) -> World {
-    let mut w = World::online(seats, 0);
+    let mut w = World::online(seats, 0, [0, 1, 2, 3]);
     for t in 0..ticks {
         if let Some((s, from)) = gone {
             if t == from {
@@ -153,10 +153,15 @@ impl Room {
                     }
                     None => self.nets[*b].message(id(*a), &text),
                 };
-                if let Some(crate::online::Event::Start { seats, empty }) = start {
+                if let Some(crate::online::Event::Start { seats, empty, skins }) = start {
                     let links = std::mem::replace(&mut self.nets[*b], Net::new(false, "b"));
                     let seat = links.seat.expect("a started guest has a seat");
-                    self.sessions[*b] = Some(Rollback::new(links, seat, seats, World::online(seats, empty)));
+                    self.sessions[*b] = Some(Rollback::new(
+                        links,
+                        seat,
+                        seats,
+                        World::online(seats, empty, skins),
+                    ));
                 }
             }
         }
@@ -166,8 +171,8 @@ impl Room {
     /// The host starts the match.
     fn start(&mut self) {
         let mut links = std::mem::replace(&mut self.nets[0], Net::new(true, "b"));
-        let (seats, empty) = links.start();
-        self.sessions[0] = Some(Rollback::new(links, 0, seats, World::online(seats, empty)));
+        let (seats, empty, skins) = links.start();
+        self.sessions[0] = Some(Rollback::new(links, 0, seats, World::online(seats, empty, skins)));
     }
 
     /// One frame: every browser in the match makes its record and steps once.
@@ -275,7 +280,7 @@ fn a_seat_the_host_left_empty_has_nobody_in_it_on_every_browser() {
         assert!(s.world.players[2].pilot.is_some(), "seat 2 is still a bot's");
         assert_eq!(s.links.status, PLAYING);
         for &(t, sum) in &s.made {
-            let mut w = World::online(0b11, 0b1000);
+            let mut w = World::online(0b11, 0b1000, [0, 1, 2, 3]);
             for k in 0..t {
                 let rec: [Input; SEATS] = std::array::from_fn(|s| script(s, k));
                 Sim::tick(&mut w, &rec);

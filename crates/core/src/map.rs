@@ -16,6 +16,7 @@ use crate::geom::{v3, Affine, V3};
 use crate::look::Rgb;
 use crate::prim::Mesh;
 use crate::render::Group;
+use crate::weapons::Weapon;
 
 /// A face's plane: the brush lies where `n · p <= d`. `n` has length `ONE`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,7 +43,8 @@ pub enum Surface {
 /// cross-section's three corners (in the other two axes) and its length.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Shape {
-    Block,
+    /// a box, from its corners as built
+    Block { mins: V3, maxs: V3 },
     /// corners as (across, up) pairs; `along_z` says which axis the prism runs
     Prism {
         corners: [(Fx, Fx); 3],
@@ -58,14 +60,24 @@ pub struct Brush {
     pub mins: V3,
     pub maxs: V3,
     pub surface: Surface,
+    /// the shape as built, before `turn`
     pub shape: Shape,
+    /// M5: a turn about the vertical and a move, carrying the shape as
+    /// built onto where it stands (`turned`); the identity for most
+    pub turn: Affine,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Map {
     pub brushes: Vec<Brush>,
     /// where a player starts, and the yaw they face
     pub spawns: Vec<(V3, i32)>,
+    /// M5: its name's key in the strings
+    pub name: &'static str,
+    /// M5: where each weapon lies at a round's start (CS-Q10: A)
+    pub pickups: Vec<(V3, Weapon)>,
+    /// M5: the loop a bot hops round, (x, z) in metres
+    pub bot_loop: Vec<(i32, i32)>,
 }
 
 fn plane(n: V3, through: V3) -> Plane {
@@ -91,7 +103,8 @@ pub fn block(mins: V3, maxs: V3, surface: Surface) -> Brush {
         mins,
         maxs,
         surface,
-        shape: Shape::Block,
+        shape: Shape::Block { mins, maxs },
+        turn: Affine::IDENTITY,
     }
 }
 
@@ -156,6 +169,65 @@ pub fn prism(corners: [(Fx, Fx); 3], along_z: bool, from: Fx, to: Fx, surface: S
             from: from.min(to),
             to: from.max(to),
         },
+        turn: Affine::IDENTITY,
+    }
+}
+
+/// M5: a brush built about the origin, turned `yaw` about the vertical and
+/// moved to `to`: the bullring's barrier, stands and shields. Every plane
+/// turns with it; the box round the turned corners is added as bevels, as
+/// Source adds them, so a box swept against it cannot snag on an edge.
+pub fn turned(b: Brush, yaw: i32, to: V3) -> Brush {
+    let turn = Affine::translate(to).then(&Affine::rot_y(yaw));
+    let corners: Vec<V3> = match b.shape {
+        Shape::Block { mins, maxs } => (0..8)
+            .map(|k| {
+                v3(
+                    if k & 1 == 0 { mins.x } else { maxs.x },
+                    if k & 2 == 0 { mins.y } else { maxs.y },
+                    if k & 4 == 0 { mins.z } else { maxs.z },
+                )
+            })
+            .collect(),
+        Shape::Prism {
+            corners,
+            along_z,
+            from,
+            to,
+        } => corners
+            .iter()
+            .flat_map(|c| [place(along_z, c.0, c.1, from), place(along_z, c.0, c.1, to)])
+            .collect(),
+    };
+    // (a brush turned before is carried from where it was built)
+    let full = turn.then(&b.turn);
+    let moved: Vec<V3> = corners.iter().map(|c| full.apply(*c)).collect();
+    let mins = moved
+        .iter()
+        .fold(moved[0], |a, c| v3(a.x.min(c.x), a.y.min(c.y), a.z.min(c.z)));
+    let maxs = moved
+        .iter()
+        .fold(moved[0], |a, c| v3(a.x.max(c.x), a.y.max(c.y), a.z.max(c.z)));
+    let mut planes: Vec<Plane> = b
+        .planes
+        .iter()
+        .map(|pl| {
+            let n = turn.apply_dir(pl.n);
+            // a point on the plane, carried with it
+            Plane {
+                n,
+                d: n.dot(turn.apply(pl.n.scale(pl.d))),
+            }
+        })
+        .collect();
+    planes.extend(box_planes(mins, maxs));
+    Brush {
+        planes,
+        mins,
+        maxs,
+        surface: b.surface,
+        shape: b.shape,
+        turn: full,
     }
 }
 
@@ -183,10 +255,16 @@ impl Brush {
 
     /// The shape the page draws: a unit cube or wedge carried onto the brush.
     pub fn drawn(&self) -> (Mesh, Affine) {
+        let (mesh, at) = self.drawn_as_built();
+        (mesh, self.turn.then(&at))
+    }
+
+    /// The shape as built, before its turn.
+    fn drawn_as_built(&self) -> (Mesh, Affine) {
         match self.shape {
-            Shape::Block => {
-                let size = self.maxs.sub(self.mins);
-                let centre = self.mins.add(size.scale(ONE / 2));
+            Shape::Block { mins, maxs } => {
+                let size = maxs.sub(mins);
+                let centre = mins.add(size.scale(ONE / 2));
                 (Mesh::Cube, Affine::translate(centre).then(&Affine::scale(size)))
             }
             Shape::Prism {
@@ -364,7 +442,13 @@ pub fn practice() -> Map {
             (at, yaw)
         })
         .collect();
-    Map { brushes: b, spawns }
+    Map {
+        brushes: b,
+        spawns,
+        name: "practice",
+        pickups: Vec::new(),
+        bot_loop: crate::pilot::LOOP.to_vec(),
+    }
 }
 
 #[cfg(test)]
@@ -511,5 +595,56 @@ mod tests {
         let (s, _) = m.spawns[0];
         m.brushes_near(s.sub(v3(ONE, ONE, ONE)), s.add(v3(ONE, ONE, ONE)), &mut out);
         assert!(out.contains(&0));
+    }
+
+    #[test]
+    fn a_block_turned_an_eighth_holds_its_middle_and_not_its_old_corners_and_stops_a_trace_at_its_face() {
+        // a 2 m cube about the origin, turned 45° and moved to (10, 0, 0):
+        // its corners now lie on the axes, √2 m from its middle
+        let b = turned(
+            block(v3(-ONE, 0, -ONE), v3(ONE, int(2), ONE), Surface::Wall),
+            fx::deg(45),
+            v3(int(10), 0, 0),
+        );
+        assert!(b.holds(v3(int(10), ONE, 0)));
+        assert!(
+            b.holds(v3(int(10) + ONE * 14 / 10, ONE, 0)),
+            "a turned corner, 1.4 m out along x"
+        );
+        assert!(
+            !b.holds(v3(int(11) - ONE / 50, ONE, ONE - ONE / 50)),
+            "the old corner is outside now"
+        );
+        // its box is the turned corners': 1.41 m each way
+        assert!(
+            (b.maxs.x - int(10) - ONE * 1414 / 1000).abs() < ONE / 100,
+            "{}",
+            fx::decimal(b.maxs.x, 3)
+        );
+        // a point traced along −x from 20 m stops at the corner, 11.41
+        let m = Map {
+            brushes: vec![b],
+            ..Map::default()
+        };
+        let mut sc = crate::trace::Scratch::default();
+        let t = crate::trace::trace_box(
+            &m,
+            &mut sc,
+            v3(int(20), ONE, 0),
+            v3(0, ONE, 0),
+            V3::ZERO,
+            V3::ZERO,
+        );
+        let stop = int(20) - fx::mul(t.fraction, int(20));
+        assert!(
+            (stop - int(10) - ONE * 1414 / 1000).abs() < ONE / 50,
+            "{}",
+            fx::decimal(stop, 3)
+        );
+        // and it is drawn where it stands: the unit cube's corner (½, ½, ½)
+        // lands on a corner of the turned box
+        let (_, at) = m.brushes[0].drawn();
+        let c = at.apply(v3(ONE / 2, ONE / 2, ONE / 2));
+        assert!(m.brushes[0].holds(c), "{c:?}");
     }
 }

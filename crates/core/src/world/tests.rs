@@ -117,6 +117,7 @@ fn hopping_and_strafing_builds_speed_past_the_run_and_landing_late_does_not() {
                 crate::map::Surface::Floor,
             )],
             spawns: vec![(V3::ZERO, 0)],
+            ..crate::map::Map::default()
         });
         w.players[0].body.origin = V3::ZERO;
         w.players[0].prev = V3::ZERO;
@@ -462,6 +463,7 @@ fn holding_crouch_and_jump_chains_slide_jumps_landing_after_landing() {
             crate::map::Surface::Floor,
         )],
         spawns: vec![(V3::ZERO, 0)],
+        ..crate::map::Map::default()
     });
     w.players[0].body.origin = V3::ZERO;
     run(&mut w, keys(FORWARD), 60);
@@ -842,6 +844,7 @@ fn bare(north: i32, south: i32) -> World {
     w.map = Rc::new(Map {
         brushes,
         spawns: vec![(V3::ZERO, 0)],
+        ..crate::map::Map::default()
     });
     w.players.truncate(1);
     w.dummies.clear();
@@ -1244,4 +1247,113 @@ fn a_headshot_leaves_an_x_on_the_head_for_the_shooter_and_the_kick_never_moves_t
     w.players[0].aim.pitch = pitch_at(110);
     w.step(&[fire()]);
     assert!(w.head_marks.is_empty());
+}
+
+// ---- M5: rounds, pickups --------------------------------------------------
+
+/// A match of one person (seat 1) and three bots, every seat in its skin.
+fn a_match() -> World {
+    World::online(0b1, 0, [0, 1, 2, 3])
+}
+
+#[test]
+fn a_match_starts_on_the_plaza_with_everyone_at_a_spawn_holding_the_pistol_and_navaja() {
+    let w = a_match();
+    let r = w.rounds.expect("a match has rounds");
+    assert_eq!(
+        (w.map.name, r.round, r.phase),
+        ("map_plaza", 1, crate::rounds::Phase::Count)
+    );
+    for (s, p) in w.players.iter().enumerate() {
+        assert_eq!(p.body.origin, w.map.spawns[s].0);
+        assert_eq!(p.arms.owned, crate::arms::ROUND_OWNED);
+        assert_eq!(p.skin, s as u8);
+    }
+    assert!(w.dummies.is_empty(), "no straw targets in a match");
+    assert_eq!(w.pickups.len(), w.map.pickups.len());
+}
+
+#[test]
+fn during_the_count_nobody_moves_and_after_it_they_do() {
+    let mut w = a_match();
+    let start = w.players[0].body.origin;
+    for _ in 0..crate::rounds::COUNT_TICKS - 1 {
+        w.step(&[keys(FORWARD)]);
+    }
+    // (across the floor: the body settles a millimetre onto it)
+    let moved = |w: &World| w.players[0].body.origin.sub(start).len_xz();
+    assert_eq!(moved(&w), 0, "held during the count");
+    for _ in 0..30 {
+        w.step(&[keys(FORWARD)]);
+    }
+    assert!(moved(&w) > ONE);
+}
+
+#[test]
+fn the_last_seat_standing_takes_the_round_and_the_next_is_on_the_next_map() {
+    let mut w = a_match();
+    run(&mut w, Input::default(), crate::rounds::COUNT_TICKS as usize);
+    // seats 2 to 4 fall
+    for k in 1..4 {
+        w.players[k].health = 0;
+        w.players[k].dead = DOWN_FOR_ROUND;
+    }
+    w.step(&[Input::default()]);
+    let r = w.rounds.unwrap();
+    assert_eq!(
+        (r.phase, r.winner, r.scores),
+        (crate::rounds::Phase::Over, Some(0), [1, 0, 0, 0])
+    );
+    // they stay down through the four seconds, then all stand on the
+    // Catedral's spawns with the pistol and navaja again
+    run(&mut w, Input::default(), crate::rounds::OVER_TICKS as usize - 1);
+    assert!(!w.players[1].alive(), "down until the next round");
+    w.step(&[Input::default()]);
+    assert_eq!(w.map.name, "map_catedral");
+    for (s, p) in w.players.iter().enumerate() {
+        assert!(p.alive());
+        assert_eq!(p.body.origin, w.map.spawns[s].0);
+        assert_eq!(p.arms.owned, crate::arms::ROUND_OWNED);
+    }
+    assert_eq!(w.rounds.unwrap().round, 2);
+}
+
+#[test]
+fn a_felled_player_watches_the_next_seat_still_standing() {
+    let mut w = a_match();
+    w.players[0].dead = DOWN_FOR_ROUND;
+    w.players[1].dead = DOWN_FOR_ROUND;
+    assert_eq!(w.watching(0), 2);
+    w.players[2].dead = DOWN_FOR_ROUND;
+    assert_eq!(w.watching(0), 3);
+}
+
+#[test]
+fn walking_over_a_weapon_takes_it_into_your_hands_full_and_it_is_gone_for_the_round() {
+    let mut w = a_match();
+    run(&mut w, Input::default(), crate::rounds::COUNT_TICKS as usize);
+    // the shotgun lies 7 m out at 45°; stand the player on it
+    let k = w
+        .pickups
+        .iter()
+        .position(|k| k.weapon == Weapon::Shotgun)
+        .unwrap();
+    w.players[0].body.origin = w.pickups[k].at;
+    w.step(&[Input::default()]);
+    let p = &w.players[0];
+    assert_eq!(p.arms.weapon, Weapon::Shotgun);
+    assert!(p.arms.owns(Weapon::Shotgun));
+    assert!(w.pickups[k].taken);
+}
+
+#[test]
+fn in_a_match_the_bots_fight_each_other_too() {
+    // four bots and nobody else: within a minute of play someone is hurt
+    let mut w = World::online(0, 0, [0, 1, 2, 3]);
+    let mut hurt = false;
+    for _ in 0..3600 {
+        w.step(&[]);
+        hurt |= w.players.iter().any(|p| p.health < HEALTH);
+    }
+    assert!(hurt);
 }

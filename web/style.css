@@ -90,6 +90,16 @@ body:not([data-screen="play"]) #hud { display: none; }
 #hud-top { right: 24px; top: 18px; font-size: 15px; transition: none; }
 #hud-hint { left: 50%; top: 18px; transform: translateX(-50%); font-size: 15px; transition: opacity 1.2s ease; }
 #hud-reload, #hud-charge { left: 50%; top: calc(50% + 36px); transform: translateX(-50%); font-size: 14px; letter-spacing: 0.08em; transition: none; }
+/* M5: the round */
+#hud-round { left: 24px; top: 18px; font-size: 15px; transition: none; }
+#hud-scores { left: 24px; top: 58px; font-size: 14px; color: var(--ink-soft); transition: none; }
+#hud-clock { left: 50%; top: 66px; transform: translateX(-50%); font: 700 22px/1.2 ui-monospace, Menlo, Consolas, monospace; transition: none; }
+#hud-count { left: 50%; top: 30%; transform: translateX(-50%); font: 700 72px/1 ui-monospace, Menlo, Consolas, monospace; padding: 10px 30px; transition: none; }
+#hud-ended { left: 50%; top: 30%; transform: translateX(-50%); font-size: 30px; font-weight: 700; padding: 12px 28px; transition: none; }
+#hud-watching { left: 50%; top: 70%; transform: translateX(-50%); font-size: 16px; transition: none; }
+#hud-online { left: 24px; top: 98px; font-size: 13px; transition: none; }
+/* the markers through walls: a hollow diamond where each seat stands */
+[id^="hud-seen-"] { width: 18px; height: 18px; margin: -9px 0 0 -9px; padding: 0; background: none; border: 3px solid var(--accent); border-radius: 2px; transform: rotate(45deg); transition: none; box-shadow: 0 0 6px rgba(0, 0, 0, 0.6); }
 #hud-dead { left: 50%; top: 38%; transform: translateX(-50%); font-size: 26px; padding: 12px 24px; transition: none; }
 /* the hit mark and the kill mark: an X round the crosshair, open at its
    middle; the kill's larger and heavier */

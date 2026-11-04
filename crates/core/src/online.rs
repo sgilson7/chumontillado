@@ -79,6 +79,13 @@ pub enum Msg {
         protocol: u32,
         build: String,
         host: bool,
+        /// M5: the skin this browser's player wears
+        #[serde(default)]
+        skin: u8,
+    },
+    /// M5: a guest to the host, in the lobby: its player's skin now
+    Skin {
+        skin: u8,
     },
     /// host to a guest: the seat it holds
     Welcome {
@@ -90,6 +97,9 @@ pub enum Msg {
         seats: Seats,
         #[serde(default)]
         empty: Seats,
+        /// M5: each seat's skin
+        #[serde(default)]
+        skins: [u8; SEATS],
     },
     /// host to everyone: the match begins, these seats held by people and
     /// these left empty; bots play the others
@@ -97,6 +107,9 @@ pub enum Msg {
         seats: Seats,
         #[serde(default)]
         empty: Seats,
+        /// M5: each seat's skin, bots' too
+        #[serde(default)]
+        skins: [u8; SEATS],
     },
     /// one seat's record for one tick
     Input {
@@ -160,6 +173,11 @@ pub struct Net {
     /// which seats the host has left empty: no bot plays them (the rest
     /// that nobody holds are bots')
     pub empty: Seats,
+    /// M5: each seat's skin, as the host last said (or, for this browser's
+    /// own seat, as chosen)
+    pub skins: [u8; SEATS],
+    /// this browser's player's own choice of skin
+    pub chosen: u8,
     /// the match has begun
     pub started: bool,
     /// this browser's checksums and the others', by tick, kept until each
@@ -186,6 +204,7 @@ pub enum Event {
     Start {
         seats: Seats,
         empty: Seats,
+        skins: [u8; SEATS],
     },
     /// a guest left during the match (the host only): drop its seat
     Gone {
@@ -203,6 +222,8 @@ impl Net {
             seat: host.then_some(0),
             seats: if host { 1 } else { 0 },
             empty: 0,
+            skins: [0, 1, 2, 3],
+            chosen: 0,
             started: false,
             mine: BTreeMap::new(),
             theirs: BTreeMap::new(),
@@ -258,6 +279,7 @@ impl Net {
             protocol: PROTOCOL,
             build: self.build.clone(),
             host: self.host,
+            skin: self.my_skin(),
         };
         self.send(peer, &hello);
     }
@@ -328,8 +350,49 @@ impl Net {
     fn send_roster(&mut self) {
         // a seat a guest takes is no longer empty
         self.empty &= !self.seats;
-        let (seats, empty) = (self.seats, self.empty);
-        self.broadcast(&Msg::Roster { seats, empty }, None);
+        let (seats, empty, skins) = (self.seats, self.empty, self.skins);
+        self.broadcast(&Msg::Roster { seats, empty, skins }, None);
+    }
+
+    /// This browser's own skin.
+    pub fn my_skin(&self) -> u8 {
+        self.chosen
+    }
+
+    /// M5: this browser's player chooses a skin. A guest tells the host,
+    /// which tells everyone; the host tells everyone itself. Only in the
+    /// lobby.
+    pub fn choose_skin(&mut self, skin: u8) {
+        if self.started {
+            return;
+        }
+        self.chosen = skin;
+        if let Some(seat) = self.seat {
+            self.skins[seat] = skin;
+        }
+        if self.host {
+            self.send_roster();
+        } else if let Some(h) = self.host_peer() {
+            self.send(h, &Msg::Skin { skin });
+        }
+    }
+
+    /// The skins at the start: each person's as chosen, and each bot's the
+    /// first not worn by a person, in seat order, so the four differ where
+    /// they can.
+    fn starting_skins(&self) -> [u8; SEATS] {
+        let mut skins = self.skins;
+        let worn: Vec<u8> = (0..SEATS)
+            .filter(|&s| holds(self.seats, s))
+            .map(|s| skins[s])
+            .collect();
+        let mut free = (0..SEATS as u8).filter(|k| !worn.contains(k));
+        for (s, skin) in skins.iter_mut().enumerate() {
+            if !holds(self.seats, s) {
+                *skin = free.next().unwrap_or(s as u8);
+            }
+        }
+        skins
     }
 
     /// The host switches the bot in a seat nobody holds on or off. Whether
@@ -346,12 +409,14 @@ impl Net {
 
     /// The host starts the match with the seats held now, and those left
     /// empty.
-    pub fn start(&mut self) -> (Seats, Seats) {
+    pub fn start(&mut self) -> (Seats, Seats, [u8; SEATS]) {
         self.started = true;
         self.status = PLAYING;
         let (seats, empty) = (self.seats, self.empty & !self.seats);
-        self.broadcast(&Msg::Start { seats, empty }, None);
-        (seats, empty)
+        let skins = self.starting_skins();
+        self.skins = skins;
+        self.broadcast(&Msg::Start { seats, empty, skins }, None);
+        (seats, empty, skins)
     }
 
     /// Text from a browser. Anything that cannot be a message, or that no
@@ -368,6 +433,7 @@ impl Net {
                 protocol,
                 build,
                 host,
+                skin,
             } => {
                 if o.said {
                     return None;
@@ -395,6 +461,10 @@ impl Net {
                 me.host = host;
                 if self.host {
                     self.seat_guest(from);
+                    if let Some(seat) = self.others.get(&from).and_then(|o| o.seat) {
+                        self.skins[seat] = skin;
+                        self.send_roster();
+                    }
                     if self.status == WAITING {
                         self.status = LOBBY;
                     }
@@ -433,20 +503,33 @@ impl Net {
                 self.status = LOBBY;
                 None
             }
-            Msg::Roster { seats, empty } if o.host && !self.host => {
+            Msg::Roster { seats, empty, skins } if o.host && !self.host => {
+                // this browser's own choice stands until the host has it
                 self.seats = seats;
                 self.empty = empty;
+                self.skins = skins;
+                if let Some(s) = self.seat {
+                    self.skins[s] = self.chosen;
+                }
                 None
             }
-            Msg::Start { seats, empty } if o.host && !self.host => {
+            Msg::Skin { skin } if self.host && !self.started => {
+                if let Some(seat) = o.seat {
+                    self.skins[seat] = skin.min(SEATS as u8 - 1);
+                    self.send_roster();
+                }
+                None
+            }
+            Msg::Start { seats, empty, skins } if o.host && !self.host => {
                 if self.started || self.seat.is_none_or(|s| !holds(seats, s)) {
                     return None;
                 }
                 self.seats = seats;
                 self.empty = empty;
+                self.skins = skins;
                 self.started = true;
                 self.status = PLAYING;
-                Some(Event::Start { seats, empty })
+                Some(Event::Start { seats, empty, skins })
             }
             Msg::Drop { seat, from: at } if o.host && !self.host => Some(Event::Drop { seat, from: at }),
             Msg::Input { seat, tick, input } => {
@@ -548,15 +631,19 @@ pub(crate) mod tests {
                 protocol: PROTOCOL,
                 build: "b".into(),
                 host: true,
+                skin: 2,
             },
+            Msg::Skin { skin: 1 },
             Msg::Welcome { seat: 2 },
             Msg::Roster {
                 seats: 0b1011,
                 empty: 0b0100,
+                skins: [3, 0, 1, 2],
             },
             Msg::Start {
                 seats: 0b11,
                 empty: 0b1000,
+                skins: [0, 1, 2, 3],
             },
             Msg::Input {
                 seat: 3,
@@ -725,7 +812,8 @@ pub(crate) mod tests {
         g2.connected(HOST);
         deliver(&mut g2, B, &mut [(&mut host, HOST)]);
         assert_eq!((host.seats, host.empty), (0b0111, 0b1000));
-        assert_eq!(host.start(), (0b0111, 0b1000));
+        assert_eq!(host.start().0..=host.seats, 0b0111..=0b0111);
+        assert_eq!(host.empty, 0b1000);
         assert!(!host.toggle_bot(3), "not once the match is under way");
     }
 }

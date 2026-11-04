@@ -100,6 +100,12 @@ pub struct Game {
     outbox_left: Vec<(u32, String)>,
     /// the field just copied to the clipboard, whose button says so
     pub copied: String,
+    /// M5: the skin this player wears (a setting), by `skins::SKINS` number
+    pub skin: u8,
+    /// a match against bots is under way (not the practice room)
+    pub matched: bool,
+    /// the map the static scene was built from
+    scene_map: &'static str,
 }
 
 impl Game {
@@ -142,6 +148,9 @@ impl Game {
             now_us: 0,
             outbox_left: Vec::new(),
             copied: String::new(),
+            skin: 0,
+            matched: false,
+            scene_map: "practice",
         };
         g.draw();
         Ok(g)
@@ -295,7 +304,25 @@ impl Game {
         }
     }
 
+    /// M5: the settings, opened from the menu, show your skin beside the
+    /// panel, turning slowly, so you see what you choose.
+    fn previewing(&self) -> bool {
+        self.screen == Screen::Settings && self.settings_from == Screen::Menu
+    }
+
     pub fn camera(&self) -> render::Camera {
+        if self.previewing() {
+            // in the practice room by its spawn, looking north at the
+            // figure, which stands off to the left of the panel
+            let eye = v3(fx::int(8), fx::ONE * 13 / 10, fx::int(13));
+            let aim = Aim {
+                yaw: 0,
+                pitch: -fx::deg(4),
+                rest: (0, 0),
+                pct: 100,
+            };
+            return camera::eye_view(eye, aim, camera::vertical_fov(self.fov, self.aspect));
+        }
         if matches!(self.screen, Screen::Title | Screen::Menu)
             || self.screen == Screen::Settings && self.settings_from == Screen::Menu
         {
@@ -314,7 +341,19 @@ impl Game {
             return camera::eye_view(eye, aim, camera::vertical_fov(self.fov, self.aspect));
         }
         self.view_world()
-            .camera(self.me(), self.alpha, self.pending.peek(), self.aspect)
+            .camera(self.eyes(), self.alpha, self.pending.peek(), self.aspect)
+    }
+
+    /// The seat whose eyes the view is from: yours, or in a match while you
+    /// are down, the next seat still standing (M5).
+    pub fn eyes(&self) -> usize {
+        let w = self.view_world();
+        let me = self.me();
+        if w.rounds.is_some() && !w.players[me].alive() {
+            w.watching(me)
+        } else {
+            me
+        }
     }
 
     /// Builds the frame the page draws next.
@@ -323,9 +362,16 @@ impl Game {
         if let Some(s) = self.versus.as_mut().and_then(|v| v.session_mut()) {
             s.world.fov = self.fov;
         }
+        // M5: a new round on a new map: its static scene
+        let shown = self.view_world().map.name;
+        let rebuilt = shown != self.scene_map;
+        if rebuilt {
+            self.scene_map = shown;
+            self.groups = Self::map_groups(self.view_world(), &self.look);
+        }
         let cam = self.camera();
         let origin = render::origin_for(cam.eye);
-        if origin != self.scene.origin || self.scene.version == 0 {
+        if rebuilt || origin != self.scene.origin || self.scene.version == 0 {
             self.scene = Scene::build(&self.groups, origin, self.scene.version + 1);
         }
         let mut moving = Shapes::default();
@@ -338,13 +384,29 @@ impl Game {
             Mouse::default()
         };
         self.view_world().draw(
-            self.me(),
+            self.eyes(),
             first_person,
             self.alpha,
             pending,
             &self.look,
             &mut moving,
         );
+        if self.previewing() {
+            let turn = (self.title_ticks as i64 * fx::deg(1) as i64 / 2) as i32;
+            let figure = crate::skins::Figure {
+                skin: crate::skins::SKINS[self.skin as usize % 4],
+                feet: v3(fx::ONE * 55 / 10, 0, fx::ONE * 95 / 10),
+                yaw: fx::wrap(fx::HALF_TURN.wrapping_add(turn)),
+                pitch: 0,
+                ducked: false,
+                flashed: false,
+                speed: 0,
+                on_ground: true,
+                moment: 0,
+                arms: None,
+            };
+            crate::skins::draw(&mut moving, &figure, &self.look);
+        }
         crate::render::keep_visible(&mut moving.list, cam.eye);
         self.frame = Frame::build(&self.scene, &moving, &cam, self.aspect);
     }
@@ -359,10 +421,31 @@ impl Game {
         }
     }
 
+    /// M5: a match on your own against three bots, on the three maps in
+    /// turn; it runs as an online match does, without the links.
+    fn bots_match(&mut self) {
+        self.leave_online();
+        let mut skins = [self.skin, 0, 0, 0];
+        // the bots wear the skins you do not
+        let mut free = (0..4u8).filter(|k| *k != self.skin);
+        for s in skins.iter_mut().skip(1) {
+            *s = free.next().unwrap_or(0);
+        }
+        self.world = World::online(0b1, 0, skins);
+        self.matched = true;
+        self.clock.rest();
+        self.show(Screen::Play);
+    }
+
     /// The practice room from its start, its bot moving only or shooting.
     fn practice(&mut self, bot: Bot) {
+        self.matched = false;
         self.bot = bot;
         self.world = World::room(bot);
+        self.world.players[0].skin = self.skin;
+        if let Some(b) = self.world.players.get_mut(1) {
+            b.skin = (self.skin + 1) % 4;
+        }
         for p in &mut self.world.players {
             p.aim.pct = self.look_pct;
         }
@@ -372,7 +455,7 @@ impl Game {
 
     /// M4: a room to host or join: the transport is told to open it.
     fn open_room(&mut self, host: bool, code: &str) {
-        self.versus = Some(Versus::new(host, code, &self.build));
+        self.versus = Some(Versus::new(host, code, &self.build, self.skin));
         self.invited = code.to_string();
         self.command("open", host, &crate::online::room_name(code));
         self.show(Screen::Online);
@@ -456,11 +539,26 @@ impl Game {
             "title.begin" => self.show(Screen::Menu),
             "menu.practice" => self.practice(Bot::Moves),
             "menu.duel" => self.practice(Bot::Shoots),
+            "menu.bots" => self.bots_match(),
             "play.resume" => self.show(Screen::Play),
             "play.restart" => {
                 if self.versus.is_none() {
-                    self.practice(self.bot)
+                    if self.matched {
+                        self.bots_match()
+                    } else {
+                        self.practice(self.bot)
+                    }
                 }
+            }
+            // M5: your skin, a setting: the four in turn; in a lobby the
+            // others are told
+            "skin.step" => {
+                let step: i32 = v.parse().map_err(|_| format!("\"{value}\" is not a step."))?;
+                self.skin = (self.skin as i32 + step).rem_euclid(4) as u8;
+                if let Some(x) = self.versus.as_mut() {
+                    x.choose_skin(self.skin);
+                }
+                self.ui_version += 1;
             }
             "screen.menu" => {
                 self.leave_online();
@@ -570,6 +668,20 @@ impl Game {
                 let step: i32 = v.parse().map_err(|_| format!("\"{value}\" is not a step."))?;
                 self.fov = (self.fov + step * 5).clamp(camera::FOV_MIN, camera::FOV_MAX);
                 self.ui_version += 1;
+                self.draw();
+            }
+            // for tests and the journal's shots: in a match against bots, a
+            // round on map k (0 the Plaza, 1 the Catedral, 2 the Galería),
+            // past its count
+            "place.map" => {
+                let k: usize = v.parse().map_err(|_| format!("\"{value}\" is not a map."))?;
+                if let Some(mut r) = self.world.rounds {
+                    r.map = k % crate::maps::COUNT;
+                    r.phase = crate::rounds::Phase::Live;
+                    r.ticks = 0;
+                    self.world.rounds = Some(r);
+                    self.world.start_round(r.map);
+                }
                 self.draw();
             }
             // for tests and the journal's shots: the four skins standing in
@@ -880,5 +992,120 @@ pub(crate) mod tests {
             &does[..4],
             &["75% · 3 of 4", "No shots yet", "50% · 1 of 2", "No shots yet"]
         );
+    }
+
+    // ---- M5 ----------------------------------------------------------------
+
+    fn hud_line(g: &Game, id: &str) -> crate::api::Hud {
+        crate::api::hud(g).into_iter().find(|h| h.id == id).expect(id)
+    }
+
+    #[test]
+    fn play_against_bots_is_a_match_in_your_skin_the_bots_in_the_other_three() {
+        let mut g = game();
+        g.act("skin.step", "2").unwrap();
+        assert_eq!(g.skin, 2);
+        g.act("menu.bots", "").unwrap();
+        let w = &g.world;
+        assert!(w.rounds.is_some() && g.matched);
+        let skins: Vec<u8> = w.players.iter().map(|p| p.skin).collect();
+        assert_eq!(skins, vec![2, 0, 1, 3]);
+        assert!(w.players[1..].iter().all(|p| p.pilot.is_some()));
+        // the count shows 3 at the start; the round's line names the Plaza
+        g.act("title.begin", "").ok();
+        g.show(Screen::Play);
+        assert_eq!(hud_line(&g, "count").text, "3");
+        assert!(hud_line(&g, "count").shown);
+        assert_eq!(hud_line(&g, "round").text, "Round 1 · the Plaza");
+    }
+
+    #[test]
+    fn the_skin_setting_steps_round_the_four_and_shows_its_name() {
+        let mut g = game();
+        g.act("skin.step", "-1").unwrap();
+        assert_eq!(g.skin, 3);
+        let row = crate::api::settings(&g)
+            .into_iter()
+            .find(|r| r.id == "skin")
+            .unwrap();
+        assert_eq!(row.value, "El Sordo");
+        g.act("skin.step", "1").unwrap();
+        assert_eq!(g.skin, 0);
+    }
+
+    #[test]
+    fn from_seventy_five_seconds_a_marker_shows_where_each_standing_seat_is() {
+        let mut g = game();
+        g.act("menu.bots", "").unwrap();
+        // seat 2 (a bot) stands 10 m straight ahead of you
+        let me = g.world.players[0].body.origin;
+        let ahead = crate::geom::facing(g.world.players[0].aim.yaw, 0).scale(fx::int(10));
+        g.world.players[1].body.origin = me.add(ahead);
+        g.world.players[1].prev = me.add(ahead);
+        let mut r = g.world.rounds.unwrap();
+        r.phase = crate::rounds::Phase::Live;
+        r.ticks = crate::rounds::XRAY_TICKS - 1;
+        g.world.rounds = Some(r);
+        assert!(!hud_line(&g, "seen-1").shown, "not before 75 s");
+        r.ticks = crate::rounds::XRAY_TICKS;
+        g.world.rounds = Some(r);
+        let m = hud_line(&g, "seen-1");
+        assert!(m.shown);
+        // straight ahead at eye height: the middle of the screen across,
+        // and its middle up and down to within a few percent
+        let [x, y] = m.at.unwrap();
+        assert!((x - 5_000).abs() < 300 && (y - 5_000).abs() < 500, "{x} {y}");
+        assert!(!hud_line(&g, "seen-0").shown, "not yourself");
+    }
+
+    #[test]
+    fn while_you_are_down_in_a_match_the_view_is_from_the_next_seat_standing() {
+        let mut g = game();
+        g.act("menu.bots", "").unwrap();
+        assert_eq!(g.eyes(), 0);
+        g.world.players[0].dead = crate::world::DOWN_FOR_ROUND;
+        assert_eq!(g.eyes(), 1);
+        let mut r = g.world.rounds.unwrap();
+        r.phase = crate::rounds::Phase::Live;
+        g.world.rounds = Some(r);
+        assert_eq!(hud_line(&g, "watching").text, "Down. Watching The Infanta.");
+    }
+
+    #[test]
+    fn a_guests_skin_reaches_the_host_and_the_match_on_both_browsers() {
+        let mut host = crate::versus::Versus::new(true, "KQXRT", "b", 1);
+        let mut guest = crate::versus::Versus::new(false, "KQXRT", "b", 3);
+        host.connected(1);
+        guest.connected(2);
+        let trade = |h: &mut crate::versus::Versus, gu: &mut crate::versus::Versus| {
+            for _ in 0..3 {
+                for (_, t) in gu.take_outbox() {
+                    h.message(1, &t, 0);
+                }
+                for (_, t) in h.take_outbox() {
+                    gu.message(2, &t, 0);
+                }
+            }
+        };
+        trade(&mut host, &mut guest);
+        assert_eq!(host.links().skins[..2], [1, 3]);
+        // the guest changes its mind in the lobby
+        guest.choose_skin(2);
+        trade(&mut host, &mut guest);
+        assert_eq!(host.links().skins[1], 2);
+        host.start();
+        trade(&mut host, &mut guest);
+        // the bots wear the two skins no person does: 0 and 3
+        let skins = |v: &crate::versus::Versus| -> Vec<u8> {
+            v.session()
+                .unwrap()
+                .world
+                .players
+                .iter()
+                .map(|p| p.skin)
+                .collect()
+        };
+        assert_eq!(skins(&host), vec![1, 2, 0, 3]);
+        assert_eq!(skins(&guest), skins(&host));
     }
 }

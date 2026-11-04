@@ -95,6 +95,8 @@ pub struct Player {
     /// slide
     pub shooting: Shooting,
     pub since_trick: i32,
+    /// M5: the skin it wears (`skins::SKINS` by number)
+    pub skin: u8,
 }
 
 /// CS-Q22 (the journal's Feel mockups page): a seat's shots and hits in
@@ -210,17 +212,21 @@ impl Player {
             out: false,
             shooting: Shooting::default(),
             since_trick: 1_000,
+            skin: 0,
         }
     }
 
     /// Back at its spawn, as new, keeping its look speed, its pilot and its
     /// shooting's counts.
     fn respawn(&mut self) {
-        let (pct, pilot, shooting) = (self.aim.pct, self.pilot, self.shooting);
+        let (pct, pilot, shooting, skin, out) =
+            (self.aim.pct, self.pilot, self.shooting, self.skin, self.out);
         *self = Player::at(self.spawn);
         self.aim.pct = pct;
         self.pilot = pilot;
         self.shooting = shooting;
+        self.skin = skin;
+        self.out = out;
     }
 
     /// The eye between last tick and this one, `alpha` of the way.
@@ -307,7 +313,25 @@ pub struct World {
     pub fov: i32,
     /// an online match (M4)
     pub online: bool,
+    /// M5: a match's rounds, if this is a match
+    pub rounds: Option<crate::rounds::Rounds>,
+    /// M5: the weapons lying on the map this round
+    pub pickups: Vec<Pickup>,
 }
+
+/// A weapon lying on the map (CS-Q10: A), until someone walks over it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Pickup {
+    pub at: V3,
+    pub weapon: Weapon,
+    pub taken: bool,
+}
+
+/// A pickup is taken within this of a body's feet, across (m) and up.
+pub const PICKUP_REACH: Fx = ONE * 13 / 10;
+pub const PICKUP_UP: Fx = int(2);
+/// A seat felled in a round is down until the next one (it watches).
+pub const DOWN_FOR_ROUND: i32 = i32::MAX / 2;
 
 /// The straw targets in the practice room, down the hop lane.
 pub const DUMMIES: [(i32, i32); 3] = [(8, -4), (14, -24), (22, -28)];
@@ -381,17 +405,21 @@ impl World {
             head_marks: Vec::new(),
             fov: camera::FOV_START,
             online: false,
+            rounds: None,
+            pickups: Vec::new(),
         }
     }
 
-    /// M4: an online match in the practice room: four seats at its four
-    /// spawns, those `seats` does not hold played by bots that shoot back
-    /// (CS-Q17: A) unless the host left them `empty`, and the straw targets.
-    pub fn online(seats: crate::online::Seats, empty: crate::online::Seats) -> World {
+    /// A match (M4, M5): four seats, those `seats` does not hold played by
+    /// bots that shoot back (CS-Q17: A) unless the host left them `empty`,
+    /// each in its skin; rounds on the three maps in turn, from the first.
+    pub fn online(seats: crate::online::Seats, empty: crate::online::Seats, skins: [u8; 4]) -> World {
         let mut w = World::room(Bot::Shoots);
+        w.dummies.clear();
         w.players = (0..crate::online::SEATS)
             .map(|s| {
                 let mut p = Player::at(w.map.spawns[s]);
+                p.skin = skins[s];
                 if crate::online::holds(empty, s) && !crate::online::holds(seats, s) {
                     p.out = true;
                 } else if !crate::online::holds(seats, s) {
@@ -404,7 +432,37 @@ impl World {
             })
             .collect();
         w.online = true;
+        w.rounds = Some(crate::rounds::Rounds::new());
+        w.start_round(0);
         w
+    }
+
+    /// M5: a round's start on map `map`: every seat in the match whole at
+    /// its spawn with the pistol and navaja, the weapons back on the map,
+    /// and nothing left in the air.
+    pub fn start_round(&mut self, map: usize) {
+        let m = crate::maps::map(map);
+        self.pickups = m
+            .pickups
+            .iter()
+            .map(|&(at, weapon)| Pickup {
+                at,
+                weapon,
+                taken: false,
+            })
+            .collect();
+        for (s, p) in self.players.iter_mut().enumerate() {
+            p.spawn = m.spawns[s % m.spawns.len()];
+            p.respawn();
+            p.arms = Arms::for_round();
+            p.prev = p.body.origin;
+        }
+        self.map = Rc::new(m);
+        self.flying.clear();
+        self.bursts.clear();
+        self.trails.clear();
+        self.marks.clear();
+        self.head_marks.clear();
     }
 
     /// M4: one number for the whole state a tick can change, the same on
@@ -462,26 +520,44 @@ impl World {
             mix(d.health as i64);
             mix(d.down as i64);
         }
+        if let Some(r) = self.rounds {
+            for n in [r.map as i32, r.round, r.ticks, r.winner.map_or(-1, |w| w as i32)] {
+                mix(n as i64);
+            }
+            for n in r.scores {
+                mix(n as i64);
+            }
+        }
+        for k in &self.pickups {
+            mix(k.taken as i64);
+        }
         h
     }
 
-    /// What a bot in seat `id` knows this tick: itself, and the first
-    /// living person's chest if it can see it.
-    fn view(&self, id: usize, scratch: &mut Scratch) -> pilot::View {
+    /// What a bot in seat `id` knows this tick: itself, its map's route,
+    /// and the chest of the nearest other living seat it can see. In the
+    /// practice room only the person is a target (the room's bot is the
+    /// only other); in a match every other seat is, bots too, or a round
+    /// of bots would never end (R10.5).
+    fn view(&self, id: usize, scratch: &mut Scratch) -> pilot::View<'_> {
         let me = &self.players[id];
         let eye = me.body.origin.add(v3(0, me.body.eye(), 0));
+        let in_match = self.rounds.is_some();
         let chest = self
             .players
             .iter()
-            .find(|p| p.pilot.is_none() && p.alive())
-            .map(|p| p.body.origin.add(v3(0, p.body.eye() - ONE / 4, 0)))
+            .enumerate()
+            .filter(|(k, p)| *k != id && p.alive() && (in_match || p.pilot.is_none()))
+            .map(|(_, p)| p.body.origin.add(v3(0, p.body.eye() - ONE / 4, 0)))
             .filter(|&c| {
                 let to = c.sub(eye);
                 let d = to.len();
                 d <= pilot::SIGHT
                     && weapons::wall_distance(&self.map, scratch, eye, to.norm(), d) >= d - ONE / 50
-            });
+            })
+            .min_by_key(|c| c.sub(eye).len());
         pilot::View {
+            route: &self.map.bot_loop,
             tick: self.tick,
             feet: me.body.origin,
             eye,
@@ -512,6 +588,17 @@ impl World {
                 None if self.players[id].out => Input::default(),
                 None => given.next().copied().unwrap_or_default(),
             };
+            // M5: in a round's count, after it, and after the match, nobody
+            // moves or fires; the mouse still looks
+            let r = if self.rounds.is_some_and(|x| x.frozen()) {
+                Input {
+                    keys: 0,
+                    buttons: 0,
+                    ..r
+                }
+            } else {
+                r
+            };
             records.push(r);
         }
 
@@ -530,9 +617,12 @@ impl World {
                     continue;
                 }
                 if p.dead > 0 {
-                    p.dead -= 1;
-                    if p.dead == 0 {
-                        p.respawn();
+                    // in a round the felled stay down until the next
+                    if p.dead != DOWN_FOR_ROUND {
+                        p.dead -= 1;
+                        if p.dead == 0 {
+                            p.respawn();
+                        }
                     }
                     continue;
                 }
@@ -585,6 +675,7 @@ impl World {
                 }
             }
         }
+        self.take_pickups();
         for (id, s) in shots {
             match s.weapon.stats().kind {
                 Kind::Hitscan => self.shoot(id, s, &mut scratch),
@@ -607,7 +698,48 @@ impl World {
             m.ticks -= 1;
         }
         self.head_marks.retain(|m| m.ticks > 0);
+        self.step_rounds();
         self.tick += 1;
+    }
+
+    /// M5: a weapon lying where a living body stands is taken, full, into
+    /// its hands; each is taken once a round, by the first seat to reach it.
+    fn take_pickups(&mut self) {
+        for k in self.pickups.iter_mut().filter(|k| !k.taken) {
+            if let Some(p) = self.players.iter_mut().find(|p| {
+                let d = p.body.origin.sub(k.at);
+                p.alive() && d.len_xz() <= PICKUP_REACH && d.y.abs() <= PICKUP_UP
+            }) {
+                p.arms.pick_up(k.weapon);
+                k.taken = true;
+            }
+        }
+    }
+
+    /// M5: a tick of the match's rounds: the count, the round, who takes it,
+    /// and the next round's map.
+    fn step_rounds(&mut self) {
+        let Some(mut r) = self.rounds else { return };
+        let present = self.players.iter().filter(|p| !p.out).count();
+        let alive: Vec<usize> = (0..self.players.len())
+            .filter(|&k| self.players[k].alive())
+            .collect();
+        let alone = (alive.len() == 1).then(|| alive[0]);
+        let next = crate::rounds::tick(&mut r, alive.len(), alone, present, crate::maps::COUNT);
+        self.rounds = Some(r);
+        if let crate::rounds::Next::Round(map) = next {
+            self.start_round(map);
+        }
+    }
+
+    /// M5: the seat a felled player watches: the first one still standing
+    /// after it, round the seats; itself if none.
+    pub fn watching(&self, me: usize) -> usize {
+        let n = self.players.len();
+        (1..n)
+            .map(|k| (me + k) % n)
+            .find(|&k| self.players[k].alive())
+            .unwrap_or(me)
     }
 
     /// Every body a shot, burst or swing from seat `by` could meet: the
@@ -641,7 +773,11 @@ impl World {
             victim.flash = FLASH;
             if victim.health <= 0 {
                 victim.health = 0;
-                victim.dead = RESPAWN;
+                victim.dead = if self.rounds.is_some() {
+                    DOWN_FOR_ROUND
+                } else {
+                    RESPAWN
+                };
                 victim.swing = None;
                 victim.hook = None;
                 victim.pinned = 0;
@@ -1031,7 +1167,7 @@ impl World {
                 // M6: each seat in its skin, holding its weapon as it
                 // holds it, legs in stride
                 let figure = crate::skins::Figure {
-                    skin: crate::skins::Skin::of_seat(k),
+                    skin: crate::skins::SKINS[p.skin as usize % crate::skins::SKINS.len()],
                     feet: p.prev.lerp(p.body.origin, alpha),
                     yaw: p.aim.yaw,
                     pitch: p.aim.pitch,
@@ -1064,6 +1200,19 @@ impl World {
         }
         for q in &self.flying {
             draw_projectile(out, q, alpha, pal, ink);
+        }
+        // M5: the weapons lying on the map, turning slowly a metre up, a
+        // glow on the floor beneath
+        let moment = (self.tick as i32).wrapping_mul(ONE).wrapping_add(alpha);
+        for k in self.pickups.iter().filter(|k| !k.taken) {
+            let up = k.at.add(v3(0, ONE * 9 / 10, 0));
+            let hold = Affine::translate(up)
+                .then(&Affine::rot_y(fx::mul(moment, fx::deg(2))))
+                .then(&Affine::translate(v3(0, 0, ONE / 5)));
+            crate::hands::draw_weapon(out, &hold, k.weapon, &crate::hands::Pose::default(), pal);
+            let glow =
+                Affine::translate(k.at.add(v3(0, ONE / 20, 0))).then(&Affine::scale(v3(ONE, ONE / 10, ONE)));
+            out.glow(Mesh::Sphere, glow, rgb(pal.brass), ONE / 2);
         }
         for b in &self.bursts {
             // grows from a third of its reach to its whole reach as it fades

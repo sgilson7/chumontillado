@@ -35,8 +35,10 @@ pub struct Pilot {
     pub shoots: bool,
 }
 
-/// What the bot knows: itself and, if it can see them, the player's chest.
-pub struct View {
+/// What the bot knows: itself, its map's route (M5) and, if it can see
+/// one, the nearest other seat's chest.
+pub struct View<'a> {
+    pub route: &'a [(i32, i32)],
     pub tick: u64,
     pub feet: V3,
     pub eye: V3,
@@ -79,12 +81,13 @@ fn keys_toward(face: i32, go: i32) -> u32 {
 
 /// One tick's record for the bot.
 pub fn record(p: &mut Pilot, v: &View) -> Input {
-    let (x, z) = LOOP[p.waypoint % LOOP.len()];
+    let route = if v.route.is_empty() { &LOOP[..] } else { v.route };
+    let (x, z) = route[p.waypoint % route.len()];
     let goal = v3(int(x), v.feet.y, int(z));
     if goal.sub(v.feet).len_xz() < REACHED {
-        p.waypoint = (p.waypoint + 1) % LOOP.len();
+        p.waypoint = (p.waypoint + 1) % route.len();
     }
-    let (x, z) = LOOP[p.waypoint % LOOP.len()];
+    let (x, z) = route[p.waypoint % route.len()];
     let go = yaw_of(v3(int(x), 0, int(z)).sub(v3(v.feet.x, 0, v.feet.z)));
     let target = if p.shoots { v.chest } else { None };
     p.seen = if target.is_some() { p.seen + 1 } else { 0 };
@@ -167,6 +170,7 @@ mod tests {
         // the player straight ahead, level, 20 m off: the aim is on them
         // but for the wobble, within 3° and so sometimes past FIRE_WITHIN
         let mut v = View {
+            route: &LOOP,
             tick: 0,
             feet: v3(int(8), 0, int(-16)),
             eye: v3(int(8), ONE * 165 / 100, int(-16)),
@@ -198,6 +202,7 @@ mod tests {
     #[test]
     fn a_player_below_makes_it_look_down_and_one_above_up() {
         let base = |chest_y: Fx| View {
+            route: &LOOP,
             tick: 0,
             feet: v3(int(8), 0, int(-16)),
             eye: v3(int(8), ONE * 165 / 100, int(-16)),
@@ -219,6 +224,7 @@ mod tests {
     fn a_bot_that_only_moves_never_fires() {
         let mut p = Pilot::default();
         let v = View {
+            route: &LOOP,
             tick: 10,
             feet: v3(int(8), 0, int(-16)),
             eye: v3(int(8), ONE * 165 / 100, int(-16)),

@@ -108,6 +108,10 @@ pub struct Hud {
     pub id: String,
     pub text: String,
     pub shown: bool,
+    /// M5: where on the screen it sits, hundredths of a percent across and
+    /// down (the markers through walls); none for the fixed lines
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub at: Option<[i32; 2]>,
 }
 
 /// A term and its definition, for the page's hover hints.
@@ -263,6 +267,14 @@ fn online_panel(g: &Game) -> Panel {
                 ..action(g, "online.bot", &k.to_string(), "", false)
             });
         }
+    }
+    // M5: your skin, here as in the settings
+    p.actions.push(Action {
+        label: s.get("lobby_skin").replace("{name}", &skin_name(g, g.skin)),
+        small: true,
+        ..action(g, "skin.step", "1", "", false)
+    });
+    if v.host {
         p.actions.push(action(g, "online.start", "", "start_match", true));
     }
     p.actions.push(leave);
@@ -326,7 +338,7 @@ fn controls(g: &Game) -> Vec<Row> {
         .collect()
 }
 
-fn settings(g: &Game) -> Vec<Setting> {
+pub fn settings(g: &Game) -> Vec<Setting> {
     let step = |name: &str, minus: &str, plus: &str| {
         vec![
             action(g, name, "-1", minus, false),
@@ -341,12 +353,115 @@ fn settings(g: &Game) -> Vec<Setting> {
             actions: step("fov.step", "narrower", "wider"),
         },
         Setting {
+            id: "skin".into(),
+            label: g.strings.get("setting_skin"),
+            value: skin_name(g, g.skin),
+            actions: step("skin.step", "skin_prev", "skin_next"),
+        },
+        Setting {
             id: "look".into(),
             label: g.strings.get("setting_look"),
             value: g.strings.get("percent").replace("{n}", &g.look_pct.to_string()),
             actions: step("look.step", "slower", "faster"),
         },
     ]
+}
+
+/// M5: a skin's name.
+pub fn skin_name(g: &Game, skin: u8) -> String {
+    g.strings.get(&format!("skin_{}", skin % 4))
+}
+
+/// M5: a seat as the HUD names it: "You", or its skin's name.
+fn who(g: &Game, seat: usize) -> String {
+    if seat == g.me() {
+        g.strings.get("you")
+    } else {
+        skin_name(g, g.view_world().players[seat].skin)
+    }
+}
+
+/// M5: the round's lines over play: the round and map, the scores, the
+/// count, the clock, who took the round or the match, and whom you watch
+/// while down; and from 75 s, where each other seat is, through walls.
+fn round_lines(g: &Game, playing: bool) -> Vec<Hud> {
+    use crate::rounds::Phase;
+    let w = g.view_world();
+    let Some(r) = w.rounds else { return Vec::new() };
+    let s = &g.strings;
+    let me = g.me();
+    let line = |id: &str, text: String, shown: bool| Hud {
+        id: id.into(),
+        text,
+        shown: shown && playing,
+        at: None,
+    };
+    let scores = (0..w.players.len())
+        .filter(|&k| !w.players[k].out)
+        .map(|k| {
+            s.get("hud_score")
+                .replace("{who}", &who(g, k))
+                .replace("{n}", &r.scores[k].to_string())
+        })
+        .collect::<Vec<_>>()
+        .join(" · ");
+    let secs = r.ticks / 60;
+    let ended = match (r.phase, r.winner) {
+        (Phase::Over, Some(k)) if k == me => s.get("hud_round_you"),
+        (Phase::Over, Some(k)) => s.get("hud_round_won").replace("{who}", &who(g, k)),
+        (Phase::Over, None) => s.get("hud_round_none"),
+        (Phase::Done, Some(k)) if k == me => s.get("hud_match_you"),
+        (Phase::Done, Some(k)) => s.get("hud_match_won").replace("{who}", &who(g, k)),
+        _ => String::new(),
+    };
+    let mut out = vec![
+        line(
+            "round",
+            s.get("hud_round")
+                .replace("{n}", &r.round.to_string())
+                .replace("{map}", &s.get(w.map.name)),
+            true,
+        ),
+        line("scores", scores, true),
+        line("count", r.count_left().to_string(), r.phase == Phase::Count),
+        line(
+            "clock",
+            s.get("hud_clock")
+                .replace("{m}", &(secs / 60).to_string())
+                .replace("{ss}", &format!("{:02}", secs % 60)),
+            r.phase == Phase::Live,
+        ),
+        line("ended", ended.clone(), !ended.is_empty()),
+        line(
+            "watching",
+            s.get("hud_watching").replace("{who}", &who(g, g.eyes())),
+            r.phase == Phase::Live && g.eyes() != me,
+        ),
+    ];
+    // from 75 s: each other seat still standing, where it is on the screen
+    // (CS-Q18: C), whatever stands between
+    let cam = g.camera();
+    let m = cam.matrix(crate::render::Layer::Far, g.aspect);
+    for k in 0..4 {
+        let p = w.players.get(k);
+        let spot = p
+            .filter(|p| r.xray() && k != g.eyes() && p.alive())
+            .map(|p| m.project(p.eye(g.alpha).sub(cam.eye)))
+            .filter(|c| c[3] > 0)
+            .map(|c| {
+                let x = 5_000 + (c[0] as i64 * 5_000 / c[3] as i64) as i32;
+                let y = 5_000 - (c[1] as i64 * 5_000 / c[3] as i64) as i32;
+                [x, y]
+            })
+            .filter(|[x, y]| (0..=10_000).contains(x) && (0..=10_000).contains(y));
+        out.push(Hud {
+            id: format!("seen-{k}"),
+            text: String::new(),
+            shown: playing && spot.is_some(),
+            at: spot,
+        });
+    }
+    out
 }
 
 /// The Pincel's charge, percent of full.
@@ -377,6 +492,7 @@ pub fn hud(g: &Game) -> Vec<Hud> {
         id: id.into(),
         text,
         shown,
+        at: None,
     };
     vec![
         line(
@@ -440,11 +556,18 @@ pub fn hud(g: &Game) -> Vec<Hud> {
                 .replace("{n}", &charge_pct(&p.arms).to_string()),
             playing && p.arms.charge > 0,
         ),
-        line("dead", g.strings.get("hud_dead"), playing && !p.alive()),
+        line(
+            "dead",
+            g.strings.get("hud_dead"),
+            playing && !p.alive() && g.view_world().rounds.is_none(),
+        ),
         // the hit mark and the kill mark round the crosshair: drawn, not read
         line("mark", String::new(), playing && p.hit_mark > 0),
         line("kill", String::new(), playing && p.kill_mark > 0),
     ]
+    .into_iter()
+    .chain(round_lines(g, playing))
+    .collect()
 }
 
 pub fn ui(g: &Game) -> Ui {
@@ -464,6 +587,7 @@ pub fn ui(g: &Game) -> Ui {
             p.actions = vec![
                 action(g, "menu.practice", "", "practice", true),
                 action(g, "menu.duel", "", "duel", true),
+                action(g, "menu.bots", "", "bots_match", true),
                 action(g, "online.host", "", "host_match", false),
                 action(g, "online.join", "", "join_match", false),
                 action(g, "screen.settings", "", "settings", false),

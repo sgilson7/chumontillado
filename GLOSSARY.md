@@ -74,6 +74,12 @@ A painted bell fired in a lob. It bursts where it lands, and its toll pushes eve
 
 Not: bell gun, mortar
 
+### Catedral
+
+A cathedral open to the sky: columns down the nave, flying buttresses to surf, a bell tower to climb.
+
+Not: church map
+
 ### Collage
 
 A painted gun of scraps stuck together. Its shots bounce once off a wall, so they go round corners.
@@ -91,6 +97,18 @@ Not: grenade launcher, nade launcher
 The practice room with its bot shooting back. Each of you stands again at your spawn a moment after going down.
 
 Not: deathmatch, versus
+
+### El Sordo
+
+A skin after Goya: a black cloak, a ragged grey head and wide white eyes.
+
+Not: deaf man
+
+### Galería
+
+A long hall with rooms of paintings off it, some tall enough to climb wall to wall.
+
+Not: museum, gallery map
 
 ### Guadaña
 
@@ -170,6 +188,12 @@ The painted rifle. It charges while the button is held, fires when let go, passe
 
 Not: railgun, brush gun
 
+### Plaza
+
+The bullring: a ring inside a barrier you can hop, its stands a ring of surf ramps.
+
+Not: arena, bullring map
+
 ### Projectile
 
 A shot that flies, falls and bounces, so it arrives a moment after it is fired.
@@ -188,6 +212,12 @@ Five letters that name an online match. Anyone who types them joins it while a s
 
 Not: lobby code, session id
 
+### Round
+
+One life each on one map, after a short count: the last seat standing takes it. A match is won on rounds taken.
+
+Not: heat, leg
+
 ### Seat
 
 One of an online match's four places. A player holds it, or a bot plays it.
@@ -200,11 +230,35 @@ The sidearm every player starts with.
 
 Not: handgun, sidearm pistol
 
+### Skin
+
+How a player looks: the Hidalgo, the Infanta, the Harlequin or El Sordo. Every skin is hit the same.
+
+Not: costume, outfit
+
 ### Straw target
 
 A figure on a post in the practice room. Shot down, it stands again a few seconds later.
 
 Not: dummy, mannequin
+
+### The Harlequin
+
+A skin after Picasso: diamonds of colour, and a face in two views at once.
+
+Not: clown, jester
+
+### The Hidalgo
+
+A skin after El Greco: drawn long, a black doublet, a ruff and a crimson sash.
+
+Not: nobleman
+
+### The Infanta
+
+A skin after Velázquez: a silver bell skirt, wide pale hair and a red bow.
+
+Not: princess
 
 ### Toro
 

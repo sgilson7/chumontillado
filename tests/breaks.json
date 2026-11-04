@@ -373,7 +373,7 @@
   {
     "name": "M2 a downed player stands again",
     "file": "crates/core/src/world.rs",
-    "find": "                    if p.dead == 0 {\n                        p.respawn();\n                    }",
+    "find": "                        if p.dead == 0 {\n                            p.respawn();\n                        }",
     "replace": "",
     "test": "a_player_who_goes_down_stands_again_at_the_spawn_full"
   },
@@ -513,8 +513,8 @@
   {
     "name": "M3 E takes the next melee weapon",
     "file": "crates/core/src/arms.rs",
-    "find": "            MELEE_WEAPONS[(k + 1) % MELEE_WEAPONS.len()]",
-    "replace": "            MELEE_WEAPONS[k]",
+    "find": "                .map(|j| MELEE_WEAPONS[(k + j) % MELEE_WEAPONS.len()])",
+    "replace": "                .map(|_| MELEE_WEAPONS[k])",
     "test": "six_to_zero_take_the_projectile_guns_and_e_takes_the_melee_weapons_in_turn"
   },
   {
@@ -1048,5 +1048,187 @@
     "find": "pub const STRIDE: i32 = fx::deg(16);",
     "replace": "pub const STRIDE: i32 = fx::deg(30);",
     "test": "every_skin_and_the_straw_target_stay_inside_the_hit_envelope"
+  },
+  {
+    "name": "M5 the Plaza's corner columns keep the 6 m rule",
+    "file": "crates/core/src/maps.rs",
+    "find": "            28 * x - 1,\n            0,\n            28 * z - 1,\n            28 * x + 1,",
+    "replace": "            48 * x - 1,\n            0,\n            28 * z - 1,\n            48 * x + 1,",
+    "test": "every_place_on_every_map_has_something_to_move_off_within_six_metres"
+  },
+  {
+    "name": "M5 a turned box is measured in its own frame",
+    "file": "crates/core/src/maps.rs",
+    "find": "let local = v3(d.dot(t.c0), d.dot(t.c1), d.dot(t.c2));",
+    "replace": "let local = d;",
+    "test": "the_distance_to_a_turned_box_is_measured_in_its_own_frame"
+  },
+  {
+    "name": "M5 a turned brush's planes turn with it",
+    "file": "crates/core/src/map.rs",
+    "find": "            let n = turn.apply_dir(pl.n);",
+    "replace": "            let n = pl.n;",
+    "test": "a_block_turned_an_eighth_holds_its_middle_and_not_its_old_corners_and_stops_a_trace_at_its_face"
+  },
+  {
+    "name": "M5 the count lasts three seconds",
+    "file": "crates/core/src/rounds.rs",
+    "find": "            if r.ticks >= COUNT_TICKS {",
+    "replace": "            if r.ticks >= COUNT_TICKS + 5 {",
+    "test": "a_round_counts_three_seconds_then_goes_and_the_last_standing_takes_it"
+  },
+  {
+    "name": "M5 the last standing takes the round",
+    "file": "crates/core/src/rounds.rs",
+    "find": "            let decided = present >= 2 && standing <= 1;",
+    "replace": "            let decided = present >= 2 && standing == 0;",
+    "test": "a_round_counts_three_seconds_then_goes_and_the_last_standing_takes_it"
+  },
+  {
+    "name": "M5 the maps go round in turn",
+    "file": "crates/core/src/rounds.rs",
+    "find": "                    r.map = (r.map + 1) % maps.max(1);",
+    "replace": "                    r.map %= maps.max(1);",
+    "test": "the_first_to_five_wins_the_match_and_the_maps_go_round_in_turn"
+  },
+  {
+    "name": "M5 first to five",
+    "file": "crates/core/src/rounds.rs",
+    "find": "pub const TO_WIN: i32 = 5;",
+    "replace": "pub const TO_WIN: i32 = 6;",
+    "test": "the_first_to_five_wins_the_match_and_the_maps_go_round_in_turn"
+  },
+  {
+    "name": "M5 positions through walls from 75 s",
+    "file": "crates/core/src/rounds.rs",
+    "find": "        self.phase == Phase::Live && self.ticks >= XRAY_TICKS",
+    "replace": "        self.phase == Phase::Live && self.ticks > XRAY_TICKS",
+    "test": "positions_show_through_walls_from_seventy_five_seconds"
+  },
+  {
+    "name": "M5 a round runs out at 150 s",
+    "file": "crates/core/src/rounds.rs",
+    "find": "            if decided || r.ticks >= LIMIT_TICKS {",
+    "replace": "            if decided {",
+    "test": "a_round_where_everyone_falls_at_once_or_time_runs_out_scores_nobody"
+  },
+  {
+    "name": "M5 a round starts with the pistol and navaja",
+    "file": "crates/core/src/arms.rs",
+    "find": "pub const ROUND_OWNED: u16 = (1 << Weapon::Pistol as u16) | (1 << Weapon::Navaja as u16);",
+    "replace": "pub const ROUND_OWNED: u16 = ALL_OWNED;",
+    "test": "a_round_starts_with_the_pistol_and_navaja_and_a_pickup_is_held_full_and_in_hand"
+  },
+  {
+    "name": "M5 a weapon not held cannot be taken",
+    "file": "crates/core/src/arms.rs",
+    "find": "        if !self.owns(g) {\n            return;\n        }",
+    "replace": "        if !self.owns(g) && false {\n            return;\n        }",
+    "test": "a_round_starts_with_the_pistol_and_navaja_and_a_pickup_is_held_full_and_in_hand"
+  },
+  {
+    "name": "M5 a pickup is held from then on",
+    "file": "crates/core/src/arms.rs",
+    "find": "        self.owned |= 1 << g as u16;",
+    "replace": "        self.owned |= 0;",
+    "test": "a_round_starts_with_the_pistol_and_navaja_and_a_pickup_is_held_full_and_in_hand"
+  },
+  {
+    "name": "M5 nobody moves in the count",
+    "file": "crates/core/src/world.rs",
+    "find": "            let r = if self.rounds.is_some_and(|x| x.frozen()) {",
+    "replace": "            let r = if false {",
+    "test": "during_the_count_nobody_moves_and_after_it_they_do"
+  },
+  {
+    "name": "M5 every seat starts a round armed for it",
+    "file": "crates/core/src/world.rs",
+    "find": "            p.arms = Arms::for_round();",
+    "replace": "            p.arms = Arms::default();",
+    "test": "a_match_starts_on_the_plaza_with_everyone_at_a_spawn_holding_the_pistol_and_navaja"
+  },
+  {
+    "name": "M5 every seat starts at its own spawn",
+    "file": "crates/core/src/world.rs",
+    "find": "            p.spawn = m.spawns[s % m.spawns.len()];",
+    "replace": "            p.spawn = m.spawns[0];",
+    "test": "a_match_starts_on_the_plaza_with_everyone_at_a_spawn_holding_the_pistol_and_navaja"
+  },
+  {
+    "name": "M5 walking over a weapon takes it",
+    "file": "crates/core/src/world.rs",
+    "find": "                p.alive() && d.len_xz() <= PICKUP_REACH && d.y.abs() <= PICKUP_UP",
+    "replace": "                p.alive() && d.len_xz() <= PICKUP_REACH && d.y.abs() <= PICKUP_UP && false",
+    "test": "walking_over_a_weapon_takes_it_into_your_hands_full_and_it_is_gone_for_the_round"
+  },
+  {
+    "name": "M5 the felled watch a seat still standing",
+    "file": "crates/core/src/world.rs",
+    "find": "            .find(|&k| self.players[k].alive())",
+    "replace": "            .find(|&k| k < 99)",
+    "test": "a_felled_player_watches_the_next_seat_still_standing"
+  },
+  {
+    "name": "M5 bots fight bots in a match",
+    "file": "crates/core/src/world.rs",
+    "find": "            .filter(|(k, p)| *k != id && p.alive() && (in_match || p.pilot.is_none()))",
+    "replace": "            .filter(|(k, p)| *k != id && p.alive() && p.pilot.is_none())",
+    "test": "in_a_match_the_bots_fight_each_other_too"
+  },
+  {
+    "name": "M5 a guest's hello carries its skin to the host",
+    "file": "crates/core/src/online.rs",
+    "find": "                        self.skins[seat] = skin;\n                        self.send_roster();",
+    "replace": "                        self.skins[seat] = 0;\n                        self.send_roster();",
+    "test": "a_guests_skin_reaches_the_host_and_the_match_on_both_browsers"
+  },
+  {
+    "name": "M5 a guest's change of skin reaches the host",
+    "file": "crates/core/src/online.rs",
+    "find": "                    self.skins[seat] = skin.min(SEATS as u8 - 1);",
+    "replace": "                    self.skins[seat] = 0;",
+    "test": "a_guests_skin_reaches_the_host_and_the_match_on_both_browsers"
+  },
+  {
+    "name": "M5 bots wear the skins nobody does",
+    "file": "crates/core/src/online.rs",
+    "find": "                *skin = free.next().unwrap_or(s as u8);",
+    "replace": "                *skin = s as u8;",
+    "test": "a_guests_skin_reaches_the_host_and_the_match_on_both_browsers"
+  },
+  {
+    "name": "M5 against bots, the bots wear the other skins",
+    "file": "crates/core/src/game.rs",
+    "find": "        let mut free = (0..4u8).filter(|k| *k != self.skin);",
+    "replace": "        let mut free = 0..4u8;",
+    "test": "play_against_bots_is_a_match_in_your_skin_the_bots_in_the_other_three"
+  },
+  {
+    "name": "M5 the skin setting steps round the four",
+    "file": "crates/core/src/game.rs",
+    "find": "                self.skin = (self.skin as i32 + step).rem_euclid(4) as u8;",
+    "replace": "                self.skin = step.rem_euclid(4) as u8;",
+    "test": "the_skin_setting_steps_round_the_four_and_shows_its_name"
+  },
+  {
+    "name": "M5 the view is from a standing seat while down",
+    "file": "crates/core/src/game.rs",
+    "find": "        if w.rounds.is_some() && !w.players[me].alive() {",
+    "replace": "        if false {",
+    "test": "while_you_are_down_in_a_match_the_view_is_from_the_next_seat_standing"
+  },
+  {
+    "name": "M5 markers only from 75 s",
+    "file": "crates/core/src/api.rs",
+    "find": "            .filter(|p| r.xray() && k != g.eyes() && p.alive())",
+    "replace": "            .filter(|p| k != g.eyes() && p.alive())",
+    "test": "from_seventy_five_seconds_a_marker_shows_where_each_standing_seat_is"
+  },
+  {
+    "name": "M5 the count shows",
+    "file": "crates/core/src/api.rs",
+    "find": "        line(\"count\", r.count_left().to_string(), r.phase == Phase::Count),",
+    "replace": "        line(\"count\", r.count_left().to_string(), false),",
+    "test": "play_against_bots_is_a_match_in_your_skin_the_bots_in_the_other_three"
   }
 ]

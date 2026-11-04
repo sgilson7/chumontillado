@@ -223,6 +223,11 @@ async function main() {
       }
       node.textContent = item.text;
       node.classList.toggle("shown", item.shown);
+      // M5: a marker the core placed on the screen (hundredths of a percent)
+      if (item.at) {
+        node.style.left = `${item.at[0] / 100}%`;
+        node.style.top = `${item.at[1] / 100}%`;
+      }
     }
     document.querySelectorAll("#overlay h1, #overlay h2, #overlay td span, #overlay button, #overlay .label").forEach(mark);
     if (!u.capture) input.release();

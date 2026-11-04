@@ -107,11 +107,16 @@ pub struct Versus {
 }
 
 impl Versus {
-    pub fn new(host: bool, code: &str, build: &str) -> Versus {
+    pub fn new(host: bool, code: &str, build: &str, skin: u8) -> Versus {
+        let mut links = Net::new(host, build);
+        links.chosen = skin;
+        if host {
+            links.skins[0] = skin;
+        }
         Versus {
             host,
             code: code.to_string(),
-            stage: Stage::Lobby(Net::new(host, build)),
+            stage: Stage::Lobby(links),
             error: None,
             heard_us: None,
         }
@@ -165,6 +170,13 @@ impl Versus {
         }
     }
 
+    /// M5: this browser's player chooses a skin, in the lobby.
+    pub fn choose_skin(&mut self, skin: u8) {
+        if let Stage::Lobby(n) = &mut self.stage {
+            n.choose_skin(skin);
+        }
+    }
+
     /// The seats left empty, as this browser knows.
     pub fn empty(&self) -> Seats {
         self.links().empty
@@ -206,7 +218,7 @@ impl Versus {
         }
         let started = match &mut self.stage {
             Stage::Lobby(n) => match n.message(peer, text) {
-                Some(Event::Start { seats, empty }) => Some((seats, empty)),
+                Some(Event::Start { seats, empty, skins }) => Some((seats, empty, skins)),
                 _ => None,
             },
             Stage::Match(s) => {
@@ -215,8 +227,8 @@ impl Versus {
             }
         };
         match started {
-            Some((seats, empty)) => {
-                self.begin(seats, empty);
+            Some((seats, empty, skins)) => {
+                self.begin(seats, empty, skins);
                 true
             }
             None => false,
@@ -232,13 +244,13 @@ impl Versus {
         if !self.host || self.error.is_some() {
             return false;
         }
-        let (seats, empty) = n.start();
-        self.begin(seats, empty);
+        let (seats, empty, skins) = n.start();
+        self.begin(seats, empty, skins);
         true
     }
 
     /// From the lobby to the match, on the world every browser builds alike.
-    fn begin(&mut self, seats: Seats, empty: Seats) {
+    fn begin(&mut self, seats: Seats, empty: Seats, skins: [u8; online::SEATS]) {
         let links = match &mut self.stage {
             Stage::Lobby(n) => std::mem::replace(n, Net::new(self.host, "")),
             Stage::Match(_) => return,
@@ -248,7 +260,7 @@ impl Versus {
             links,
             seat,
             seats,
-            World::online(seats, empty),
+            World::online(seats, empty, skins),
         )));
     }
 
@@ -314,8 +326,8 @@ mod tests {
 
     #[test]
     fn a_guest_that_hears_nothing_from_the_host_for_ten_seconds_has_lost_it() {
-        let mut host = Versus::new(true, "KQXRT", "b");
-        let mut guest = Versus::new(false, "KQXRT", "b");
+        let mut host = Versus::new(true, "KQXRT", "b", 0);
+        let mut guest = Versus::new(false, "KQXRT", "b", 1);
         host.connected(1);
         guest.connected(2);
         for (_, t) in guest.take_outbox() {
@@ -333,8 +345,8 @@ mod tests {
 
     #[test]
     fn the_host_starting_starts_every_guest_on_the_same_seats() {
-        let mut host = Versus::new(true, "KQXRT", "b");
-        let mut guest = Versus::new(false, "KQXRT", "b");
+        let mut host = Versus::new(true, "KQXRT", "b", 0);
+        let mut guest = Versus::new(false, "KQXRT", "b", 1);
         host.connected(1);
         guest.connected(2);
         for _ in 0..3 {

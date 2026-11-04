@@ -18,6 +18,10 @@ pub const HOOK_AGAIN: i32 = 20;
 pub struct Arms {
     pub weapon: Weapon,
     pub last: Weapon,
+    /// M5: the weapons held, one bit each by `Weapon` order: every one in
+    /// the practice room, the pistol and navaja at a round's start
+    /// (CS-Q10: A), more as they are picked up
+    pub owned: u16,
     /// the melee weapon the melee key takes first
     pub melee: Weapon,
     pub rounds: [i32; COUNT],
@@ -49,6 +53,7 @@ impl Default for Arms {
         Arms {
             weapon: Weapon::Pistol,
             last: Weapon::Shotgun,
+            owned: ALL_OWNED,
             melee: Weapon::Navaja,
             rounds: WEAPONS.map(|g| g.magazine),
             cooldown: 0,
@@ -64,8 +69,35 @@ impl Default for Arms {
     }
 }
 
+/// Every weapon, and what a round starts with (CS-Q10: A).
+pub const ALL_OWNED: u16 = (1 << COUNT) - 1;
+pub const ROUND_OWNED: u16 = (1 << Weapon::Pistol as u16) | (1 << Weapon::Navaja as u16);
+
 impl Arms {
+    /// A round's start: the pistol in hand and the navaja, full.
+    pub fn for_round() -> Arms {
+        Arms {
+            owned: ROUND_OWNED,
+            last: Weapon::Navaja,
+            ..Arms::default()
+        }
+    }
+
+    pub fn owns(&self, g: Weapon) -> bool {
+        self.owned & (1 << g as u16) != 0
+    }
+
+    /// M5: a weapon picked up off the map: held from now, full, in hand.
+    pub fn pick_up(&mut self, g: Weapon) {
+        self.owned |= 1 << g as u16;
+        self.rounds[g as usize] = g.stats().magazine;
+        self.take(g);
+    }
+
     fn take(&mut self, g: Weapon) {
+        if !self.owns(g) {
+            return;
+        }
         if g != self.weapon {
             self.last = self.weapon;
             self.weapon = g;
@@ -82,8 +114,12 @@ impl Arms {
     /// one is already in hand.
     fn take_melee(&mut self) {
         let next = if self.weapon.swing().is_some() {
+            // the next melee weapon held, round the three
             let k = MELEE_WEAPONS.iter().position(|&m| m == self.weapon).unwrap_or(0);
-            MELEE_WEAPONS[(k + 1) % MELEE_WEAPONS.len()]
+            (1..=MELEE_WEAPONS.len())
+                .map(|j| MELEE_WEAPONS[(k + j) % MELEE_WEAPONS.len()])
+                .find(|&m| self.owns(m))
+                .unwrap_or(self.weapon)
         } else {
             self.melee
         };
@@ -106,8 +142,13 @@ impl Arms {
             self.take(self.last);
         }
         if input.wheel != 0 {
+            // the next weapon held, either way round
             let step = if input.wheel > 0 { 1 } else { COUNT - 1 };
-            self.take(Weapon::from_index(self.weapon as usize + step));
+            let next = (1..=COUNT)
+                .map(|j| Weapon::from_index(self.weapon as usize + step * j))
+                .find(|&g| self.owns(g))
+                .unwrap_or(self.weapon);
+            self.take(next);
         }
         self.old_keys = input.keys;
         self.cooldown = (self.cooldown - 1).max(0);
@@ -364,5 +405,32 @@ mod tests {
         // empty: the next press reloads, two beats (CS-Q20): 60 ticks
         a.tick(&rec(0, true));
         assert_eq!(a.reloading, 60);
+    }
+
+    #[test]
+    fn a_round_starts_with_the_pistol_and_navaja_and_a_pickup_is_held_full_and_in_hand() {
+        use crate::input::{SLOT_2, SLOT_8};
+        let mut a = Arms::for_round();
+        assert!(a.owns(Weapon::Pistol) && a.owns(Weapon::Navaja));
+        // the shotgun is not held: 2 does nothing
+        a.tick(&rec(SLOT_2, false));
+        assert_eq!(a.weapon, Weapon::Pistol);
+        // E takes the navaja, and again stays on it (the only melee held)
+        a.tick(&rec(MELEE, false));
+        a.tick(&rec(0, false));
+        a.tick(&rec(MELEE, false));
+        assert_eq!(a.weapon, Weapon::Navaja);
+        // the wheel goes between the two held
+        let mut b = Arms::for_round();
+        b.tick(&Input {
+            wheel: 100,
+            ..Input::default()
+        });
+        assert_eq!(b.weapon, Weapon::Navaja);
+        a.pick_up(Weapon::Toro);
+        assert_eq!((a.weapon, a.rounds[Weapon::Toro as usize]), (Weapon::Toro, 3));
+        a.tick(&rec(0, false));
+        a.tick(&rec(SLOT_8, false));
+        assert_eq!(a.weapon, Weapon::Toro);
     }
 }
