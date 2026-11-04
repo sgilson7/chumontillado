@@ -7,7 +7,7 @@ practice room, a run and a jump read off the HUD, the pause with its
 controls, and the field of view in the settings.
 
 Expected values are worked out by hand from BRIEF.md and the journal's
-Mockup page: the run speed is 8 m/s (movement::TUNING), the HUD reads one
+Mockup page, as T3 changed it: the run speed is 9 m/s (movement::TUNING), the HUD reads one
 decimal, and there are three wall jumps a flight.
 """
 
@@ -42,9 +42,9 @@ def run(page, check, engine):
     check(hud(page, "walls") == STRINGS["hud_walls"].replace("{n}", "3"), "three wall jumps to start")
 
     # hold forward until the HUD reads the run speed (the room's spawn faces
-    # the open floor; 8 m/s is reached in under half a second)
+    # the open floor; 9 m/s is reached in under half a second)
     page.keyboard.down("KeyW")
-    check(until(page, lambda: hud(page, "speed"), "8.0 m/s"), "holding W reaches 8.0 m/s")
+    check(until(page, lambda: hud(page, "speed"), "9.0 m/s"), "holding W reaches the run speed, 9.0 m/s (T3)")
     page.keyboard.down("Space")
     check(until(page, lambda: hud(page, "doing"), STRINGS["hud_air"]), "Space leaves the ground")
     page.keyboard.up("Space")

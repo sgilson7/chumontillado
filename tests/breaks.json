@@ -18,7 +18,7 @@
     "file": "crates/core/src/movement.rs",
     "find": "        let add = speed - current;\n        if add <= 0 {\n            return;\n        }\n        let a = fx::mul(fx::mul(fx::mul(accel,",
     "replace": "        let add = speed + ONE - current;\n        if add <= 0 {\n            return;\n        }\n        let a = fx::mul(fx::mul(fx::mul(accel,",
-    "test": "running_forward_reaches_eight_metres_a_second_and_no_more"
+    "test": "running_forward_reaches_the_run_speed_and_no_more"
   },
   {
     "name": "M1 air: the cap applies to the comparison",
@@ -88,7 +88,7 @@
     "file": "crates/core/src/movement.rs",
     "find": "        if b.sliding || b.since_slide <= self.t.slide_jump_ticks {",
     "replace": "        if false {",
-    "test": "a_jump_out_of_a_slide_adds_two_and_a_half_metres_a_second_and_goes_higher"
+    "test": "a_jump_out_of_a_slide_adds_speed_along_and_up"
   },
   {
     "name": "M1 wall jump: three a flight",
@@ -221,7 +221,7 @@
     "file": "crates/core/src/movement.rs",
     "find": "            up += self.t.slide_jump_up;",
     "replace": "            up += 0;",
-    "test": "a_jump_out_of_a_slide_adds_two_and_a_half_metres_a_second_and_goes_higher"
+    "test": "a_jump_out_of_a_slide_adds_speed_along_and_up"
   },
   {
     "name": "T1 a slide jump's window is 200 ms",
@@ -264,5 +264,26 @@
     "find": "            let free = b.since_touch > AIR_CONTROL_AFTER;",
     "replace": "            let free = true;",
     "test": "once_on_a_ramp_holding_w_into_it_costs_no_speed_along_it"
+  },
+  {
+    "name": "T3 the run speed is 9",
+    "file": "crates/core/src/movement.rs",
+    "find": "    run: int(9),",
+    "replace": "    run: int(8),",
+    "test": "running_forward_reaches_the_run_speed_and_no_more"
+  },
+  {
+    "name": "T3 a dash jump adds 3.5 along",
+    "file": "crates/core/src/movement.rs",
+    "find": "    slide_jump: ONE * 35 / 10,",
+    "replace": "    slide_jump: ONE * 25 / 10,",
+    "test": "a_jump_out_of_a_slide_adds_speed_along_and_up"
+  },
+  {
+    "name": "T3 a dash jump's arc is flatter",
+    "file": "crates/core/src/movement.rs",
+    "find": "    slide_jump_up: ONE * 5 / 10,",
+    "replace": "    slide_jump_up: ONE * 15 / 10,",
+    "test": "a_jump_out_of_a_slide_adds_speed_along_and_up"
   }
 ]

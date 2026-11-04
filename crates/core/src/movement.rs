@@ -91,7 +91,8 @@ pub struct Tuning {
 }
 
 pub const TUNING: Tuning = Tuning {
-    run: int(8),
+    // T3: a little faster than the Mockup page's 8
+    run: int(9),
     accelerate: int(10),
     air_accelerate: int(40),
     air_cap: ONE * 8 / 10,
@@ -117,8 +118,9 @@ pub const TUNING: Tuning = Tuning {
     // T1: 200 ms to jump out of a slide (was 50 ms), +2.5 m/s along (was 1.5)
     // and 1.5 m/s more up
     slide_jump_ticks: 12,
-    slide_jump: ONE * 25 / 10,
-    slide_jump_up: ONE * 15 / 10,
+    // T3: faster (+3.5, was 2.5) and flatter (+0.5 up, was 1.5)
+    slide_jump: ONE * 35 / 10,
+    slide_jump_up: ONE * 5 / 10,
     wall_reach: ONE / 5,
     wall_out: int(5),
     wall_up: int(6),
