@@ -86,6 +86,7 @@ One row per assumption, surprise or open item. **Kind** is *divergence* (what wa
 | R10.9 | finding | Practice is you and three bots (Mockup page) | The practice room is for movement, with its targets | A separate menu entry, Play against bots, is a match of rounds on the three maps against three bots, as online without the links | `game::Game::bots_match` | done |
 | R10.10 | worklist | The dead watch through a player's eyes or from a free camera (Mockup page) | Only the first is built | While down you watch the next seat still standing; a free camera is not built | `world::World::watching` | open |
 | R10.11 | worklist | — | How the rounds, the maps and the bots play is yours to judge from play: Play against bots, or host a match | — | — | person |
+| R10.12 | worklist | A guest who opens the invite link finds the host | On the live site, one run of the online check in three had a guest by invite link never seated within a minute; the two reruns passed, and the local runs always have. Probably the public relays slow to introduce the two browsers; not shown. A guest that never finds the host waits with no word | Open: say so to a guest still looking after about 20 s, and look at the relay list (`web/net/config.js`) | — | open |
 
 ## Strings written by the agent
 

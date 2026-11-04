@@ -52,9 +52,10 @@ Chumontillado is a first-person movement shooter for up to four players online, 
 
 M5 is built: matches of one-life rounds on the three maps, pickups, the markers through walls at 75 s, and the skin choice (T11). Next, in order:
 
-1. **The hit taken back on a miss** (CS-Q5: B, R8.10), and the open M5 rows: the host's settings (R10.6) and a free camera for the dead (R10.10).
-2. **M6:** sound, the painted projectiles and bursts (R7.9), and the Kuwahara video (R1.13).
-3. **Final pass:** the rest of T7: bodies that recoil, land and fall.
+1. **A guest who cannot find the room** (R10.12): seen once in three live runs; tell the guest after about 20 s, and check the relays.
+2. **The hit taken back on a miss** (CS-Q5: B, R8.10), and the open M5 rows: the host's settings (R10.6) and a free camera for the dead (R10.10).
+3. **M6:** sound, the painted projectiles and bursts (R7.9), and the Kuwahara video (R1.13).
+4. **Final pass:** the rest of T7: bodies that recoil, land and fall.
 
 Before trusting a test run, check it compiled: filter for `error` lines as well as failures (R6.5).
 
@@ -70,4 +71,4 @@ Before trusting a test run, check it compiled: filter for `error` lines as well 
 
 ## Check
 
-`./scripts/check.sh` on 2026-11-04 after M5: BUILDER CHECK PASSED (format, lint, 270 tests, the WebAssembly build and import audit, the art check, the notebook, the journal, and the browser check in Chromium, Firefox and WebKit). Live at 6c528ce: the browser check passed there, and `tests/browser/online.py` played three browsers through the live invite link.
+`./scripts/check.sh` on 2026-11-04 after M5: BUILDER CHECK PASSED (format, lint, 270 tests, the WebAssembly build and import audit, the art check, the notebook, the journal, and the browser check in Chromium, Firefox and WebKit). Live at f3d27ec: the browser check passed there; `tests/browser/online.py` on the live site passed two runs of three (R10.12).
