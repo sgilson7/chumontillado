@@ -1,0 +1,38 @@
+# Second-order notebook
+
+Stage 6, kept by the agent as the work happens, not afterwards. `B3 Build in self-questioning`.
+
+The code and tests are the work; this file is the record about the work. It is where a decision the agent made alone, an assumption that turned out wrong, or something only the person can do becomes visible to the person. With the plan approved in advance, it is the main place those decisions surface before the person uses the tool. [`docs/procedure.md`](https://github.com/sgilson7/builder-setting/blob/main/docs/procedure.md#the-second-order-notebook) says why.
+
+One row per assumption, surprise or open item. **Kind** is *divergence* (what was assumed, what turned out to be true, what changed), *finding*, or *worklist* (the person's to do). Number rows by round (R1.1, R1.2, then R2.1 after the first triage) so a later round does not renumber an earlier one. **Rule** is the rule the row produced for later sessions, and where it now lives (`CLAUDE.md`, a test, `tests/breaks.json`), or blank. **Status** is *done*, *open*, or *person*; every *person* row is named in `HANDOFF.md`. `scripts/notebook_check.py` checks the form of each row and that the notebook is not empty once `PLAN.md` holds a decision, not what the rows say.
+
+| # | Kind | Assumed or found | What is true | What changed | Rule | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| R1.1 | worklist | — | CS-Q1's note asks for "a more Spanish sounding chum based name, some play on the cask of amontillado" | The game is called Chumontillado (chum + Amontillado), in the title, the repository and the strings. A name is the person's to confirm | `data/strings.json` title | person |
+| R1.2 | divergence | CS-Q2: A named the arena's modules to copy | M1 needs the maths, the renderer and the page, and none of the sword, the wounds, the save, online play, the health bars or Watch | Taken at e78945b: fx, geom, rng, ticks, mesh, prim, render, look, sky, glossary, page (its checker), input (its record and `Pending`), camera (its `Aim`, field of view and eye view), flicker, the shim, gl.js, input.js and the page's skeleton; the rest waits for the milestone that needs it. `look::Palette` now holds the room's surfaces | lib.rs's header; each file's header names its source | done |
+| R1.3 | divergence | The movement would be written new from the Mockup page's numbers | Your CSSurf repository (sgilson7/surfs-up, 91d04b3) already ports Source's CGameMovement, with its rampbug fixes, in `f32`; rollback needs every browser to agree to the bit | Ported to Q16.16 metres, Y up, with the Mockup page's numbers in place of Source's inches (run 8, gravity 18, jump 5.6, cap 0.8, air accel 40). Source's ground rule (0.7), half-and-half gravity, clipping, stepping and the eight bumps are CSSurf's | `movement::TUNING`; `world/tests.rs` | done |
+| R1.4 | divergence | The arena's shader lit any drawn shape | It took normals by dividing each axis by its column's length, which is wrong for a sheared shape; a ramp or slope drawn as a sheared wedge would have lit wrongly | It now uses the inverse transpose | `data/shaders/scene.vert` | done |
+| R1.5 | finding | Crouch on Ctrl, as the Mockup's controls implied | Ctrl with W, crouching while moving forward, closes a browser tab, and pointer lock does not stop it | Crouch is Shift or C | `data/controls.json` | done |
+| R1.6 | finding | A slide could start on any crouch at speed | Tapping crouch would give the 1.4× boost again and again | A slide's boost needs a second since the last slide began (`slide_rest`, 60 ticks); a slide without it keeps the speed held. My choice: tune by feel | test `a_second_slide_within_a_second_gives_no_boost` | done |
+| R1.7 | finding | A held jump would also wall jump | With hops held (CS-Q9: A), holding jump against a wall spent all three wall jumps at once | A wall jump needs a fresh press; a slam needs a fresh crouch and 1.5 m of air under the feet | tests `holding_jump_against_a_wall_does_not_spend_the_wall_jumps`, `a_slam_drops_at_thirty_…` | done |
+| R1.8 | finding | Six expected values worked out by hand | Three of mine were wrong: 16:9 at 105° is 72.5° vertical, not 73.7°; a jump comes before friction in Source's order, so a slide jump adds the whole 1.5; both gravity halves apply in the air, so a slam reads −30.3 | The tests were corrected, not the code | `camera.rs`, `world/tests.rs` | done |
+| R1.9 | finding | Two tests checked what their names said | Two break rows were missed: the air-cap test started faster than the run speed, where the cap never matters; the surf test began on the face, where a bounce off it is too small to see (and my gap measure had its sign inverted) | Both now start where the behaviour shows: 5 m/s forward, and 6 m/s into the ramp | `tests/breaks.json`, 28 of 28 caught | done |
+| R1.10 | finding | The hop test could run anywhere in the room | Its circles ran into the first surf ramp's foot and measured a collision | It runs on a bare floor | `world/tests.rs` | done |
+| R1.11 | finding | The flicker scan would pass the room | The slope's sheared floor lay in the floor's plane | The ramps' and slope's feet sink 5 cm into the floor along their own faces | test `the_static_scene_draws_no_two_surfaces_in_one_plane` | done |
+| R1.12 | finding | "Slope" could be ruled out for a surf ramp | The room has a walkable slope as well, so the copy test flagged the menu's text | Slope has its own entry, and Surf ramp's Not line no longer names it | `GLOSSARY.md` | done |
+| R1.13 | worklist | — | CS-Q14's note asks for a video of the game running with a Kuwahara filter, though the pass will not ship | To be recorded from the practice room at M6, with the filter as a test-only shader | — | open |
+| R1.14 | worklist | — | How the movement feels is the person's judgement from play (the Mockup's numbers are starting points) | M1 is published for the person to try | — | person |
+| R1.15 | finding | A prism along x would draw like one along z | Its transform turned the wedge into its mirror image (determinant −1), so its triangles wound backwards and the slope drew inside out, black | A wedge's length axis flips whenever the determinant would be negative, for any axis or corner order | test `every_drawn_brush_keeps_its_handedness_so_none_draws_inside_out` (break row R1.15) | done |
+
+## Strings written by the agent
+
+Each reader-visible string the agent wrote, with its key, for the person to read.
+
+| Key | String |
+| --- | --- |
+| `title`, `tagline`, `menu_text`, `loading`, `no_webgl` | Chumontillado / A shooter in the cellars. Four players, one life a round. For now, the practice room: learn to move. / The practice room has a slope, two surf ramps, a shaft to climb and open floor to hop across. No weapons yet. |
+| `key_*`, `control_*` | the seven controls and what each does (M1) |
+| `hud_*`, `hint_play` | the HUD's speed, wall jumps, state and best speed, and the first-ten-seconds hint |
+| `setting_*`, `degrees`, `percent`, `narrower` … `faster` | the settings' rows |
+| GLOSSARY.md (M1) | Hop, Practice room, Slam, Slide, Slide jump, Slope, Surf ramp, Wall jump |
+

@@ -1,0 +1,388 @@
+//! The movement's behaviour, through the world as a player meets it. Each
+//! expected value is worked out by hand from `movement::TUNING` in the
+//! test's comment.
+
+use super::*;
+use crate::fx::int;
+use crate::geom::yaw_of;
+use crate::input::{CROUCH, FORWARD, JUMP, LEFT};
+use crate::movement::{Mover, TUNING};
+
+fn keys(k: u32) -> Input {
+    Input {
+        keys: k,
+        ..Input::default()
+    }
+}
+
+fn run(w: &mut World, input: Input, ticks: usize) {
+    for _ in 0..ticks {
+        w.step(&[input]);
+    }
+}
+
+/// A body alone in the practice room's map, for the mover directly.
+fn body_at(p: V3) -> Body {
+    Body::at(p)
+}
+
+fn near(a: Fx, b: Fx, within: Fx) -> bool {
+    (a - b).abs() <= within
+}
+
+#[test]
+fn a_player_at_the_spawn_comes_to_rest_on_the_floor() {
+    let mut w = World::practice();
+    run(&mut w, Input::default(), 60);
+    let b = w.players[0].body;
+    assert!(b.on_ground, "{b:?}");
+    assert_eq!(b.velocity, V3::ZERO);
+    // the floor's top is y = 0; a trace stops 1/1024 m short at most
+    assert!(b.origin.y >= 0 && b.origin.y < ONE / 100, "{}", b.origin.y);
+}
+
+#[test]
+fn running_forward_reaches_eight_metres_a_second_and_no_more() {
+    let mut w = World::practice();
+    // the spawn faces −z (yaw 0) down the open middle of the room
+    run(&mut w, keys(FORWARD), 90);
+    let s = w.players[0].body.speed();
+    // friction 6 against acceleration 10 settles at the run speed: each tick
+    // adds 10 × 8 / 60 = 1.33 m/s, more than friction's 6 × 8 / 60 = 0.8 takes,
+    // and the add is capped where the speed meets 8
+    assert!(near(s, int(8), ONE / 20), "{}", fx::decimal(s, 3));
+}
+
+#[test]
+fn air_strafing_with_the_wish_square_to_the_velocity_adds_the_cap_at_right_angles() {
+    let w = World::practice();
+    let mut m = Mover::new(&w.map);
+    // high above the room, nothing to hit for a second
+    let mut b = body_at(v3(0, int(200), 0));
+    b.velocity = v3(int(10), 0, 0);
+    for _ in 0..60 {
+        let v = b.velocity;
+        let yaw = yaw_of(v3(-v.z, 0, v.x));
+        m.tick(&mut b, &keys(FORWARD), yaw, yaw);
+    }
+    // two sub-steps a tick: the first adds the whole cap, 0.8, square to the
+    // velocity; the second finds 0.8 already along the wish and adds nothing.
+    // So speed² grows by 0.64 a tick: √(100 + 60 × 0.64) = 11.77 m/s
+    let s = b.speed();
+    assert!(near(s, ONE * 1177 / 100, ONE / 20), "{}", fx::decimal(s, 3));
+}
+
+#[test]
+fn holding_forward_in_the_air_past_the_cap_adds_nothing() {
+    let w = World::practice();
+    let mut m = Mover::new(&w.map);
+    let mut b = body_at(v3(0, int(200), 0));
+    // 5 m/s forward: past the air's cap (0.8), under the run speed (8), so
+    // only the cap stops the wish adding speed along itself
+    b.velocity = v3(0, 0, -int(5));
+    for _ in 0..60 {
+        m.tick(&mut b, &keys(FORWARD), 0, 0);
+    }
+    assert_eq!(b.speed(), int(5));
+}
+
+#[test]
+fn holding_jump_hops_again_on_every_landing() {
+    let mut w = World::practice();
+    run(&mut w, Input::default(), 30);
+    let mut jumps = 0;
+    for _ in 0..180 {
+        w.step(&[keys(JUMP)]);
+        if w.players[0].events.jumped {
+            jumps += 1;
+        }
+    }
+    // 5.6 m/s up under 18 m/s²: 0.62 s, 37 ticks a hop, so 180 ticks hold
+    // 4 whole hops and the start of a fifth
+    assert_eq!(jumps, 5);
+}
+
+#[test]
+fn hopping_and_strafing_builds_speed_past_the_run_and_landing_late_does_not() {
+    let hop = |late: usize| {
+        // a bare floor 400 m across: the room's ramps would get in the way of
+        // the circles a strafer turns
+        let mut w = World::practice();
+        w.map = crate::map::Map {
+            brushes: vec![crate::map::block(
+                v3(-int(200), -ONE, -int(200)),
+                v3(int(200), 0, int(200)),
+                crate::map::Surface::Floor,
+            )],
+            spawns: vec![(V3::ZERO, 0)],
+        };
+        w.players[0].body.origin = V3::ZERO;
+        w.players[0].prev = V3::ZERO;
+        run(&mut w, Input::default(), 10);
+        // run up to speed first: a jump held from a standstill never meets
+        // the ground, so only the air's cap is ever added
+        run(&mut w, keys(FORWARD), 60);
+        let mut on = 0;
+        for _ in 0..150 {
+            let b = w.players[0].body;
+            let v = b.velocity;
+            // the wish square to the velocity, turning left
+            w.players[0].aim.yaw = yaw_of(v3(-v.z, 0, v.x));
+            let k = if b.on_ground {
+                on += 1;
+                if on > late {
+                    on = 0;
+                    FORWARD | JUMP
+                } else {
+                    FORWARD
+                }
+            } else {
+                FORWARD
+            };
+            w.step(&[keys(k)]);
+        }
+        w.players[0].body.speed()
+    };
+    let on_time = hop(0);
+    let late = hop(2);
+    // 2.5 s of hops on time: each tick in the air adds 0.64 to speed², from
+    // 64: about √(64 + 0.64 × 140) ≈ 12.4 m/s, a little less for the ticks
+    // on the ground
+    assert!(on_time > int(11), "on time: {}", fx::decimal(on_time, 2));
+    assert!(late < int(9), "late: {}", fx::decimal(late, 2));
+}
+
+#[test]
+fn a_surf_ramp_gives_no_footing_and_speeds_a_surfer_along_it() {
+    let w = World::practice();
+    let mut m = Mover::new(&w.map);
+    // the west face of the ramp whose ridge is at x = 0 (7 up over 5.25
+    // across), half way up, moving north along it at 10 m/s
+    let (x, y) = (-ONE * 2625 / 1000, ONE * 35 / 10);
+    let mut b = body_at(v3(x - HALF - ONE * 3 / 10, y, int(10)));
+    // arriving at the face: 6 m/s into it (east), 10 along it (north)
+    b.velocity = v3(int(6), 0, -int(10));
+    // the ramp's west face, and the box's corner that meets it first
+    let face = *w
+        .map
+        .brushes
+        .iter()
+        .filter(|r| r.surface == crate::map::Surface::Ramp && r.mins.x > int(-10))
+        .flat_map(|r| r.planes.iter())
+        .find(|p| p.n.x < 0 && p.n.y > 0)
+        .unwrap();
+    // outside the brush is n · p > d, so the gap is how far past d
+    let gap = |b: &Body| face.n.dot(b.origin.add(v3(crate::movement::HALF_WIDTH, 0, 0))) - face.d;
+    let mut grounded = 0;
+    let mut widest = 0;
+    for t in 0..30 {
+        // the wish into the ramp: east
+        m.tick(
+            &mut b,
+            &keys(FORWARD),
+            yaw_of(v3(ONE, 0, 0)),
+            yaw_of(v3(ONE, 0, 0)),
+        );
+        if b.on_ground {
+            grounded += 1;
+        }
+        // from the third tick, once it has reached the face
+        if t >= 3 {
+            widest = widest.max(gap(&b));
+        }
+    }
+    // held on the face: the box never more than 5 cm off it (a face that
+    // threw back what went into it would bounce the surfer away)
+    assert!(widest < ONE / 20, "{}", fx::decimal(widest, 3));
+    assert_eq!(grounded, 0, "a ramp face at 53° is never ground");
+    assert!(b.velocity.len() > int(10), "{}", fx::decimal(b.velocity.len(), 2));
+    // still on the ramp's face, not thrown off it: within a metre of it
+    assert!(b.origin.x > x - int(2), "{}", fx::decimal(b.origin.x, 2));
+}
+
+/// Half the box's width plus a hair: a box beside a face at x touches it at
+/// x − HALF.
+const HALF: Fx = crate::movement::HALF_WIDTH + ONE / 50;
+
+#[test]
+fn crouching_at_a_run_slides_at_eleven_metres_a_second_and_slows_slowly() {
+    let mut w = World::practice();
+    run(&mut w, keys(FORWARD), 60);
+    w.step(&[keys(FORWARD | CROUCH)]);
+    assert!(w.players[0].events.slid);
+    // 1.4 × 8 = 11.2, less one tick of slide friction 0.6 × 11.2 / 60 = 0.11
+    let s = w.players[0].body.speed();
+    assert!(near(s, ONE * 1109 / 100, ONE / 20), "{}", fx::decimal(s, 3));
+    run(&mut w, keys(CROUCH), 30);
+    let after = w.players[0].body.speed();
+    // half a second at friction 0.6: about 11.1 × (1 − 0.01)^30 = 8.2
+    assert!(after > int(8), "{}", fx::decimal(after, 3));
+}
+
+#[test]
+fn a_second_slide_within_a_second_gives_no_boost() {
+    let mut w = World::practice();
+    run(&mut w, keys(FORWARD), 60);
+    run(&mut w, keys(FORWARD | CROUCH), 5);
+    run(&mut w, keys(FORWARD), 5);
+    let before = w.players[0].body.speed();
+    w.step(&[keys(FORWARD | CROUCH)]);
+    assert!(w.players[0].events.slid);
+    assert!(w.players[0].body.speed() <= before, "no boost inside slide_rest");
+}
+
+#[test]
+fn a_jump_out_of_a_slide_adds_a_metre_and_a_half_a_second() {
+    let mut w = World::practice();
+    run(&mut w, keys(FORWARD), 60);
+    run(&mut w, keys(FORWARD | CROUCH), 4);
+    let before = w.players[0].body.speed();
+    w.step(&[keys(CROUCH | JUMP)]);
+    assert!(w.players[0].events.jumped);
+    let gain = w.players[0].body.speed() - before;
+    // + slide_jump 1.5: the jump comes before friction (Source's order), so
+    // that tick takes none
+    assert!(near(gain, ONE * 15 / 10, ONE / 50), "{}", fx::decimal(gain, 3));
+}
+
+#[test]
+fn three_wall_jumps_a_flight_each_pushing_up_and_out_and_a_fourth_does_nothing() {
+    let w = World::practice();
+    let mut m = Mover::new(&w.map);
+    // beside the west wall (its face at x = −32), well off the floor
+    let mut b = body_at(v3(int(-32) + HALF, int(6), 0));
+    b.velocity = v3(0, 0, -int(6));
+    for k in 0..4 {
+        b.origin.x = int(-32) + HALF;
+        b.velocity.x = 0;
+        let ev = m.tick(&mut b, &keys(JUMP), 0, 0);
+        if k < 3 {
+            assert!(ev.wall_jumped, "jump {k}");
+            // 5 m/s out (east), up at 6 less half a tick's gravity, along the
+            // wall kept
+            assert!(
+                near(b.velocity.x, int(5), ONE / 100),
+                "{}",
+                fx::decimal(b.velocity.x, 3)
+            );
+            assert!(
+                near(b.velocity.y, int(6) - int(18) / 120, ONE / 50),
+                "{}",
+                fx::decimal(b.velocity.y, 3)
+            );
+            assert!(near(b.velocity.z, -int(6), ONE / 50));
+        } else {
+            assert!(!ev.wall_jumped, "a fourth");
+        }
+        // let go of jump so the next press is fresh
+        m.tick(&mut b, &Input::default(), 0, 0);
+    }
+    assert_eq!(b.wall_jumps, 3);
+}
+
+#[test]
+fn holding_jump_against_a_wall_does_not_spend_the_wall_jumps() {
+    let w = World::practice();
+    let mut m = Mover::new(&w.map);
+    let mut b = body_at(v3(int(-32) + HALF, int(6), 0));
+    b.old_jump = true;
+    for _ in 0..10 {
+        b.origin.x = int(-32) + HALF;
+        m.tick(&mut b, &keys(JUMP), 0, 0);
+    }
+    assert_eq!(b.wall_jumps, 0);
+}
+
+#[test]
+fn a_slam_drops_at_thirty_and_a_jump_off_its_landing_goes_higher_than_a_jump() {
+    let mut w = World::practice();
+    w.players[0].body.origin = v3(int(-28), int(8), int(-28));
+    w.players[0].body.since_slam = 1_000;
+    w.step(&[keys(CROUCH)]);
+    assert!(w.players[0].events.slammed);
+    // −30, less a tick's gravity in its two halves (18 / 60 = 0.3)
+    let vy = w.players[0].body.velocity.y;
+    assert!(
+        near(vy, -int(30) - int(18) / 60, ONE / 50),
+        "{}",
+        fx::decimal(vy, 3)
+    );
+    let mut landed = false;
+    for _ in 0..40 {
+        w.step(&[keys(CROUCH)]);
+        if w.players[0].events.landed {
+            landed = true;
+            break;
+        }
+    }
+    assert!(landed);
+    w.step(&[keys(JUMP)]);
+    let ev = w.players[0].events;
+    assert!(ev.jumped && ev.bounced, "{ev:?}");
+    // fell about 8 m: 60% is 4.8 m, √(2 × 18 × 4.8) = 13.1 m/s up, well over a
+    // jump's 5.6
+    let up = w.players[0].body.velocity.y;
+    assert!(up > int(12), "{}", fx::decimal(up, 2));
+}
+
+#[test]
+fn the_slope_is_walked_up_to_the_balcony() {
+    let mut w = World::practice();
+    // at the slope's foot, facing south (yaw a half turn) up it
+    w.players[0].body.origin = v3(int(28), 0, int(4));
+    w.players[0].aim.yaw = fx::HALF_TURN;
+    run(&mut w, keys(FORWARD), 240);
+    let p = w.players[0].body.origin;
+    assert!(p.y >= map::BALCONY_Y - ONE / 100, "{}", fx::decimal(p.y, 2));
+}
+
+#[test]
+fn r_puts_the_player_back_at_the_spawn() {
+    let mut w = World::practice();
+    run(&mut w, keys(FORWARD), 60);
+    w.step(&[keys(crate::input::RESET)]);
+    assert_eq!(w.players[0].body.origin, w.map.spawns[0].0);
+    assert_eq!(w.players[0].body.velocity, V3::ZERO);
+}
+
+#[test]
+fn the_same_records_give_the_same_world() {
+    let script = |t: u64| Input {
+        keys: [FORWARD, FORWARD | JUMP, LEFT | JUMP, CROUCH][(t / 23 % 4) as usize],
+        dx: ((t * 37) % 400) as i32 - 200,
+        dy: ((t * 11) % 60) as i32 - 30,
+        ..Input::default()
+    };
+    let play = || {
+        let mut w = World::practice();
+        for t in 0..600 {
+            w.step(&[script(t)]);
+        }
+        w
+    };
+    assert_eq!(play(), play());
+}
+
+#[test]
+fn speed_reads_with_one_decimal() {
+    assert_eq!(speed_text(ONE * 173 / 10), "17.3");
+    assert_eq!(speed_text(int(8)), "8.0");
+    assert_eq!(speed_text(0), "0.0");
+}
+
+#[test]
+fn the_tuning_is_the_mockup_pages_numbers() {
+    // the journal's Mockup page, 2026-11-04: run 8, gravity 18, jump 5.6,
+    // cap 0.8, air accel 40, slide 1.4× run, three wall jumps
+    assert_eq!(
+        (
+            TUNING.run,
+            TUNING.gravity,
+            TUNING.jump,
+            TUNING.air_cap,
+            TUNING.air_accelerate
+        ),
+        (int(8), int(18), ONE * 56 / 10, ONE * 8 / 10, int(40))
+    );
+    assert_eq!((TUNING.slide_boost_pct, TUNING.wall_jumps), (140, 3));
+}

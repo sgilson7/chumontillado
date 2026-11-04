@@ -1,0 +1,456 @@
+//! A map: convex brushes, each the set of points behind every one of its
+//! planes, as Source's (and CSSurf's `map.rs`) are. A player's box is swept
+//! against them in `trace.rs`; the page draws each as a cube or a wedge.
+//!
+//! Y is up, lengths are metres in Q16.16. A face is ground when its
+//! normal's y is at least `movement::GROUND_NORMAL_Y` (0.7, about 45.6°); a
+//! steeper face is a surf ramp: no footing, so the air rules hold on it.
+//!
+//! M1's map is the practice room (`practice`): a floor, walls to jump off,
+//! a walkable slope up to a balcony, two surf ramps below the balcony, a
+//! wall-jump shaft and a few blocks, for judging the movement before any
+//! weapon exists (PLAN.md M1).
+
+use crate::fx::{self, int, Fx, ONE};
+use crate::geom::{v3, Affine, V3};
+use crate::look::Rgb;
+use crate::prim::Mesh;
+use crate::render::Group;
+
+/// A face's plane: the brush lies where `n · p <= d`. `n` has length `ONE`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Plane {
+    pub n: V3,
+    pub d: Fx,
+}
+
+/// How far past a face a point may read and still be on it (0.25 mm).
+const HOLD_TOLERANCE: Fx = ONE / 4096;
+
+/// What a brush is, for its colour.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Surface {
+    Floor,
+    Wall,
+    Ramp,
+    Slope,
+    Block,
+    Trim,
+}
+
+/// How a brush is drawn: a box, or a triangular prism along x or z with its
+/// cross-section's three corners (in the other two axes) and its length.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Shape {
+    Block,
+    /// corners as (across, up) pairs; `along_z` says which axis the prism runs
+    Prism {
+        corners: [(Fx, Fx); 3],
+        along_z: bool,
+        from: Fx,
+        to: Fx,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Brush {
+    pub planes: Vec<Plane>,
+    pub mins: V3,
+    pub maxs: V3,
+    pub surface: Surface,
+    pub shape: Shape,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Map {
+    pub brushes: Vec<Brush>,
+    /// where a player starts, and the yaw they face
+    pub spawns: Vec<(V3, i32)>,
+}
+
+fn plane(n: V3, through: V3) -> Plane {
+    Plane { n, d: n.dot(through) }
+}
+
+/// The six axis planes of a box: also every brush's bevels (`trace.rs`).
+fn box_planes(mins: V3, maxs: V3) -> Vec<Plane> {
+    vec![
+        plane(v3(ONE, 0, 0), maxs),
+        plane(v3(-ONE, 0, 0), mins),
+        plane(v3(0, ONE, 0), maxs),
+        plane(v3(0, -ONE, 0), mins),
+        plane(v3(0, 0, ONE), maxs),
+        plane(v3(0, 0, -ONE), mins),
+    ]
+}
+
+/// An axis-aligned box from `mins` to `maxs`.
+pub fn block(mins: V3, maxs: V3, surface: Surface) -> Brush {
+    Brush {
+        planes: box_planes(mins, maxs),
+        mins,
+        maxs,
+        surface,
+        shape: Shape::Block,
+    }
+}
+
+/// A point in the world from a cross-section's (across, up) and a distance
+/// along the prism.
+fn place(along_z: bool, across: Fx, up: Fx, along: Fx) -> V3 {
+    if along_z {
+        v3(across, up, along)
+    } else {
+        v3(along, up, across)
+    }
+}
+
+/// A triangular prism: the cross-section's three corners, given as (across,
+/// up) in the plane square to its length, run from `from` to `to` along z
+/// (or along x). Its planes are the three sides, the two end caps and the
+/// box round it (bevels, which a convex set lies behind anyway).
+pub fn prism(corners: [(Fx, Fx); 3], along_z: bool, from: Fx, to: Fx, surface: Surface) -> Brush {
+    let mid = (
+        (corners[0].0 + corners[1].0 + corners[2].0) / 3,
+        (corners[0].1 + corners[1].1 + corners[2].1) / 3,
+    );
+    let mut planes = Vec::new();
+    for k in 0..3 {
+        let (a, b) = (corners[k], corners[(k + 1) % 3]);
+        // the edge's normal in the cross-section, turned to face away from
+        // the middle
+        let (ea, eu) = (b.0 - a.0, b.1 - a.1);
+        let len = fx::length(ea, eu);
+        let (mut na, mut nu) = (fx::div(eu, len), fx::div(-ea, len));
+        let outward = fx::mul(na, a.0 - mid.0) + fx::mul(nu, a.1 - mid.1);
+        if outward < 0 {
+            na = -na;
+            nu = -nu;
+        }
+        let n = place(along_z, na, nu, 0);
+        planes.push(plane(n, place(along_z, a.0, a.1, from)));
+    }
+    let lo = (
+        corners.iter().map(|c| c.0).min().unwrap(),
+        corners.iter().map(|c| c.1).min().unwrap(),
+    );
+    let hi = (
+        corners.iter().map(|c| c.0).max().unwrap(),
+        corners.iter().map(|c| c.1).max().unwrap(),
+    );
+    let (a, b) = (
+        place(along_z, lo.0, lo.1, from.min(to)),
+        place(along_z, hi.0, hi.1, from.max(to)),
+    );
+    let mins = v3(a.x.min(b.x), a.y.min(b.y), a.z.min(b.z));
+    let maxs = v3(a.x.max(b.x), a.y.max(b.y), a.z.max(b.z));
+    planes.extend(box_planes(mins, maxs));
+    Brush {
+        planes,
+        mins,
+        maxs,
+        surface,
+        shape: Shape::Prism {
+            corners,
+            along_z,
+            from: from.min(to),
+            to: from.max(to),
+        },
+    }
+}
+
+impl Brush {
+    /// Whether `p` lies inside the brush or on its face.
+    pub fn holds(&self, p: V3) -> bool {
+        // a corner on a face may read a few units past it after rounding
+        self.planes.iter().all(|pl| pl.n.dot(p) <= pl.d + HOLD_TOLERANCE)
+    }
+
+    /// The shape the page draws: a unit cube or wedge carried onto the brush.
+    pub fn drawn(&self) -> (Mesh, Affine) {
+        match self.shape {
+            Shape::Block => {
+                let size = self.maxs.sub(self.mins);
+                let centre = self.mins.add(size.scale(ONE / 2));
+                (Mesh::Cube, Affine::translate(centre).then(&Affine::scale(size)))
+            }
+            Shape::Prism {
+                corners,
+                along_z,
+                from,
+                to,
+            } => {
+                // the unit wedge has its floor's corners at (∓½, −½) and its
+                // ridge at (0, ½), along z from −½ to ½ (mesh.rs)
+                let p = |c: (Fx, Fx)| place(along_z, c.0, c.1, 0);
+                let (bl, br, top) = (p(corners[0]), p(corners[1]), p(corners[2]));
+                let base_mid = bl.add(br).scale(ONE / 2);
+                let along = (from + to) / 2;
+                let c2 = place(along_z, 0, 0, to - from);
+                let t = top.add(base_mid).scale(ONE / 2).add(place(along_z, 0, 0, along));
+                // the wedge's axes must stay right-handed, or its triangles
+                // wind backwards and it draws inside out (R1.15): a prism
+                // along x, or with its corners in the other order, runs its
+                // length the other way
+                let (c0, c1) = (br.sub(bl), top.sub(base_mid));
+                let c2 = if c0.dot(c1.cross(c2)) < 0 { c2.neg() } else { c2 };
+                (Mesh::Wedge, Affine { c0, c1, c2, t })
+            }
+        }
+    }
+}
+
+impl Map {
+    /// The brushes whose boxes reach into the box `lo` to `hi`, by index.
+    pub fn brushes_near(&self, lo: V3, hi: V3, out: &mut Vec<u32>) {
+        out.clear();
+        for (i, b) in self.brushes.iter().enumerate() {
+            if b.mins.x <= hi.x
+                && b.maxs.x >= lo.x
+                && b.mins.y <= hi.y
+                && b.maxs.y >= lo.y
+                && b.mins.z <= hi.z
+                && b.maxs.z >= lo.z
+            {
+                out.push(i as u32);
+            }
+        }
+    }
+
+    /// The static scene: one group for the whole map, each brush in its
+    /// surface's colour with an ink outline.
+    pub fn groups(&self, colour: impl Fn(Surface) -> Rgb, ink: Rgb) -> Vec<Group> {
+        let mut g = Group::new("map", V3::ZERO, int(200));
+        for b in &self.brushes {
+            let (mesh, at) = b.drawn();
+            g.shapes.inked(mesh, at, colour(b.surface), ink);
+        }
+        vec![g]
+    }
+}
+
+/// The room's half-width and the height of its walls.
+pub const ROOM_HALF: Fx = int(32);
+pub const WALL_HIGH: Fx = int(14);
+/// The balcony along the south wall, and its height.
+pub const BALCONY_Y: Fx = int(10);
+pub const BALCONY_FROM_Z: Fx = int(24);
+
+/// M1's practice room (PLAN.md M1): 64 m square with walls 14 m high.
+///
+/// - Along the south wall, a balcony 10 m up and 8 m deep, reached by a
+///   walkable slope up the east wall (30°).
+/// - North of the balcony, two surf ramps 7 m high and 10.5 m across (53°,
+///   too steep to stand on), running 48 m north: drop on from the balcony.
+/// - A wall-jump shaft: two walls 3 m apart and 12 m tall beside the slope.
+/// - Four blocks to hop round, and stripes on the floor every 8 m.
+pub fn practice() -> Map {
+    let w = ROOM_HALF;
+    let thick = ONE;
+    let mut b = vec![
+        // floor and walls
+        block(
+            v3(-w - thick, -thick, -w - thick),
+            v3(w + thick, 0, w + thick),
+            Surface::Floor,
+        ),
+        block(
+            v3(-w - thick, 0, -w - thick),
+            v3(-w, WALL_HIGH, w + thick),
+            Surface::Wall,
+        ),
+        block(
+            v3(w, 0, -w - thick),
+            v3(w + thick, WALL_HIGH, w + thick),
+            Surface::Wall,
+        ),
+        block(v3(-w, 0, -w - thick), v3(w, WALL_HIGH, -w), Surface::Wall),
+        block(v3(-w, 0, w), v3(w, WALL_HIGH, w + thick), Surface::Wall),
+        // the balcony
+        block(
+            v3(-w, BALCONY_Y - thick, BALCONY_FROM_Z),
+            v3(w, BALCONY_Y, w),
+            Surface::Floor,
+        ),
+    ];
+    // the slope up to the balcony: along z, rising south, 30° (rise 10 over
+    // 17.32), on the east side
+    // its foot sinks 5 cm into the floor along the same line, so no face of
+    // it lies in the floor's plane
+    let run = ONE * 1732 / 100;
+    let (sink, sink_run) = (ONE / 20, ONE * 866 / 10_000);
+    b.push(prism(
+        [
+            (BALCONY_FROM_Z - run - sink_run, -sink),
+            (BALCONY_FROM_Z, -sink),
+            (BALCONY_FROM_Z, BALCONY_Y),
+        ],
+        false,
+        int(24),
+        int(32),
+        Surface::Slope,
+    ));
+    // two surf ramps north of the balcony, ridges at x = −18 and x = 0
+    for ridge in [int(-18), 0] {
+        // 5 cm wider at a foot sunk 5 cm into the floor (7 up over 5.25)
+        let half = ONE * 525 / 100 + ONE * 375 / 10_000;
+        b.push(prism(
+            [
+                (ridge - half, -ONE / 20),
+                (ridge + half, -ONE / 20),
+                (ridge, int(7)),
+            ],
+            true,
+            int(-24),
+            BALCONY_FROM_Z,
+            Surface::Ramp,
+        ));
+    }
+    // the wall-jump shaft, west of the slope
+    b.push(block(
+        v3(int(14), 0, int(4)),
+        v3(int(15), int(12), int(12)),
+        Surface::Wall,
+    ));
+    b.push(block(
+        v3(int(18), 0, int(4)),
+        v3(int(19), int(12), int(12)),
+        Surface::Wall,
+    ));
+    // blocks to hop round
+    for (x, z) in [(10, -12), (20, -20), (-8, -28), (24, -4)] {
+        b.push(block(
+            v3(int(x) - ONE, 0, int(z) - ONE),
+            v3(int(x) + ONE, int(2), int(z) + ONE),
+            Surface::Block,
+        ));
+    }
+    // floor stripes every 8 m down the hop lane, 5 mm proud of the floor
+    for k in -3..=-1 {
+        let z = int(k * 8);
+        b.push(block(
+            v3(int(7), 0, z - ONE / 10),
+            v3(int(13), ONE / 200, z + ONE / 10),
+            Surface::Trim,
+        ));
+    }
+    Map {
+        brushes: b,
+        spawns: vec![(v3(int(8), 0, int(16)), 0)],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_box_holds_its_middle_and_not_a_point_outside() {
+        let b = block(v3(0, 0, 0), v3(int(2), int(2), int(2)), Surface::Block);
+        assert!(b.holds(v3(ONE, ONE, ONE)));
+        assert!(!b.holds(v3(int(3), ONE, ONE)));
+    }
+
+    #[test]
+    fn a_prism_holds_its_corners_and_its_middle_and_nothing_past_its_sides() {
+        let r = prism(
+            [(int(-5), 0), (int(5), 0), (0, int(7))],
+            true,
+            0,
+            int(10),
+            Surface::Ramp,
+        );
+        for (x, y) in [(int(-5), 0), (int(5), 0), (0, int(7)), (0, ONE)] {
+            assert!(r.holds(v3(x, y, int(5))), "{x} {y}");
+        }
+        // just outside the left slope, and past the end cap
+        assert!(!r.holds(v3(int(-3), int(4), int(5))));
+        assert!(!r.holds(v3(0, ONE, int(11))));
+        // its box: 10 across, 7 up, 10 along
+        assert_eq!((r.mins, r.maxs), (v3(int(-5), 0, 0), v3(int(5), int(7), int(10))));
+    }
+
+    #[test]
+    fn the_practice_ramps_are_too_steep_to_stand_on_and_the_slope_is_not() {
+        let m = practice();
+        let steepest = |s: Surface| {
+            m.brushes
+                .iter()
+                .filter(|b| b.surface == s)
+                .flat_map(|b| b.planes.iter().map(|p| p.n.y))
+                .filter(|&y| y > 0 && y < ONE)
+                .collect::<Vec<_>>()
+        };
+        // ramps: 7 up over 5.25 across, a normal's y of cos 53.1° = 0.6
+        for y in steepest(Surface::Ramp) {
+            assert!(y < ONE * 7 / 10, "a ramp face stands at {y}");
+        }
+        // the slope: 30°, a normal's y of cos 30° = 0.866
+        let slope = steepest(Surface::Slope);
+        assert!(!slope.is_empty());
+        for y in slope {
+            assert!(
+                (y - ONE * 866 / 1000).abs() < ONE / 100,
+                "the slope's face is {y}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_prism_is_drawn_on_its_own_corners() {
+        let r = prism(
+            [(int(-5), 0), (int(5), 0), (int(1), int(7))],
+            true,
+            0,
+            int(10),
+            Surface::Ramp,
+        );
+        let (mesh, a) = r.drawn();
+        assert_eq!(mesh, Mesh::Wedge);
+        let h = ONE / 2;
+        // the unit wedge's floor corners and ridge, at its middle z
+        let near = |p: V3, q: V3| (p.x - q.x).abs() <= 4 && (p.y - q.y).abs() <= 4 && (p.z - q.z).abs() <= 4;
+        assert!(
+            near(a.apply(v3(-h, -h, 0)), v3(int(-5), 0, int(5))),
+            "{:?}",
+            a.apply(v3(-h, -h, 0))
+        );
+        assert!(near(a.apply(v3(h, -h, 0)), v3(int(5), 0, int(5))));
+        assert!(near(a.apply(v3(0, h, h)), v3(int(1), int(7), int(10))));
+    }
+
+    #[test]
+    fn every_drawn_brush_keeps_its_handedness_so_none_draws_inside_out() {
+        // c0 · (c1 × c2) > 0 for each shape's transform; the slope (a prism
+        // along x) and a prism with its corners reversed included
+        let mut m = practice();
+        m.brushes.push(prism(
+            [(int(5), 0), (int(-5), 0), (0, int(7))],
+            true,
+            0,
+            int(10),
+            Surface::Ramp,
+        ));
+        for (k, b) in m.brushes.iter().enumerate() {
+            let (_, a) = b.drawn();
+            let det = (a.c0.x as i64 * (a.c1.y as i64 * a.c2.z as i64 - a.c1.z as i64 * a.c2.y as i64)
+                - a.c0.y as i64 * (a.c1.x as i64 * a.c2.z as i64 - a.c1.z as i64 * a.c2.x as i64)
+                + a.c0.z as i64 * (a.c1.x as i64 * a.c2.y as i64 - a.c1.y as i64 * a.c2.x as i64))
+                .signum();
+            assert_eq!(det, 1, "brush {k} ({:?}) draws inside out", b.surface);
+        }
+    }
+
+    #[test]
+    fn the_brushes_near_a_box_are_those_whose_boxes_touch_it() {
+        let m = practice();
+        let mut out = Vec::new();
+        // high in the middle of the room, nothing but nothing
+        m.brushes_near(v3(-ONE, int(20), -ONE), v3(ONE, int(21), ONE), &mut out);
+        assert!(out.is_empty(), "{out:?}");
+        // on the floor at the spawn: the floor
+        let (s, _) = m.spawns[0];
+        m.brushes_near(s.sub(v3(ONE, ONE, ONE)), s.add(v3(ONE, ONE, ONE)), &mut out);
+        assert!(out.contains(&0));
+    }
+}

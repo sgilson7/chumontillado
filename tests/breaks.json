@@ -1,0 +1,212 @@
+[
+  {
+    "name": "an empty string is refused by name",
+    "file": "crates/core/src/page.rs",
+    "find": "if text.trim().is_empty() {",
+    "replace": "if false {",
+    "test": "an_empty_title_is_rejected_by_name"
+  },
+  {
+    "name": "an unknown action is refused",
+    "file": "crates/core/src/game.rs",
+    "find": "            _ => return Err(format!(\"Unknown action \\\"{name}\\\".\")),",
+    "replace": "            _ => {}",
+    "test": "an_unknown_action_is_refused_by_name"
+  },
+  {
+    "name": "M1 run: ground acceleration stops at the run speed",
+    "file": "crates/core/src/movement.rs",
+    "find": "        let add = speed - current;\n        if add <= 0 {\n            return;\n        }\n        let a = fx::mul(fx::mul(fx::mul(accel,",
+    "replace": "        let add = speed + ONE - current;\n        if add <= 0 {\n            return;\n        }\n        let a = fx::mul(fx::mul(fx::mul(accel,",
+    "test": "running_forward_reaches_eight_metres_a_second_and_no_more"
+  },
+  {
+    "name": "M1 air: the cap applies to the comparison",
+    "file": "crates/core/src/movement.rs",
+    "find": "        let capped = speed.min(self.t.air_cap);",
+    "replace": "        let capped = speed;",
+    "test": "holding_forward_in_the_air_past_the_cap_adds_nothing"
+  },
+  {
+    "name": "M1 air: the acceleration uses the uncapped wish speed",
+    "file": "crates/core/src/movement.rs",
+    "find": "            fx::mul(fx::mul(self.t.air_accelerate, speed), dt),",
+    "replace": "            fx::mul(fx::mul(self.t.air_accelerate, capped), dt) / 4,",
+    "test": "air_strafing_with_the_wish_square_to_the_velocity_adds_the_cap_at_right_angles"
+  },
+  {
+    "name": "M1 hop: a jump on landing skips that tick's friction",
+    "file": "crates/core/src/movement.rs",
+    "find": "        if b.on_ground {\n            b.velocity.y = 0;\n            self.friction(b);\n        }\n        self.check_velocity(b);\n\n        if b.on_ground {",
+    "replace": "        b.velocity.y = if b.on_ground { 0 } else { b.velocity.y };\n        self.friction(b);\n        self.check_velocity(b);\n\n        if b.on_ground {",
+    "test": "hopping_and_strafing_builds_speed_past_the_run_and_landing_late_does_not"
+  },
+  {
+    "name": "M1 hop: holding jump hops on every landing",
+    "file": "crates/core/src/movement.rs",
+    "find": "            if b.on_ground {\n                self.jump(b, &mut ev);",
+    "replace": "            if b.on_ground && !b.old_jump {\n                self.jump(b, &mut ev);",
+    "test": "holding_jump_hops_again_on_every_landing"
+  },
+  {
+    "name": "M1 surf: a steep face is not ground",
+    "file": "crates/core/src/movement.rs",
+    "find": "pub const GROUND_NORMAL_Y: Fx = ONE * 7 / 10;",
+    "replace": "pub const GROUND_NORMAL_Y: Fx = ONE / 2;",
+    "test": "a_surf_ramp_gives_no_footing_and_speeds_a_surfer_along_it"
+  },
+  {
+    "name": "M1 surf: a face removes only what goes into it",
+    "file": "crates/core/src/movement.rs",
+    "find": "    let backoff = v.dot(n);",
+    "replace": "    let backoff = v.dot(n) * 2;",
+    "test": "a_surf_ramp_gives_no_footing_and_speeds_a_surfer_along_it"
+  },
+  {
+    "name": "M1 slide: the boost",
+    "file": "crates/core/src/movement.rs",
+    "find": "    slide_boost_pct: 140,",
+    "replace": "    slide_boost_pct: 100,",
+    "test": "crouching_at_a_run_slides_at_eleven_metres_a_second_and_slows_slowly"
+  },
+  {
+    "name": "M1 slide: low friction while sliding",
+    "file": "crates/core/src/movement.rs",
+    "find": "        let friction = if b.sliding {\n            self.t.slide_friction\n        } else {",
+    "replace": "        let friction = if false {\n            self.t.slide_friction\n        } else {",
+    "test": "crouching_at_a_run_slides_at_eleven_metres_a_second_and_slows_slowly"
+  },
+  {
+    "name": "M1 slide: the boost rests a second",
+    "file": "crates/core/src/movement.rs",
+    "find": "            if b.since_slide_began >= self.t.slide_rest {",
+    "replace": "            if b.since_slide_began >= 0 {",
+    "test": "a_second_slide_within_a_second_gives_no_boost"
+  },
+  {
+    "name": "M1 slide jump",
+    "file": "crates/core/src/movement.rs",
+    "find": "        if b.sliding || b.since_slide <= self.t.slide_jump_ticks {",
+    "replace": "        if false {",
+    "test": "a_jump_out_of_a_slide_adds_a_metre_and_a_half_a_second"
+  },
+  {
+    "name": "M1 wall jump: three a flight",
+    "file": "crates/core/src/movement.rs",
+    "find": "    wall_jumps: 3,",
+    "replace": "    wall_jumps: 4,",
+    "test": "three_wall_jumps_a_flight_each_pushing_up_and_out_and_a_fourth_does_nothing"
+  },
+  {
+    "name": "M1 wall jump: the push out",
+    "file": "crates/core/src/movement.rs",
+    "find": "        b.velocity = b.velocity.add(flat.scale(self.t.wall_out));",
+    "replace": "        b.velocity = b.velocity.add(flat.scale(self.t.wall_out / 2));",
+    "test": "three_wall_jumps_a_flight_each_pushing_up_and_out_and_a_fourth_does_nothing"
+  },
+  {
+    "name": "M1 wall jump: a fresh press",
+    "file": "crates/core/src/movement.rs",
+    "find": "            } else if fresh_jump && b.wall_jumps < self.t.wall_jumps {",
+    "replace": "            } else if b.wall_jumps < self.t.wall_jumps {",
+    "test": "holding_jump_against_a_wall_does_not_spend_the_wall_jumps"
+  },
+  {
+    "name": "M1 slam: down at thirty",
+    "file": "crates/core/src/movement.rs",
+    "find": "    slam_speed: int(30),",
+    "replace": "    slam_speed: int(20),",
+    "test": "a_slam_drops_at_thirty_and_a_jump_off_its_landing_goes_higher_than_a_jump"
+  },
+  {
+    "name": "M1 slam: the bounce",
+    "file": "crates/core/src/movement.rs",
+    "find": "            if v > up {\n                up = v;",
+    "replace": "            if v > up && false {\n                up = v;",
+    "test": "a_slam_drops_at_thirty_and_a_jump_off_its_landing_goes_higher_than_a_jump"
+  },
+  {
+    "name": "M1 step: a slope is walked up",
+    "file": "crates/core/src/movement.rs",
+    "find": "        if t.normal.y < GROUND_NORMAL_Y {\n            b.origin = down_pos;",
+    "replace": "        if true {\n            b.origin = down_pos;",
+    "test": "the_slope_is_walked_up_to_the_balcony"
+  },
+  {
+    "name": "M1 reset",
+    "file": "crates/core/src/world.rs",
+    "find": "            if input.key(RESET) {",
+    "replace": "            if input.key(RESET) && false {",
+    "test": "r_puts_the_player_back_at_the_spawn"
+  },
+  {
+    "name": "M1 trace: the box stops short of a wall by its half-width",
+    "file": "crates/core/src/trace.rs",
+    "find": "            if p.n.x < 0 { maxs.x } else { mins.x },",
+    "replace": "            if p.n.x < 0 { maxs.x / 2 } else { mins.x / 2 },",
+    "test": "running_at_a_wall_stops_short_of_it_and_reports_its_face"
+  },
+  {
+    "name": "M1 map: a ramp is steeper than ground",
+    "file": "crates/core/src/map.rs",
+    "find": "                (ridge, int(7)),",
+    "replace": "                (ridge, int(4)),",
+    "test": "the_practice_ramps_are_too_steep_to_stand_on_and_the_slope_is_not"
+  },
+  {
+    "name": "M1 view: the pending mouse turns the frame's view",
+    "file": "crates/core/src/world.rs",
+    "find": "            p.aim.turned(pending),",
+    "replace": "            p.aim,",
+    "test": "the_mouse_turns_the_view_on_the_frame_it_moves_before_any_tick_takes_it"
+  },
+  {
+    "name": "M1 view: the pitch stops short of straight up",
+    "file": "crates/core/src/camera.rs",
+    "find": "pub const PITCH_MAX: i32 = deg(89);",
+    "replace": "pub const PITCH_MAX: i32 = deg(90);",
+    "test": "the_pitch_stops_short_of_straight_up_and_down"
+  },
+  {
+    "name": "M1 pause: the world holds still",
+    "file": "crates/core/src/game.rs",
+    "find": "            self.pending.clear();\n            self.clock.rest();\n        } else {",
+    "replace": "            self.pending.clear();\n            self.clock.rest();\n            self.world.step(&[Input::from_page(bits, Mouse::default())]);\n        } else {",
+    "test": "escape_pauses_the_room_and_the_world_holds_still_while_paused"
+  },
+  {
+    "name": "M1 settings: the field of view's range",
+    "file": "crates/core/src/game.rs",
+    "find": "                self.fov = (self.fov + step * 5).clamp(camera::FOV_MIN, camera::FOV_MAX);",
+    "replace": "                self.fov = self.fov + step * 5;",
+    "test": "the_field_of_view_steps_by_five_inside_ninety_to_a_hundred_and_twenty"
+  },
+  {
+    "name": "M1 HUD: wall jumps left",
+    "file": "crates/core/src/api.rs",
+    "find": "    let left = crate::movement::TUNING.wall_jumps - b.wall_jumps;",
+    "replace": "    let left = crate::movement::TUNING.wall_jumps;",
+    "test": "the_hud_reads_the_speed_and_the_wall_jumps_left_only_in_play"
+  },
+  {
+    "name": "M1 pause lets go of the pointer",
+    "file": "crates/core/src/game.rs",
+    "find": "        self.screen == Screen::Play\n    }",
+    "replace": "        true\n    }",
+    "test": "the_pause_lists_every_control_and_lets_go_of_the_pointer"
+  },
+  {
+    "name": "M1 place.at: centimetres",
+    "file": "crates/core/src/game.rs",
+    "find": "crate::movement::Body::at(v3(x * fx::ONE / 100, y * fx::ONE / 100, z * fx::ONE / 100));",
+    "replace": "crate::movement::Body::at(v3(x * fx::ONE / 10, y * fx::ONE / 100, z * fx::ONE / 100));",
+    "test": "place_at_stands_the_player_where_it_is_told_in_centimetres"
+  },
+  {
+    "name": "R1.15 a wedge keeps its handedness",
+    "file": "crates/core/src/map.rs",
+    "find": "                let c2 = if c0.dot(c1.cross(c2)) < 0 { c2.neg() } else { c2 };",
+    "replace": "                let c2 = c2;",
+    "test": "every_drawn_brush_keeps_its_handedness_so_none_draws_inside_out"
+  }
+]

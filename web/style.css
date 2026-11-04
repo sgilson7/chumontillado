@@ -1,0 +1,77 @@
+/* The page's frame round the view: the loading state, the panels the core
+   describes (title, menu, pause, settings), the lines over play, and
+   messages. The journal's roster palette: primed canvas, ivory black,
+   vermilion and ochre, after the tenebrists. */
+:root {
+  --ink: #efe3c8;
+  --ink-soft: #bfae8f;
+  --umber: #2a1e15;
+  --umber-edge: #4a3527;
+  --glass: rgba(23, 17, 12, 0.9);
+  --accent: #b3361f;
+  --accent-deep: #6e1d18;
+  --ochre: #c79a3a;
+  --shadow: 0 18px 50px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+* { box-sizing: border-box; }
+/* A display rule elsewhere must not show what the page hid. */
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; overflow: hidden; }
+body {
+  background: #17110c;
+  color: var(--ink);
+  font: 16px/1.45 Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+#view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; background: #17110c; }
+body[data-ready="false"] #view { visibility: hidden; }
+#loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 18px; letter-spacing: 0.08em; color: var(--ink-soft); }
+
+/* the crosshair: a small cross, only in play */
+#crosshair { position: fixed; left: 50%; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px; pointer-events: none; display: none; filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 1px #000); }
+#crosshair::before, #crosshair::after { content: ""; position: absolute; background: var(--ink); }
+#crosshair::before { left: 0; right: 0; top: 8px; height: 2px; }
+#crosshair::after { top: 0; bottom: 0; left: 8px; width: 2px; }
+body[data-screen="play"] #crosshair { display: block; }
+
+#overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.15) 0%, rgba(0, 0, 0, 0.6) 100%); }
+body[data-screen="title"] #overlay, body[data-screen="menu"] #overlay { align-items: flex-end; justify-content: flex-start; padding: 0 0 8vh 6vw; background: linear-gradient(90deg, rgba(10, 6, 3, 0.75) 0%, rgba(0, 0, 0, 0) 62%); }
+.panel { min-width: 320px; max-width: 460px; max-height: calc(100vh - 32px); overflow: auto; padding: 28px 32px 24px; border-radius: 6px; background: var(--glass); border: 1px solid var(--umber-edge); box-shadow: var(--shadow); }
+#title, #menu { background: none; border: none; box-shadow: none; max-width: 640px; }
+.panel h1 { margin: 0 0 14px; font-size: 30px; line-height: 1.1; font-weight: 700; letter-spacing: 0.05em; }
+#title h1, #menu h1 { font-size: 64px; letter-spacing: 0.04em; font-style: italic; text-shadow: 0 3px 18px rgba(0, 0, 0, 0.7); }
+.panel h2 { margin: 20px 0 8px; font-size: 12px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-soft); }
+.panel p { margin: 0 0 16px; color: var(--ink-soft); font-size: 17px; }
+.panel button { display: block; width: 100%; padding: 13px 22px; border: 1px solid var(--accent-deep); border-radius: 4px; background: var(--accent); color: #f6efe2; font: inherit; font-size: 18px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; box-shadow: 0 3px 0 var(--accent-deep); }
+#title button, #menu button { max-width: 320px; }
+.panel button + button { margin-top: 10px; }
+.panel button:hover:not(:disabled) { filter: brightness(1.1); }
+.panel button:focus-visible { outline: 2px solid var(--ochre); outline-offset: 3px; }
+.setting { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--umber-edge); }
+.setting .label { flex: 1; }
+.setting output { min-width: 64px; text-align: right; font-weight: 700; color: var(--ochre); }
+.setting button { width: auto; min-width: 44px; margin: 0; padding: 6px 12px; font-size: 14px; letter-spacing: 0.04em; box-shadow: none; }
+.setting + button { margin-top: 20px; }
+.setting button + button { margin-top: 0; }
+table.controls { width: 100%; border-collapse: collapse; }
+table.controls td { padding: 4px 0; vertical-align: top; font-size: 14px; }
+table.controls td:first-child { width: 34%; padding-right: 10px; }
+kbd { display: inline-block; padding: 2px 8px; border-radius: 3px; background: var(--umber); border: 1px solid var(--umber-edge); font: inherit; font-size: 13px; font-weight: 700; }
+#message { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); margin: 0; max-width: 80vw; color: #f4b39f; }
+
+/* the lines over play: speed under the crosshair's lower left, as the
+   journal's HUD mockup places it */
+#hud { position: fixed; inset: 0; pointer-events: none; }
+.hud-item { position: fixed; margin: 0; padding: 6px 14px; border-radius: 5px; background: rgba(0, 0, 0, 0.5); color: var(--ink); opacity: 0; transition: opacity 0.4s ease; }
+.hud-item.shown { opacity: 1; }
+body:not([data-screen="play"]) #hud { display: none; }
+#hud-speed { left: 50%; bottom: 4vh; transform: translateX(-50%); font: 700 28px/1.2 ui-monospace, Menlo, Consolas, monospace; min-width: 180px; text-align: center; transition: none; }
+#hud-walls { left: 24px; bottom: 4vh; font-size: 16px; letter-spacing: 0.04em; transition: none; }
+#hud-doing { left: 24px; bottom: calc(4vh + 44px); font-size: 14px; color: var(--ink-soft); transition: none; }
+#hud-top { right: 24px; bottom: 4vh; font-size: 16px; transition: none; }
+#hud-hint { left: 50%; top: 18px; transform: translateX(-50%); font-size: 15px; transition: opacity 1.2s ease; }
+@media (max-height: 640px) {
+  #title h1, #menu h1 { font-size: 44px; }
+  table.controls td { padding: 1px 0; }
+}
