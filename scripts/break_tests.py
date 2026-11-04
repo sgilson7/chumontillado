@@ -15,9 +15,10 @@ tests/breaks.json is a list of objects:
      "test": "an_empty_title_is_rejected_by_name"}
 
 The file is restored after each break, whatever happens. The script exits
-non-zero when a break leaves its test passing, when its text is no longer in
-its file (the break has rotted), or when the list is empty (a proof with
-nothing in it proves nothing). It is slow on a large list, so it runs outside
+non-zero when a break leaves its test passing, when the broken code does not
+compile (R6.5), when its text is no longer in its file (the break has
+rotted), or when the list is empty (a proof with nothing in it proves
+nothing). It is slow on a large list, so it runs outside
 the everyday check; run it after adding tests and before a handoff.
 """
 import json
@@ -53,6 +54,11 @@ def main(words):
             path.write_text(original)
         if run.returncode == 0:
             print(f"  MISSED  {b['name']}: {b['test']} still passes with the behaviour broken")
+            bad.append(b["name"])
+        elif "could not compile" in run.stderr:
+            # a break that does not compile proves nothing about the test
+            # (R6.5): it is a broken row, not a caught one
+            print(f"  NOBUILD {b['name']}: the broken code does not compile")
             bad.append(b["name"])
         else:
             print(f"  caught  {b['name']}")

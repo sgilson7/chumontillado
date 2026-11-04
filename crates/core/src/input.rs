@@ -37,7 +37,17 @@ pub const SLOT_3: u32 = 1 << 10;
 pub const SLOT_4: u32 = 1 << 11;
 pub const SLOT_5: u32 = 1 << 12;
 pub const LAST: u32 = 1 << 13;
-pub const SLOTS: [u32; 5] = [SLOT_1, SLOT_2, SLOT_3, SLOT_4, SLOT_5];
+/// M3: 6 to 0 take the projectile guns; E takes a melee weapon, and again
+/// the next of the three.
+pub const SLOT_6: u32 = 1 << 14;
+pub const SLOT_7: u32 = 1 << 15;
+pub const SLOT_8: u32 = 1 << 16;
+pub const SLOT_9: u32 = 1 << 17;
+pub const SLOT_10: u32 = 1 << 18;
+pub const MELEE: u32 = 1 << 19;
+pub const SLOTS: [u32; 10] = [
+    SLOT_1, SLOT_2, SLOT_3, SLOT_4, SLOT_5, SLOT_6, SLOT_7, SLOT_8, SLOT_9, SLOT_10,
+];
 
 /// Buttons sit above the keys in the page's bit set.
 pub const BUTTON_SHIFT: u32 = 24;
@@ -46,7 +56,8 @@ const KEY_MASK: u32 = (1 << BUTTON_SHIFT) - 1;
 /// Mouse buttons, one bit each, as `Input::buttons` holds them.
 /// Left: fire (M2).
 pub const FIRE: u32 = 1 << 0;
-/// Right: the weapon's second use (M3: the katana's parry and lunge).
+/// Right: the weapon's second use (M3: the katana's lunge, the guadaña's
+/// hook).
 pub const ALT: u32 = 1 << 1;
 
 /// Every action's name and its bit in the page's bit set, in the order
@@ -66,6 +77,12 @@ pub const ACTIONS: &[(&str, u32)] = &[
     ("slot_4", SLOT_4),
     ("slot_5", SLOT_5),
     ("last", LAST),
+    ("slot_6", SLOT_6),
+    ("slot_7", SLOT_7),
+    ("slot_8", SLOT_8),
+    ("slot_9", SLOT_9),
+    ("slot_10", SLOT_10),
+    ("melee", MELEE),
     ("fire", FIRE << BUTTON_SHIFT),
     ("alt", ALT << BUTTON_SHIFT),
 ];

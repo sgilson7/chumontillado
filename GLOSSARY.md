@@ -22,7 +22,7 @@ Not: bunny hop, bhop
 
 ### Practice room
 
-The room for learning to move: a slope, two surf ramps, a shaft to climb and open floor. It has no weapons and no opponents.
+The room for learning to move and shoot: a slope, two surf ramps, a shaft to climb, open floor, straw targets and a bot.
 
 Not: training ground, tutorial, sandbox
 
@@ -68,11 +68,35 @@ A seat played by the game. It moves and shoots only through the same keys and mo
 
 Not: AI, NPC, computer player
 
+### Campana
+
+A painted bell fired in a lob. It bursts where it lands, and its toll pushes everyone near it away.
+
+Not: bell gun, mortar
+
+### Collage
+
+A painted gun of scraps stuck together. Its shots bounce once off a wall, so they go round corners.
+
+Not: ricochet gun
+
+### Drum launcher
+
+A gun drawn true that throws bouncing grenades. Each bursts when it meets a body or its fuse runs out.
+
+Not: grenade launcher, nade launcher
+
 ### Duel the bot
 
 The practice room with its bot shooting back. Each of you stands again at your spawn a moment after going down.
 
 Not: deathmatch, versus
+
+### Guadaña
+
+The painted scythe: a long, slow swing. Its second button throws a hook at a wall and pulls you there while held.
+
+Not: scythe, reaper
 
 ### Headshot
 
@@ -86,11 +110,23 @@ A gun whose shot arrives the moment it is fired, along a straight line from the 
 
 Not: instant hit, raycast
 
+### Katana
+
+A sword drawn true. Each swing carries you on a little, its second button lunges, and the first ticks of a swing parry.
+
+Not: sword, blade
+
 ### Lever rifle
 
 A rifle drawn true: slow and heavy, a headshot kills.
 
 Not: sniper, marksman rifle
+
+### Lunge
+
+The katana's second use: it flings you along your view and hits whatever its arc meets on the way.
+
+Not: dash
 
 ### Machine pistol
 
@@ -98,11 +134,29 @@ A small gun drawn true that fires while the button is held.
 
 Not: SMG, uzi
 
+### Navaja
+
+A folding knife drawn true, quick and short. From behind it fells anyone; held, it makes you a little faster.
+
+Not: knife, switchblade, backstab knife
+
+### Parry
+
+A katana swing turning a projectile back the way you face, as yours. It works in the first ticks of a swing.
+
+Not: deflect, reflect
+
 ### Pincel
 
 The painted rifle. It charges while the button is held, fires when let go, passes through bodies, and leaves its stroke in the air.
 
 Not: railgun, brush gun
+
+### Projectile
+
+A shot that flies, falls and bounces, so it arrives a moment after it is fired.
+
+Not: bullet, missile
 
 ### Pump shotgun
 
@@ -122,3 +176,14 @@ A figure on a post in the practice room. Shot down, it stands again a few second
 
 Not: dummy, mannequin
 
+### Toro
+
+A painted gun with horns that fires slow rockets. Fired at your feet, its burst throws you up.
+
+Not: rocket launcher, bazooka
+
+### Trabuco
+
+A painted blunderbuss that fires seven nails. A nail that meets a body with a wall close behind pins it there.
+
+Not: nail gun, blunderbuss

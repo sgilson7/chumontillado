@@ -1,22 +1,29 @@
-//! What a player holds and does with it (M2): the gun in hand and the last
-//! one, each gun's rounds, the time to the next shot, a reload, the Pincel's
-//! charge, and the raise after a switch. One record a tick in, at most one
-//! shot out; `world.rs` casts it.
+//! What a player holds and does with it (M2, M3): the weapon in hand and the
+//! last one, each gun's rounds, the time to the next shot or swing, a
+//! reload, the Pincel's charge, the raise after a switch, and the second
+//! button's use. One record a tick in, at most one shot or swing out;
+//! `world.rs` casts, launches or swings it.
 
-use crate::input::{Input, FIRE, LAST, RELOAD, SLOTS};
-use crate::weapons::{Gun, GUNS, GUN_COUNT};
+use crate::input::{Input, ALT, FIRE, LAST, MELEE, RELOAD, SLOTS};
+use crate::weapons::{Alt, Weapon, COUNT, LUNGE_INTERVAL, MELEE as MELEE_WEAPONS, WEAPONS};
 
-/// Ticks to raise a gun after taking it (no shot meanwhile).
+/// Ticks to raise a weapon after taking it (no shot meanwhile).
 pub const RAISE: i32 = 12;
 /// Ticks the gun kicks back in the hands after a shot (drawn only).
 pub const RECOIL: i32 = 8;
+/// Ticks between two hooks, so a held line is let go before the next.
+pub const HOOK_AGAIN: i32 = 20;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Arms {
-    pub gun: Gun,
-    pub last: Gun,
-    pub rounds: [i32; GUN_COUNT],
+    pub weapon: Weapon,
+    pub last: Weapon,
+    /// the melee weapon the melee key takes first
+    pub melee: Weapon,
+    pub rounds: [i32; COUNT],
     pub cooldown: i32,
+    /// ticks until the second button can be used again
+    pub alt_cooldown: i32,
     /// ticks left in a reload; 0 when not reloading
     pub reloading: i32,
     /// the Pincel's charge, ticks held
@@ -24,77 +31,140 @@ pub struct Arms {
     pub raise: i32,
     pub recoil: i32,
     old_fire: bool,
+    old_alt: bool,
     old_keys: u32,
 }
 
-/// A shot leaving a gun: which, and for the Pincel how charged.
+/// A shot or swing leaving a weapon: which, for the Pincel how charged, and
+/// whether it is the second button's use (a lunge or a hook).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Shot {
-    pub gun: Gun,
+    pub weapon: Weapon,
     pub charged: i32,
+    pub alt: bool,
 }
 
 impl Default for Arms {
     fn default() -> Arms {
         Arms {
-            gun: Gun::Pistol,
-            last: Gun::Shotgun,
-            rounds: GUNS.map(|g| g.magazine),
+            weapon: Weapon::Pistol,
+            last: Weapon::Shotgun,
+            melee: Weapon::Navaja,
+            rounds: WEAPONS.map(|g| g.magazine),
             cooldown: 0,
+            alt_cooldown: 0,
             reloading: 0,
             charge: 0,
             raise: 0,
             recoil: 0,
             old_fire: false,
+            old_alt: false,
             old_keys: 0,
         }
     }
 }
 
 impl Arms {
-    fn take(&mut self, g: Gun) {
-        if g != self.gun {
-            self.last = self.gun;
-            self.gun = g;
+    fn take(&mut self, g: Weapon) {
+        if g != self.weapon {
+            self.last = self.weapon;
+            self.weapon = g;
             self.raise = RAISE;
             self.reloading = 0;
             self.charge = 0;
         }
+        if g.swing().is_some() {
+            self.melee = g;
+        }
     }
 
-    /// One tick of the record: switches, reloads and shots.
+    /// The melee key: the last melee weapon, or the next of the three when
+    /// one is already in hand.
+    fn take_melee(&mut self) {
+        let next = if self.weapon.swing().is_some() {
+            let k = MELEE_WEAPONS.iter().position(|&m| m == self.weapon).unwrap_or(0);
+            MELEE_WEAPONS[(k + 1) % MELEE_WEAPONS.len()]
+        } else {
+            self.melee
+        };
+        self.take(next);
+    }
+
+    /// One tick of the record: switches, reloads, shots and swings.
     pub fn tick(&mut self, input: &Input) -> Option<Shot> {
         let old = self.old_keys;
         let fresh = |bit: u32| input.keys & bit != 0 && old & bit == 0;
         for (k, bit) in SLOTS.iter().enumerate() {
             if fresh(*bit) {
-                self.take(Gun::from_index(k));
+                self.take(Weapon::from_index(k));
             }
+        }
+        if fresh(MELEE) {
+            self.take_melee();
         }
         if fresh(LAST) {
             self.take(self.last);
         }
         if input.wheel != 0 {
-            let step = if input.wheel > 0 { 1 } else { GUN_COUNT - 1 };
-            self.take(Gun::from_index(self.gun as usize + step));
+            let step = if input.wheel > 0 { 1 } else { COUNT - 1 };
+            self.take(Weapon::from_index(self.weapon as usize + step));
         }
         self.old_keys = input.keys;
         self.cooldown = (self.cooldown - 1).max(0);
+        self.alt_cooldown = (self.alt_cooldown - 1).max(0);
         self.raise = (self.raise - 1).max(0);
         self.recoil = (self.recoil - 1).max(0);
-        let g = self.gun.stats();
+        let g = self.weapon.stats();
         let held = input.button(FIRE);
         let was = self.old_fire;
         self.old_fire = held;
+        let alt = input.button(ALT);
+        let alt_fresh = alt && !self.old_alt;
+        self.old_alt = alt;
+
+        if let Some(sw) = self.weapon.swing() {
+            if self.raise > 0 {
+                return None;
+            }
+            // the second button first: a lunge waits for the swing to end
+            let use_alt = match sw.alt {
+                Alt::Lunge => alt_fresh && self.alt_cooldown == 0 && self.cooldown == 0,
+                Alt::Hook => alt_fresh && self.alt_cooldown == 0,
+                Alt::None => false,
+            };
+            if use_alt {
+                self.alt_cooldown = match sw.alt {
+                    Alt::Lunge => LUNGE_INTERVAL,
+                    _ => HOOK_AGAIN,
+                };
+                if sw.alt == Alt::Lunge {
+                    self.cooldown = g.interval;
+                }
+                return Some(Shot {
+                    weapon: self.weapon,
+                    charged: 0,
+                    alt: true,
+                });
+            }
+            if held && self.cooldown == 0 {
+                self.cooldown = g.interval;
+                return Some(Shot {
+                    weapon: self.weapon,
+                    charged: 0,
+                    alt: false,
+                });
+            }
+            return None;
+        }
 
         if self.reloading > 0 {
             self.reloading -= 1;
             if self.reloading == 0 {
-                self.rounds[self.gun as usize] = g.magazine;
+                self.rounds[self.weapon as usize] = g.magazine;
             }
             return None;
         }
-        let rounds = self.rounds[self.gun as usize];
+        let rounds = self.rounds[self.weapon as usize];
         if (fresh(RELOAD) && rounds < g.magazine) || (rounds == 0 && held) {
             self.reloading = g.reload;
             self.charge = 0;
@@ -121,12 +191,13 @@ impl Arms {
         }
         let charged = self.charge;
         self.charge = 0;
-        self.rounds[self.gun as usize] -= 1;
+        self.rounds[self.weapon as usize] -= 1;
         self.cooldown = g.interval;
         self.recoil = RECOIL;
         Some(Shot {
-            gun: self.gun,
+            weapon: self.weapon,
             charged,
+            alt: false,
         })
     }
 }
@@ -201,23 +272,96 @@ mod tests {
             assert!(a.tick(&rec(0, true)).is_none());
         }
         let shot = a.tick(&rec(0, false)).expect("fires on release");
-        assert_eq!((shot.gun, shot.charged), (Gun::Pincel, 30));
+        assert_eq!((shot.weapon, shot.charged), (Weapon::Pincel, 30));
     }
 
     #[test]
     fn a_switch_raises_the_gun_before_it_fires_and_q_takes_the_last_again() {
         let mut a = Arms::default();
         a.tick(&rec(SLOT_2, false));
-        assert_eq!((a.gun, a.last), (Gun::Shotgun, Gun::Pistol));
+        assert_eq!((a.weapon, a.last), (Weapon::Shotgun, Weapon::Pistol));
         // pressed at once: still raising
         assert!(a.tick(&rec(0, true)).is_none());
         a.tick(&rec(LAST, false));
-        assert_eq!(a.gun, Gun::Pistol);
+        assert_eq!(a.weapon, Weapon::Pistol);
         let mut b = Arms::default();
         b.tick(&rec(SLOT_2, false));
         for _ in 0..RAISE {
             b.tick(&rec(0, false));
         }
         assert!(b.tick(&rec(0, true)).is_some());
+    }
+    // ---- M3 ----------------------------------------------------------------
+
+    fn raised(a: &mut Arms, keys: u32) {
+        a.tick(&rec(keys, false));
+        for _ in 0..RAISE {
+            a.tick(&rec(0, false));
+        }
+    }
+
+    #[test]
+    fn six_to_zero_take_the_projectile_guns_and_e_takes_the_melee_weapons_in_turn() {
+        use crate::input::{SLOT_10, SLOT_8};
+        let mut a = Arms::default();
+        a.tick(&rec(SLOT_8, false));
+        assert_eq!(a.weapon, Weapon::Toro);
+        a.tick(&rec(SLOT_10, false));
+        assert_eq!(a.weapon, Weapon::Collage);
+        // the first press takes the navaja every player starts with; each
+        // further press, the next of the three
+        let mut order = Vec::new();
+        for _ in 0..4 {
+            a.tick(&rec(MELEE, false));
+            a.tick(&rec(0, false));
+            order.push(a.weapon);
+        }
+        assert_eq!(
+            order,
+            [Weapon::Navaja, Weapon::Guadana, Weapon::Katana, Weapon::Navaja]
+        );
+        // from a gun, E takes the melee weapon last held
+        a.tick(&rec(SLOT_8, false));
+        a.tick(&rec(0, false));
+        a.tick(&rec(MELEE, false));
+        assert_eq!(a.weapon, Weapon::Navaja);
+    }
+
+    #[test]
+    fn a_held_katana_swings_every_forty_three_ticks_and_lunges_once_in_ninety() {
+        let mut a = Arms {
+            weapon: Weapon::Katana,
+            ..Arms::default()
+        };
+        // held for two seconds: swings at 0, 43, 86: three
+        let swings = (0..120).filter(|_| a.tick(&rec(0, true)).is_some()).count();
+        assert_eq!(swings, 3);
+        assert_eq!(a.rounds, Arms::default().rounds, "no rounds are spent");
+        // the right button pressed every 10 ticks for two seconds: lunges at
+        // 0 and 90 only
+        let mut b = Arms {
+            weapon: Weapon::Katana,
+            ..Arms::default()
+        };
+        let alt = |t: i32| Input {
+            buttons: if t % 10 == 0 { ALT } else { 0 },
+            ..Input::default()
+        };
+        let lunges: Vec<i32> = (0..120)
+            .filter(|&t| b.tick(&alt(t)).is_some_and(|s| s.alt))
+            .collect();
+        assert_eq!(lunges, vec![0, 90]);
+    }
+
+    #[test]
+    fn a_trabuco_reloads_after_its_one_shot() {
+        use crate::input::SLOT_7;
+        let mut a = Arms::default();
+        raised(&mut a, SLOT_7);
+        assert!(a.tick(&rec(0, true)).is_some());
+        a.tick(&rec(0, false));
+        // empty: the next press reloads, 45 ticks
+        a.tick(&rec(0, true));
+        assert_eq!(a.reloading, 45);
     }
 }

@@ -127,6 +127,8 @@ pub const CONTROLS: &[(&str, &str)] = &[
     ("key_fire", "control_fire"),
     ("key_reload", "control_reload"),
     ("key_guns", "control_guns"),
+    ("key_melee", "control_melee"),
+    ("key_alt", "control_alt"),
     ("key_jump", "control_jump"),
     ("key_crouch", "control_crouch"),
     ("key_wall", "control_wall"),
@@ -169,18 +171,19 @@ fn settings(g: &Game) -> Vec<Setting> {
 
 /// The Pincel's charge, percent of full.
 fn charge_pct(a: &crate::arms::Arms) -> i32 {
-    let full = a.gun.stats().charge.max(1);
+    let full = a.weapon.stats().charge.max(1);
     a.charge * 100 / full
 }
 
 /// The lines over the play view: speed, wall jumps left, what the body is
-/// doing, the best speed, the hint, and (M2) health, the gun, its rounds,
+/// doing, the best speed, the hint, and (M2) health, the weapon, its rounds,
 /// a reload, the Pincel's charge, being down, and the hit and kill marks.
 pub fn hud(g: &Game) -> Vec<Hud> {
     let playing = g.screen == Screen::Play;
     let p = &g.world.players[0];
     let b = &p.body;
-    let left = crate::movement::TUNING.wall_jumps - b.wall_jumps;
+    // the katana in hand allows a fourth (M3)
+    let left = (p.tuning().wall_jumps - b.wall_jumps).max(0);
     let doing = if b.sliding {
         "hud_sliding"
     } else if b.slam_from.is_some() {
@@ -223,14 +226,15 @@ pub fn hud(g: &Game) -> Vec<Hud> {
             g.strings.get("hud_health").replace("{n}", &p.health.to_string()),
             playing,
         ),
-        line("gun", g.strings.get(p.arms.gun.stats().name), playing),
+        line("gun", g.strings.get(p.arms.weapon.stats().name), playing),
         line(
             "ammo",
             g.strings
                 .get("hud_ammo")
-                .replace("{n}", &p.arms.rounds[p.arms.gun as usize].to_string())
-                .replace("{of}", &p.arms.gun.stats().magazine.to_string()),
-            playing,
+                .replace("{n}", &p.arms.rounds[p.arms.weapon as usize].to_string())
+                .replace("{of}", &p.arms.weapon.stats().magazine.to_string()),
+            // a melee weapon has no rounds
+            playing && p.arms.weapon.stats().magazine > 0,
         ),
         line(
             "reload",
@@ -399,6 +403,18 @@ mod tests {
         assert!(!line("reload").shown && !line("mark").shown);
         g.world.players[0].hit_mark = 4;
         assert!(hud(&g).iter().find(|l| l.id == "mark").unwrap().shown);
+    }
+
+    #[test]
+    fn with_a_katana_the_hud_hides_the_rounds_and_counts_four_wall_jumps() {
+        let mut g = game();
+        g.act("menu.practice", "").unwrap();
+        g.world.players[0].arms.weapon = crate::weapons::Weapon::Katana;
+        let h = hud(&g);
+        let line = |id: &str| h.iter().find(|l| l.id == id).unwrap().clone();
+        assert_eq!(line("gun").text, "Katana");
+        assert!(!line("ammo").shown, "a melee weapon has no rounds");
+        assert_eq!(line("walls").text, "Wall jumps: 4");
     }
 
     #[test]

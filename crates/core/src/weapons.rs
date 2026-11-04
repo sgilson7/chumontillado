@@ -1,9 +1,12 @@
-//! The guns (M2: the five hitscan ones) and what a shot does: a ray from the
+//! The weapons and what each does. A hitscan gun's shot is a ray from the
 //! eye along the aim, stopped by the first wall, hitting the first body in
-//! front of it (or every body, for the Pincel, which pierces).
+//! front of it (or every body, for the Pincel, which pierces). M3 adds the
+//! projectile guns, whose shots fly through the ticks in `world.rs` and
+//! meet bodies through `meets` and bursts through `blast_damage`, and the
+//! melee weapons, whose swings hit through `in_arc`.
 //!
 //! The numbers are the journal's Roster page (2026-11-04), in one table,
-//! `GUNS`, so tuning by play is one edit. Damage is out of 100 health; a
+//! `WEAPONS`, so tuning by play is one edit. Damage is out of 100 health; a
 //! head takes `HEAD_PCT` of a body's.
 //!
 //! Bodies are hit as a vertical cylinder for the body and a ball for the
@@ -17,37 +20,139 @@ use crate::map::Map;
 use crate::trace::{trace_box, Scratch};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Gun {
+pub enum Weapon {
     Pistol = 0,
     Shotgun = 1,
     MachinePistol = 2,
     Rifle = 3,
     Pincel = 4,
+    // M3: the projectile guns
+    Drum = 5,
+    Trabuco = 6,
+    Toro = 7,
+    Campana = 8,
+    Collage = 9,
+    // M3: the melee weapons
+    Katana = 10,
+    Navaja = 11,
+    Guadana = 12,
 }
 
-pub const GUN_COUNT: usize = 5;
-pub const ALL: [Gun; GUN_COUNT] = [
-    Gun::Pistol,
-    Gun::Shotgun,
-    Gun::MachinePistol,
-    Gun::Rifle,
-    Gun::Pincel,
+pub const COUNT: usize = 13;
+pub const ALL: [Weapon; COUNT] = [
+    Weapon::Pistol,
+    Weapon::Shotgun,
+    Weapon::MachinePistol,
+    Weapon::Rifle,
+    Weapon::Pincel,
+    Weapon::Drum,
+    Weapon::Trabuco,
+    Weapon::Toro,
+    Weapon::Campana,
+    Weapon::Collage,
+    Weapon::Katana,
+    Weapon::Navaja,
+    Weapon::Guadana,
 ];
+/// The guns take the number keys 1 to 0 in this order; the melee key takes
+/// the three melee weapons in turn.
+pub const MELEE: [Weapon; 3] = [Weapon::Katana, Weapon::Navaja, Weapon::Guadana];
 
-/// A gun's numbers. Rates are in ticks (60 a second).
+/// How a weapon reaches what it hits.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Kind {
+    /// a ray from the eye, there at once
+    Hitscan,
+    /// a body that flies, falls and bounces through the ticks (M3)
+    Projectile(Flight),
+    /// an arc in front of the eye during a swing's active ticks (CS-Q7: A)
+    Melee(Swing),
+}
+
+/// A projectile's flight. Speeds in m/s, gravity in m/s².
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Flight {
+    pub speed: Fx,
+    pub gravity: Fx,
+    /// up added to the launch, for a lob (the Campana)
+    pub lift: Fx,
+    /// how many walls it bounces off before the next one stops it
+    pub bounces: i32,
+    /// the speed a bounce keeps, percent
+    pub keep_pct: i32,
+    /// ticks until it bursts where it is (the drum's fuse), or until it is
+    /// gone; 0 for neither
+    pub fuse: i32,
+    /// how far from its centre it meets a body (m)
+    pub size: Fx,
+    /// its burst on meeting a body or a wall that stops it, or at its fuse
+    pub blast: Option<Blast>,
+    /// ticks a nail that meets a body with a wall close behind it holds the
+    /// body there (the Trabuco)
+    pub pins: i32,
+}
+
+/// A burst: damage that falls off with distance, and a push away from it.
+/// Within `inner` a body takes `near`; from there to `outer` it falls in a
+/// straight line to `far`; beyond `outer`, nothing. The push falls the
+/// same way from `push` to nothing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Blast {
+    pub inner: Fx,
+    pub outer: Fx,
+    pub near: i32,
+    pub far: i32,
+    pub push: Fx,
+}
+
+/// The second button's use.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Alt {
+    None,
+    /// the katana: flung along the aim, hitting what the arc meets
+    Lunge,
+    /// the guadaña: a line to a wall within reach that pulls you to it
+    Hook,
+}
+
+/// A melee weapon's swing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Swing {
+    /// how far past the body's edge it reaches (m)
+    pub reach: Fx,
+    /// the arc each side of the aim (angle units)
+    pub half_arc: i32,
+    /// the ticks of a swing during which it hits: from `from` to `until`
+    pub from: i32,
+    pub until: i32,
+    /// speed added along the aim on the ground plane by each swing (m/s)
+    pub carry: Fx,
+    /// damage from behind, or 0 for none extra (the navaja)
+    pub behind: i32,
+    pub alt: Alt,
+    /// the run speed while held, percent (the navaja's 10% faster)
+    pub run_pct: i32,
+    /// wall jumps a flight while held
+    pub wall_jumps: i32,
+}
+
+/// A weapon's numbers. Rates are in ticks (60 a second).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Stats {
     /// the strings' key for its name
     pub name: &'static str,
+    pub kind: Kind,
+    /// a hit's damage: a ray's, a projectile's direct one, a swing's
     pub damage: i32,
-    /// rays a shot casts (the shotgun's pellets)
+    /// rays or projectiles a shot sends (the shotgun's and Trabuco's)
     pub pellets: i32,
     /// how far a pellet or a shot strays from the aim, at most (angle units)
     pub spread: i32,
-    /// ticks between shots
+    /// ticks between shots or swings
     pub interval: i32,
     /// fires while the button is held
     pub auto: bool,
+    /// rounds; 0 for a melee weapon, which needs none
     pub magazine: i32,
     pub reload: i32,
     /// how far a shot reaches (m)
@@ -62,21 +167,87 @@ pub struct Stats {
     pub kick: Fx,
 }
 
-pub const GUNS: [Stats; GUN_COUNT] = [
+/// A gun that fires at once: its kind and the fields a hitscan gun leaves
+/// unused, so the table below states only what differs.
+const HITSCAN: Stats = Stats {
+    name: "",
+    kind: Kind::Hitscan,
+    damage: 0,
+    pellets: 1,
+    spread: 0,
+    interval: 0,
+    auto: false,
+    magazine: 0,
+    reload: 0,
+    range: int(200),
+    charge: 0,
+    charged_damage: 0,
+    pierce: false,
+    kick: 0,
+};
+
+const FLIGHT: Flight = Flight {
+    speed: 0,
+    gravity: 0,
+    lift: 0,
+    bounces: 0,
+    keep_pct: 0,
+    fuse: 0,
+    size: ONE / 10,
+    blast: None,
+    pins: 0,
+};
+
+const SWING: Swing = Swing {
+    reach: 0,
+    half_arc: 0,
+    from: 2,
+    until: 8,
+    carry: 0,
+    behind: 0,
+    alt: Alt::None,
+    run_pct: 100,
+    wall_jumps: 3,
+};
+
+/// Self-damage from your own burst, percent of what another body would take
+/// (CS-Q16: A).
+pub const SELF_PCT: i32 = 30;
+/// A katana swing turns projectiles in its first ticks (CS-Q15: A).
+pub const PARRY: i32 = 6;
+/// The katana's lunge: the speed it flings you along the aim (m/s), the
+/// ticks it hits for, and the ticks before the next.
+pub const LUNGE_SPEED: Fx = int(16);
+/// The lunge lifts you off the ground (m/s up), past the speed at which a
+/// body leaves it (`movement::TUNING.non_jump_velocity`, 3.5), so friction
+/// does not eat the fling: 0.44 s in the air at 16 m/s is about 7 m, near
+/// the Roster page's 8.
+pub const LUNGE_LIFT: Fx = int(4);
+/// A lunge's damage (the Roster page).
+pub const LUNGE_DAMAGE: i32 = 100;
+pub const LUNGE_TICKS: i32 = 18;
+pub const LUNGE_INTERVAL: i32 = 90;
+/// The guadaña's hook: how far it reaches, how hard it pulls (m/s²), and
+/// the ticks it holds at most.
+pub const HOOK_REACH: Fx = int(12);
+pub const HOOK_PULL: Fx = int(40);
+pub const HOOK_TICKS: i32 = 150;
+/// The hook lifts you off the ground as it catches (m/s up), past the
+/// speed at which a body leaves it, or the floor holds you and the pull
+/// only drags you along it.
+pub const HOOK_LIFT: Fx = int(4);
+/// A nail pins a body when a wall is this close behind it (m).
+pub const PIN_BEHIND: Fx = ONE * 15 / 10;
+
+pub const WEAPONS: [Stats; COUNT] = [
     Stats {
         name: "gun_pistol",
         damage: 25,
-        pellets: 1,
-        spread: 0,
         interval: 15,
-        auto: false,
         magazine: 8,
         reload: 60,
         range: int(120),
-        charge: 0,
-        charged_damage: 0,
-        pierce: false,
-        kick: 0,
+        ..HITSCAN
     },
     Stats {
         name: "gun_shotgun",
@@ -84,72 +255,218 @@ pub const GUNS: [Stats; GUN_COUNT] = [
         pellets: 8,
         spread: fx::deg(5),
         interval: 55,
-        auto: false,
         magazine: 8,
         reload: 90,
         range: int(40),
-        charge: 0,
-        charged_damage: 0,
-        pierce: false,
         kick: int(6),
+        ..HITSCAN
     },
     Stats {
         name: "gun_machine_pistol",
         damage: 11,
-        pellets: 1,
         spread: fx::deg(2),
         interval: 5,
         auto: true,
         magazine: 30,
         reload: 75,
         range: int(80),
-        charge: 0,
-        charged_damage: 0,
-        pierce: false,
-        kick: 0,
+        ..HITSCAN
     },
     Stats {
         name: "gun_rifle",
         damage: 70,
-        pellets: 1,
-        spread: 0,
         interval: 60,
-        auto: false,
         magazine: 5,
         reload: 120,
-        range: int(200),
-        charge: 0,
-        charged_damage: 0,
-        pierce: false,
-        kick: 0,
+        ..HITSCAN
     },
     Stats {
         name: "gun_pincel",
         damage: 40,
-        pellets: 1,
-        spread: 0,
         interval: 30,
-        auto: false,
         magazine: 4,
         reload: 120,
-        range: int(200),
         charge: 60,
         charged_damage: 100,
         pierce: true,
-        kick: 0,
+        ..HITSCAN
+    },
+    // M3: the projectile guns. The Roster page's damage and rates; the
+    // speeds, fuses and pushes are mine (R7.1)
+    Stats {
+        name: "gun_drum",
+        kind: Kind::Projectile(Flight {
+            speed: int(24),
+            gravity: int(18),
+            // it bounces until its fuse
+            bounces: 10_000,
+            keep_pct: 55,
+            fuse: 90,
+            size: ONE * 12 / 100,
+            blast: Some(Blast {
+                inner: 0,
+                outer: int(3),
+                near: 60,
+                far: 15,
+                push: int(8),
+            }),
+            ..FLIGHT
+        }),
+        damage: 90,
+        interval: 50,
+        magazine: 6,
+        reload: 120,
+        ..HITSCAN
+    },
+    Stats {
+        name: "gun_trabuco",
+        kind: Kind::Projectile(Flight {
+            speed: int(60),
+            gravity: int(6),
+            fuse: 120,
+            size: ONE * 5 / 100,
+            pins: 10,
+            ..FLIGHT
+        }),
+        damage: 15,
+        pellets: 7,
+        spread: fx::deg(4),
+        interval: 67,
+        magazine: 1,
+        reload: 45,
+        ..HITSCAN
+    },
+    Stats {
+        name: "gun_toro",
+        kind: Kind::Projectile(Flight {
+            speed: int(20),
+            fuse: 600,
+            size: ONE * 15 / 100,
+            blast: Some(Blast {
+                inner: 0,
+                outer: int(4),
+                near: 70,
+                far: 20,
+                push: int(10),
+            }),
+            ..FLIGHT
+        }),
+        damage: 100,
+        interval: 75,
+        magazine: 3,
+        reload: 120,
+        ..HITSCAN
+    },
+    Stats {
+        name: "gun_campana",
+        kind: Kind::Projectile(Flight {
+            speed: int(16),
+            gravity: int(18),
+            lift: int(4),
+            fuse: 600,
+            size: ONE * 25 / 100,
+            blast: Some(Blast {
+                inner: ONE,
+                outer: int(5),
+                near: 120,
+                far: 50,
+                push: int(12),
+            }),
+            ..FLIGHT
+        }),
+        damage: 120,
+        interval: 100,
+        magazine: 2,
+        reload: 120,
+        ..HITSCAN
+    },
+    Stats {
+        name: "gun_collage",
+        kind: Kind::Projectile(Flight {
+            speed: int(40),
+            bounces: 1,
+            keep_pct: 100,
+            fuse: 180,
+            size: ONE * 8 / 100,
+            ..FLIGHT
+        }),
+        damage: 30,
+        interval: 20,
+        auto: true,
+        magazine: 12,
+        reload: 75,
+        ..HITSCAN
+    },
+    // M3: the melee weapons (CS-Q7: A)
+    Stats {
+        name: "melee_katana",
+        kind: Kind::Melee(Swing {
+            reach: ONE * 16 / 10,
+            half_arc: fx::deg(50),
+            carry: ONE,
+            alt: Alt::Lunge,
+            wall_jumps: 4,
+            ..SWING
+        }),
+        damage: 50,
+        interval: 43,
+        ..HITSCAN
+    },
+    Stats {
+        name: "melee_navaja",
+        kind: Kind::Melee(Swing {
+            reach: ONE * 11 / 10,
+            half_arc: fx::deg(35),
+            from: 1,
+            until: 5,
+            behind: 150,
+            run_pct: 110,
+            ..SWING
+        }),
+        damage: 35,
+        interval: 20,
+        ..HITSCAN
+    },
+    Stats {
+        name: "melee_guadana",
+        kind: Kind::Melee(Swing {
+            reach: ONE * 25 / 10,
+            half_arc: fx::deg(65),
+            from: 6,
+            until: 14,
+            alt: Alt::Hook,
+            ..SWING
+        }),
+        damage: 70,
+        interval: 75,
+        ..HITSCAN
     },
 ];
 
 /// A head takes twice a body's damage.
 pub const HEAD_PCT: i32 = 200;
 
-impl Gun {
+impl Weapon {
     pub fn stats(self) -> &'static Stats {
-        &GUNS[self as usize]
+        &WEAPONS[self as usize]
     }
 
-    pub fn from_index(i: usize) -> Gun {
-        ALL[i % GUN_COUNT]
+    pub fn from_index(i: usize) -> Weapon {
+        ALL[i % COUNT]
+    }
+
+    pub fn swing(self) -> Option<Swing> {
+        match self.stats().kind {
+            Kind::Melee(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    pub fn flight(self) -> Option<Flight> {
+        match self.stats().kind {
+            Kind::Projectile(f) => Some(f),
+            _ => None,
+        }
     }
 }
 
@@ -233,6 +550,90 @@ pub fn ray_column(o: V3, d: V3, c: V3, r: Fx, lo: Fx, hi: Fx) -> Option<Fx> {
     (y >= lo as i64 && y <= hi as i64).then_some(t as Fx)
 }
 
+/// Where the unit ray first meets a body, grown by `grow` (a projectile's
+/// size), and whether it is the head.
+pub fn meets(o: V3, d: V3, t: &Target, grow: Fx) -> Option<(Fx, bool)> {
+    let head = ray_ball(o, d, t.head, HEAD_R + grow);
+    let body = ray_column(
+        o,
+        d,
+        t.feet,
+        BODY_R + grow,
+        t.feet.y - grow,
+        t.feet.y + t.body_top,
+    );
+    match (head, body) {
+        (Some(h), Some(b)) if b < h => Some((b, false)),
+        (Some(h), _) => Some((h, true)),
+        (None, Some(b)) => Some((b, false)),
+        (None, None) => None,
+    }
+}
+
+/// The point of a body's upright line, from its feet to its head's centre,
+/// nearest `p`.
+pub fn nearest_on(t: &Target, p: V3) -> V3 {
+    let top = t.head.y;
+    t.feet.add(v3(0, p.y.clamp(t.feet.y, top) - t.feet.y, 0))
+}
+
+/// How far `p` is from a body's surface: from its upright line, less the
+/// body's radius; 0 inside it.
+pub fn gap_to(t: &Target, p: V3) -> Fx {
+    (p.dist(nearest_on(t, p)) - BODY_R).max(0)
+}
+
+/// A burst's damage to a body whose surface is `gap` from its centre.
+pub fn blast_damage(b: &Blast, gap: Fx) -> i32 {
+    if gap > b.outer {
+        return 0;
+    }
+    if gap <= b.inner {
+        return b.near;
+    }
+    let along = fx::div(gap - b.inner, b.outer - b.inner);
+    b.near - fx::round(fx::mul(int(b.near - b.far), along))
+}
+
+/// A burst's push on a body `gap` from its centre: `push` at the centre,
+/// nothing at `outer`.
+pub fn blast_push(b: &Blast, gap: Fx) -> Fx {
+    if gap >= b.outer {
+        return 0;
+    }
+    b.push - fx::mul(b.push, fx::div(gap, b.outer))
+}
+
+/// Whether a body is in a swing's arc from the eye along `aim`: its
+/// surface within `reach`, and its nearest point within `half_arc` of the
+/// aim (or touching the eye).
+pub fn in_arc(s: &Swing, eye: V3, aim: V3, t: &Target) -> bool {
+    let p = nearest_on(t, eye);
+    let to = p.sub(eye);
+    let d = p.dist(eye);
+    if d - BODY_R > s.reach {
+        return false;
+    }
+    if d <= BODY_R {
+        return true;
+    }
+    // the body's edge widens the arc: the angle it spans each side
+    let spans = fx::atan2(BODY_R, d);
+    // |to × aim| and to · aim are |to| sin θ and |to| cos θ for a unit aim
+    let off = fx::atan2(to.cross(aim).len(), to.dot(aim));
+    off <= s.half_arc + spans
+}
+
+/// Whether `attacker` is behind a body facing `yaw`: more than 120° from the
+/// way it faces, seen from the body.
+pub fn from_behind(feet: V3, yaw: i32, attacker: V3) -> bool {
+    let to = attacker.sub(feet);
+    let ahead = facing(yaw, 0);
+    let flat = v3(to.x, 0, to.z);
+    let n = flat.len();
+    n > 0 && fx::div(flat.dot(ahead), n) < -(ONE / 2)
+}
+
 /// How far the ray goes before a wall stops it, up to `range`.
 pub fn wall_distance(map: &Map, scratch: &mut Scratch, o: V3, d: V3, range: Fx) -> Fx {
     let end = o.add(d.scale(range));
@@ -255,15 +656,7 @@ pub fn cast(
     let mut hits: Vec<Hit> = Vec::new();
     for (who, t) in targets.iter().enumerate() {
         let Some(t) = t else { continue };
-        let head = ray_ball(o, d, t.head, HEAD_R);
-        let body = ray_column(o, d, t.feet, BODY_R, t.feet.y, t.feet.y + t.body_top);
-        let hit = match (head, body) {
-            (Some(h), Some(b)) if b < h => Some((b, false)),
-            (Some(h), _) => Some((h, true)),
-            (None, Some(b)) => Some((b, false)),
-            (None, None) => None,
-        };
-        if let Some((at, head)) = hit {
+        if let Some((at, head)) = meets(o, d, t, 0) {
             if at < wall {
                 hits.push(Hit { who, t: at, head });
             }
@@ -442,11 +835,11 @@ mod tests {
 
     #[test]
     fn damage_is_the_rosters_with_a_head_doubled_and_the_pincel_charged() {
-        let pistol = Gun::Pistol.stats();
+        let pistol = Weapon::Pistol.stats();
         assert_eq!((damage(pistol, 0, false), damage(pistol, 0, true)), (25, 50));
-        let rifle = Gun::Rifle.stats();
+        let rifle = Weapon::Rifle.stats();
         assert_eq!(damage(rifle, 0, true), 140, "a rifle headshot kills");
-        let pincel = Gun::Pincel.stats();
+        let pincel = Weapon::Pincel.stats();
         // 40 uncharged, 100 at a full second, 70 at half
         assert_eq!(
             (
@@ -461,7 +854,7 @@ mod tests {
 
     #[test]
     fn the_shotgun_throws_eight_pellets_on_a_fixed_ring_and_the_pistol_one_true() {
-        let shotgun = Gun::Shotgun.stats();
+        let shotgun = Weapon::Shotgun.stats();
         let a = pellets(shotgun, 0, 0, 1);
         let b = pellets(shotgun, 0, 0, 99);
         assert_eq!(a.len(), 8);
@@ -471,24 +864,85 @@ mod tests {
             let c = p.dot(a[0]);
             assert!(c < ONE && c > ONE * 995 / 1000, "{c}");
         }
-        assert_eq!(pellets(Gun::Pistol.stats(), 0, 0, 7), vec![facing(0, 0)]);
+        assert_eq!(pellets(Weapon::Pistol.stats(), 0, 0, 7), vec![facing(0, 0)]);
     }
 
     #[test]
     fn the_numbers_are_the_rosters() {
         // the Roster page: pistol 4/s, 8 rounds; shotgun 1.1/s, 8; machine
         // pistol 12/s, 30; rifle 1/s, 5; Pincel 4
-        let rate = |g: Gun| g.stats().interval;
+        let rate = |g: Weapon| g.stats().interval;
         assert_eq!(
             (
-                rate(Gun::Pistol),
-                rate(Gun::Shotgun),
-                rate(Gun::MachinePistol),
-                rate(Gun::Rifle)
+                rate(Weapon::Pistol),
+                rate(Weapon::Shotgun),
+                rate(Weapon::MachinePistol),
+                rate(Weapon::Rifle)
             ),
             (15, 55, 5, 60)
         );
-        let mag = |g: Gun| g.stats().magazine;
-        assert_eq!(ALL.map(mag), [8, 8, 30, 5, 4]);
+        let mag = |g: Weapon| g.stats().magazine;
+        assert_eq!(ALL.map(mag)[..5], [8, 8, 30, 5, 4]);
+    }
+    // ---- M3 ----------------------------------------------------------------
+
+    #[test]
+    fn a_bursts_damage_falls_in_a_line_from_near_to_far_and_stops_at_its_edge() {
+        // the Toro: 70 at the centre, 20 at 4 m: at 2 m, 70 − 50 × ½ = 45
+        let toro = Weapon::Toro.flight().unwrap().blast.unwrap();
+        assert_eq!(
+            [0, int(2), int(4), int(4) + ONE / 50].map(|g| blast_damage(&toro, g)),
+            [70, 45, 20, 0]
+        );
+        // the Campana: 120 within 1 m, 50 at 5 m: at 3 m, 120 − 70 × ½ = 85
+        let bell = Weapon::Campana.flight().unwrap().blast.unwrap();
+        assert_eq!(
+            [ONE / 2, ONE, int(3), int(5)].map(|g| blast_damage(&bell, g)),
+            [120, 120, 85, 50]
+        );
+        // the push: the Toro's 10 m/s at the centre, 5 at 2 m, none at 4
+        assert_eq!(
+            [0, int(2), int(4)].map(|g| blast_push(&toro, g)),
+            [int(10), int(5), 0]
+        );
+    }
+
+    #[test]
+    fn a_katana_swing_reaches_a_body_whose_edge_is_within_its_reach_and_in_its_arc() {
+        let k = Weapon::Katana.swing().unwrap();
+        let eye = v3(0, ONE * 165 / 100, 0);
+        let north = v3(0, 0, -ONE);
+        let at = |x: Fx, z: Fx| Target::of(v3(x, 0, z), ONE * 165 / 100);
+        // 2 m off: its edge 2 − 0.48 = 1.52 m, within the 1.6
+        assert!(in_arc(&k, eye, north, &at(0, -int(2))));
+        // 2.2 m off: 1.72, past it
+        assert!(!in_arc(&k, eye, north, &at(0, -(ONE * 22 / 10))));
+        // 45° to the side at the same distance: within the 50° arc
+        assert!(in_arc(&k, eye, north, &at(ONE * 14 / 10, -(ONE * 14 / 10))));
+        // square to the side, and behind: no
+        assert!(!in_arc(&k, eye, north, &at(int(2), 0)));
+        assert!(!in_arc(&k, eye, north, &at(0, int(2))));
+    }
+
+    #[test]
+    fn behind_is_more_than_a_hundred_and_twenty_degrees_from_where_a_body_faces() {
+        // a body at the origin facing −z (heading 0)
+        assert!(from_behind(V3::ZERO, 0, v3(0, 0, int(2))));
+        assert!(
+            from_behind(V3::ZERO, 0, v3(ONE, 0, int(2))),
+            "27° off straight behind"
+        );
+        assert!(!from_behind(V3::ZERO, 0, v3(0, 0, -int(2))));
+        assert!(!from_behind(V3::ZERO, 0, v3(int(2), 0, 0)), "square to the side");
+    }
+
+    #[test]
+    fn a_projectile_meets_a_body_grown_by_its_size() {
+        // along −z at 1 m high, 0.56 m beside a body's line: past the
+        // body's 0.48, within 0.48 + the rocket's 0.15
+        let t = Target::of(v3(0, 0, -int(10)), ONE * 165 / 100);
+        let o = v3(ONE * 56 / 100, ONE, 0);
+        assert_eq!(meets(o, v3(0, 0, -ONE), &t, 0), None);
+        assert!(meets(o, v3(0, 0, -ONE), &t, ONE * 15 / 100).is_some());
     }
 }

@@ -184,8 +184,8 @@
   {
     "name": "M1 HUD: wall jumps left",
     "file": "crates/core/src/api.rs",
-    "find": "    let left = crate::movement::TUNING.wall_jumps - b.wall_jumps;",
-    "replace": "    let left = crate::movement::TUNING.wall_jumps;",
+    "find": "    let left = (p.tuning().wall_jumps - b.wall_jumps).max(0);",
+    "replace": "    let left = p.tuning().wall_jumps;",
     "test": "the_hud_reads_the_speed_and_the_wall_jumps_left_only_in_play"
   },
   {
@@ -352,15 +352,15 @@
   {
     "name": "M2 the shooter's hit mark",
     "file": "crates/core/src/world.rs",
-    "find": "                self.players[id].hit_mark = MARK;",
-    "replace": "",
+    "find": "        if k != by {\n            self.players[by].hit_mark = MARK;\n        }",
+    "replace": "        if k != by {\n            self.players[by].hit_mark = 0;\n        }",
     "test": "a_pistol_shot_takes_fifty_from_a_straw_head_and_twenty_five_from_its_body"
   },
   {
     "name": "M2 a straw target falls and stands again",
     "file": "crates/core/src/world.rs",
-    "find": "                        dummy.down = TARGET_DOWN;",
-    "replace": "                        dummy.down = 0;",
+    "find": "                dummy.down = TARGET_DOWN;",
+    "replace": "                dummy.down = 0;",
     "test": "a_rifle_headshot_fells_a_straw_target_and_it_stands_again_full"
   },
   {
@@ -380,7 +380,7 @@
   {
     "name": "M2 the walls keep at most 48 marks",
     "file": "crates/core/src/world.rs",
-    "find": "                if self.marks.len() >= MARKS_MOST {\n                    self.marks.remove(0);\n                }",
+    "find": "        if self.marks.len() >= MARKS_MOST {\n            self.marks.remove(0);\n        }",
     "replace": "",
     "test": "the_walls_keep_at_most_forty_eight_marks"
   },
@@ -415,8 +415,8 @@
   {
     "name": "M2 the HUD's rounds",
     "file": "crates/core/src/api.rs",
-    "find": "                .replace(\"{n}\", &p.arms.rounds[p.arms.gun as usize].to_string())",
-    "replace": "                .replace(\"{n}\", &p.arms.gun.stats().magazine.to_string())",
+    "find": "                .replace(\"{n}\", &p.arms.rounds[p.arms.weapon as usize].to_string())",
+    "replace": "                .replace(\"{n}\", &p.arms.weapon.stats().magazine.to_string())",
     "test": "the_hud_names_the_gun_and_counts_its_rounds"
   },
   {
@@ -467,5 +467,271 @@
     "find": "        (Mesh::Facet, 72, [92, 140, 66], pal.figure),",
     "replace": "        (Mesh::Capsule, 72, [92, 140, 66], pal.figure),",
     "test": "the_drawn_bot_and_straw_target_stay_inside_the_hit_envelope"
+  },
+  {
+    "name": "M3 a burst's damage falls off",
+    "file": "crates/core/src/weapons.rs",
+    "find": "    b.near - fx::round(fx::mul(int(b.near - b.far), along))",
+    "replace": "    b.near + 0 * fx::round(fx::mul(int(b.near - b.far), along))",
+    "test": "a_bursts_damage_falls_in_a_line_from_near_to_far_and_stops_at_its_edge"
+  },
+  {
+    "name": "M3 a burst's push falls off",
+    "file": "crates/core/src/weapons.rs",
+    "find": "    b.push - fx::mul(b.push, fx::div(gap, b.outer))",
+    "replace": "    b.push + 0 * fx::mul(b.push, fx::div(gap, b.outer))",
+    "test": "a_bursts_damage_falls_in_a_line_from_near_to_far_and_stops_at_its_edge"
+  },
+  {
+    "name": "M3 a swing's reach",
+    "file": "crates/core/src/weapons.rs",
+    "find": "    if d - BODY_R > s.reach {",
+    "replace": "    if d - BODY_R > s.reach + int(9) {",
+    "test": "a_katana_swing_reaches_a_body_whose_edge_is_within_its_reach_and_in_its_arc"
+  },
+  {
+    "name": "M3 a swing's arc",
+    "file": "crates/core/src/weapons.rs",
+    "find": "    off <= s.half_arc + spans",
+    "replace": "    off <= s.half_arc + spans + fx::HALF_TURN",
+    "test": "a_katana_swing_reaches_a_body_whose_edge_is_within_its_reach_and_in_its_arc"
+  },
+  {
+    "name": "M3 behind is past 120 degrees",
+    "file": "crates/core/src/weapons.rs",
+    "find": "    n > 0 && fx::div(flat.dot(ahead), n) < -(ONE / 2)",
+    "replace": "    n > 0 && fx::div(flat.dot(ahead), n) < ONE / 2",
+    "test": "behind_is_more_than_a_hundred_and_twenty_degrees_from_where_a_body_faces"
+  },
+  {
+    "name": "M3 a projectile's size grows the body",
+    "file": "crates/core/src/weapons.rs",
+    "find": "        BODY_R + grow,",
+    "replace": "        BODY_R,",
+    "test": "a_projectile_meets_a_body_grown_by_its_size"
+  },
+  {
+    "name": "M3 E takes the next melee weapon",
+    "file": "crates/core/src/arms.rs",
+    "find": "            MELEE_WEAPONS[(k + 1) % MELEE_WEAPONS.len()]",
+    "replace": "            MELEE_WEAPONS[k]",
+    "test": "six_to_zero_take_the_projectile_guns_and_e_takes_the_melee_weapons_in_turn"
+  },
+  {
+    "name": "M3 6 to 0 take the projectile guns",
+    "file": "crates/core/src/arms.rs",
+    "find": "                self.take(Weapon::from_index(k));",
+    "replace": "                self.take(Weapon::from_index(k % 5));",
+    "test": "six_to_zero_take_the_projectile_guns_and_e_takes_the_melee_weapons_in_turn"
+  },
+  {
+    "name": "M3 the katana's interval",
+    "file": "crates/core/src/weapons.rs",
+    "find": "        damage: 50,\n        interval: 43,",
+    "replace": "        damage: 50,\n        interval: 30,",
+    "test": "a_held_katana_swings_every_forty_three_ticks_and_lunges_once_in_ninety"
+  },
+  {
+    "name": "M3 a lunge waits ninety ticks",
+    "file": "crates/core/src/arms.rs",
+    "find": "                    Alt::Lunge => LUNGE_INTERVAL,",
+    "replace": "                    Alt::Lunge => 30,",
+    "test": "a_held_katana_swings_every_forty_three_ticks_and_lunges_once_in_ninety"
+  },
+  {
+    "name": "M3 the Trabuco holds one round",
+    "file": "crates/core/src/weapons.rs",
+    "find": "        interval: 67,\n        magazine: 1,",
+    "replace": "        interval: 67,\n        magazine: 2,",
+    "test": "a_trabuco_reloads_after_its_one_shot"
+  },
+  {
+    "name": "M3 the Toro's rocket speed",
+    "file": "crates/core/src/weapons.rs",
+    "find": "            speed: int(20),",
+    "replace": "            speed: int(25),",
+    "test": "a_toro_rocket_takes_about_a_second_to_cross_twenty_metres_and_fells_a_straw_target"
+  },
+  {
+    "name": "M3 your own burst costs 30%",
+    "file": "crates/core/src/world.rs",
+    "find": "                dmg = dmg * weapons::SELF_PCT / 100;",
+    "replace": "                dmg = dmg * 100 / 100;",
+    "test": "a_toro_rocket_at_your_feet_throws_you_higher_than_a_jump_and_costs_thirty_percent"
+  },
+  {
+    "name": "M3 a burst pushes players",
+    "file": "crates/core/src/world.rs",
+    "find": "                p.body.velocity = p.body.velocity.add(dir.scale(weapons::blast_push(b, gap)));",
+    "replace": "                p.body.velocity = p.body.velocity.add(dir.scale(0 * weapons::blast_push(b, gap)));",
+    "test": "a_toro_rocket_at_your_feet_throws_you_higher_than_a_jump_and_costs_thirty_percent"
+  },
+  {
+    "name": "M3 the Campana's toll pushes others away",
+    "file": "crates/core/src/world.rs",
+    "find": "                p.body.velocity = p.body.velocity.add(dir.scale(weapons::blast_push(b, gap)));",
+    "replace": "                p.body.velocity = p.body.velocity.add(dir.scale(0 * weapons::blast_push(b, gap)));",
+    "test": "a_campana_at_your_feet_costs_you_thirty_percent_and_its_toll_pushes_a_player_beside_you_away"
+  },
+  {
+    "name": "M3 a bounce is counted",
+    "file": "crates/core/src/world.rs",
+    "find": "                        q.bounces -= 1;",
+    "replace": "                        q.bounces -= 0;",
+    "test": "a_collage_shot_bounces_off_one_wall_and_stops_at_the_next"
+  },
+  {
+    "name": "M3 a grenade's bounces are counted",
+    "file": "crates/core/src/world.rs",
+    "find": "                        q.bounces -= 1;",
+    "replace": "                        q.bounces -= 0;",
+    "test": "a_drum_grenade_bounces_along_the_floor_and_bursts_at_its_fuse"
+  },
+  {
+    "name": "M3 a bounce turns off the face",
+    "file": "crates/core/src/world.rs",
+    "find": "                        q.velocity = v.sub(back).scale(ONE * f.keep_pct / 100);",
+    "replace": "                        q.velocity = v.add(back.scale(0)).scale(ONE * f.keep_pct / 100);",
+    "test": "a_collage_shot_bounces_off_one_wall_and_stops_at_the_next"
+  },
+  {
+    "name": "M3 a grenade bursts at its fuse",
+    "file": "crates/core/src/world.rs",
+    "find": "            if !gone && f.fuse > 0 && q.age >= f.fuse {",
+    "replace": "            if !gone && f.fuse > 0 && q.age > f.fuse {",
+    "test": "a_drum_grenade_bounces_along_the_floor_and_bursts_at_its_fuse"
+  },
+  {
+    "name": "M3 a direct hit is spared the burst",
+    "file": "crates/core/src/world.rs",
+    "find": "            if Some(k) == spared {",
+    "replace": "            if Some(k) == spared && false {",
+    "test": "a_drum_grenade_that_meets_a_body_takes_its_ninety_and_not_its_burst_as_well"
+  },
+  {
+    "name": "M3 a nail pins only with a wall close behind",
+    "file": "crates/core/src/world.rs",
+    "find": "                        if behind < weapons::PIN_BEHIND && self.players[who].alive() {",
+    "replace": "                        if self.players[who].alive() {",
+    "test": "a_trabuco_nail_pins_a_body_with_a_wall_close_behind_it"
+  },
+  {
+    "name": "M3 a swing hits each body once",
+    "file": "crates/core/src/world.rs",
+    "find": "                    if s.struck & (1 << k) != 0 || !weapons::in_arc(&sw, eye, aim, t) {",
+    "replace": "                    if !weapons::in_arc(&sw, eye, aim, t) {",
+    "test": "a_katana_swing_hits_a_straw_target_within_reach_once_and_misses_one_beyond"
+  },
+  {
+    "name": "M3 the navaja from behind",
+    "file": "crates/core/src/world.rs",
+    "find": "                    } else if sw.behind > 0 && weapons::from_behind(t.feet, facing_yaw, eye) {",
+    "replace": "                    } else if sw.behind > 0 && weapons::from_behind(t.feet, facing_yaw, eye) && false {",
+    "test": "a_navaja_from_behind_fells_a_straw_target_and_from_the_front_takes_thirty_five"
+  },
+  {
+    "name": "M3 a straw target faces the spawn",
+    "file": "crates/core/src/world.rs",
+    "find": "                        // a straw target faces the room's spawn, +z\n                        fx::HALF_TURN",
+    "replace": "                        // a straw target faces the room's spawn, +z\n                        0",
+    "test": "a_navaja_from_behind_fells_a_straw_target_and_from_the_front_takes_thirty_five"
+  },
+  {
+    "name": "M3 the navaja's faster run",
+    "file": "crates/core/src/world.rs",
+    "find": "            t.run = t.run * sw.run_pct / 100;",
+    "replace": "            t.run = t.run * 100 / 100;",
+    "test": "the_navaja_held_runs_ten_percent_faster_and_the_katana_allows_a_fourth_wall_jump"
+  },
+  {
+    "name": "M3 the katana's fourth wall jump",
+    "file": "crates/core/src/world.rs",
+    "find": "            t.wall_jumps = sw.wall_jumps;",
+    "replace": "            t.wall_jumps = sw.wall_jumps.min(3);",
+    "test": "the_navaja_held_runs_ten_percent_faster_and_the_katana_allows_a_fourth_wall_jump"
+  },
+  {
+    "name": "M3 the HUD counts the katana's wall jumps",
+    "file": "crates/core/src/api.rs",
+    "find": "    let left = (p.tuning().wall_jumps - b.wall_jumps).max(0);",
+    "replace": "    let left = (crate::movement::TUNING.wall_jumps - b.wall_jumps).max(0);",
+    "test": "with_a_katana_the_hud_hides_the_rounds_and_counts_four_wall_jumps"
+  },
+  {
+    "name": "M3 the HUD hides a melee weapon's rounds",
+    "file": "crates/core/src/api.rs",
+    "find": "            playing && p.arms.weapon.stats().magazine > 0,",
+    "replace": "            playing,",
+    "test": "with_a_katana_the_hud_hides_the_rounds_and_counts_four_wall_jumps"
+  },
+  {
+    "name": "M3 the parry lasts six ticks",
+    "file": "crates/core/src/world.rs",
+    "find": "            if s.weapon == Weapon::Katana && !s.lunge && s.age <= weapons::PARRY {",
+    "replace": "            if s.weapon == Weapon::Katana && !s.lunge && s.age <= weapons::PARRY + 10 {",
+    "test": "a_katana_swing_after_its_six_parry_ticks_does_not_turn_a_rocket"
+  },
+  {
+    "name": "M3 a parried rocket is the parrier's",
+    "file": "crates/core/src/world.rs",
+    "find": "            q.owner = id;",
+    "replace": "            q.owner = q.owner.min(9);",
+    "test": "a_katana_swing_in_time_turns_a_rocket_back_and_it_fells_the_target_behind"
+  },
+  {
+    "name": "M3 a parry is in front only",
+    "file": "crates/core/src/world.rs",
+    "find": "            if q.owner == id || to.len() > PARRY_REACH || to.dot(aim) <= 0 {",
+    "replace": "            if q.owner == id || to.len() > PARRY_REACH {",
+    "test": "a_katana_swing_in_time_turns_a_rocket_back_and_it_fells_the_target_behind"
+  },
+  {
+    "name": "M3 the lunge lifts you",
+    "file": "crates/core/src/world.rs",
+    "find": "            p.body.velocity = v3(along.x, along.y.max(weapons::LUNGE_LIFT), along.z);",
+    "replace": "            p.body.velocity = v3(along.x, along.y, along.z);",
+    "test": "a_katana_lunge_flings_you_about_seven_metres_before_you_land"
+  },
+  {
+    "name": "M3 the lunge's speed",
+    "file": "crates/core/src/weapons.rs",
+    "find": "pub const LUNGE_SPEED: Fx = int(16);",
+    "replace": "pub const LUNGE_SPEED: Fx = int(20);",
+    "test": "a_katana_lunge_flings_you_about_seven_metres_before_you_land"
+  },
+  {
+    "name": "M3 the hook's reach",
+    "file": "crates/core/src/world.rs",
+    "find": "            if reach < weapons::HOOK_REACH {",
+    "replace": "            if reach < weapons::HOOK_REACH * 2 {",
+    "test": "the_guadana_hook_pulls_you_to_a_wall_in_reach_while_held_and_lets_go_when_released"
+  },
+  {
+    "name": "M3 the hook lets go when released",
+    "file": "crates/core/src/world.rs",
+    "find": "    if !input.button(ALT) || p.arms.weapon != Weapon::Guadana",
+    "replace": "    if p.arms.weapon != Weapon::Guadana",
+    "test": "the_guadana_hook_pulls_you_to_a_wall_in_reach_while_held_and_lets_go_when_released"
+  },
+  {
+    "name": "M3 the hook bears your weight",
+    "file": "crates/core/src/world.rs",
+    "find": "        .add(weight);",
+    "replace": "        .add(weight.scale(0));",
+    "test": "the_guadana_hook_pulls_you_to_a_wall_in_reach_while_held_and_lets_go_when_released"
+  },
+  {
+    "name": "M3 the hook lifts you as it catches",
+    "file": "crates/core/src/world.rs",
+    "find": "                    p.body.velocity.y = p.body.velocity.y.max(weapons::HOOK_LIFT);",
+    "replace": "                    p.body.velocity.y = p.body.velocity.y.max(0);",
+    "test": "the_guadana_hook_pulls_you_to_a_wall_in_reach_while_held_and_lets_go_when_released"
+  },
+  {
+    "name": "M3 the hook pulls",
+    "file": "crates/core/src/world.rs",
+    "find": "        .add(dir.scale(fx::mul(weapons::HOOK_PULL, dt)))",
+    "replace": "        .add(dir.scale(fx::mul(0, dt)))",
+    "test": "the_guadana_hook_pulls_you_to_a_wall_in_reach_while_held_and_lets_go_when_released"
   }
 ]

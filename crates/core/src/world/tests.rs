@@ -793,3 +793,368 @@ fn the_drawn_bot_and_straw_target_stay_inside_the_hit_envelope() {
         fx::decimal(widest, 3)
     );
 }
+
+// ---- M3: projectiles, bursts and melee -------------------------------------
+
+/// A bare floor 400 m across with walls across the way north and south at
+/// `-north` and `south` metres (0 for none), 20 m high, and the player alone
+/// at the origin facing north (heading 0, −z), settled.
+fn bare(north: i32, south: i32) -> World {
+    use crate::map::{block, Map, Surface};
+    let mut w = World::practice();
+    let mut brushes = vec![block(
+        v3(-int(200), -ONE, -int(200)),
+        v3(int(200), 0, int(200)),
+        Surface::Floor,
+    )];
+    if north > 0 {
+        brushes.push(block(
+            v3(-int(200), 0, -int(north) - ONE),
+            v3(int(200), int(20), -int(north)),
+            Surface::Wall,
+        ));
+    }
+    if south > 0 {
+        brushes.push(block(
+            v3(-int(200), 0, int(south)),
+            v3(int(200), int(20), int(south) + ONE),
+            Surface::Wall,
+        ));
+    }
+    w.map = Map {
+        brushes,
+        spawns: vec![(V3::ZERO, 0)],
+    };
+    w.players.truncate(1);
+    w.dummies.clear();
+    w.players[0] = Player::at((V3::ZERO, 0));
+    run(&mut w, Input::default(), 10);
+    w
+}
+
+/// The player holding `g`, raised and ready.
+fn holding(w: &mut World, g: Weapon) {
+    w.players[0].arms.weapon = g;
+    w.players[0].arms.raise = 0;
+}
+
+fn alt() -> Input {
+    Input {
+        buttons: crate::input::ALT,
+        ..Input::default()
+    }
+}
+
+#[test]
+fn a_toro_rocket_takes_about_a_second_to_cross_twenty_metres_and_fells_a_straw_target() {
+    let mut w = settled(Bot::Moves);
+    holding(&mut w, Weapon::Toro);
+    w.players[0].aim.pitch = pitch_at(110);
+    w.step(&[fire()]);
+    assert_eq!(w.flying.len(), 1);
+    // from the muzzle, 0.7 m ahead of the eye, to the target's front, 20 −
+    // 0.48 − the rocket's 0.15: 18.67 m at a third of a metre a tick, so
+    // the 57th tick's move (counting the firing tick's) reaches it
+    run(&mut w, Input::default(), 55);
+    assert_eq!(w.dummies[0].health, HEALTH, "still in the air");
+    run(&mut w, Input::default(), 4);
+    assert_eq!(
+        w.dummies[0].down,
+        TARGET_DOWN - 3,
+        "100 direct, felled three ticks ago"
+    );
+    assert!(w.flying.is_empty());
+    assert_eq!(w.bursts.len(), 1);
+}
+
+#[test]
+fn a_toro_rocket_at_your_feet_throws_you_higher_than_a_jump_and_costs_thirty_percent() {
+    let mut w = bare(0, 0);
+    holding(&mut w, Weapon::Toro);
+    w.players[0].aim.pitch = crate::camera::PITCH_MIN;
+    w.step(&[fire()]);
+    let mut top = 0;
+    for _ in 0..90 {
+        w.step(&[Input::default()]);
+        top = top.max(w.players[0].body.origin.y);
+    }
+    // the burst is within a body's radius of the feet: its edge is 0 away,
+    // so 70 × 30% = 21, and the whole 10 m/s push, nearly straight up:
+    // about 9.7 m/s, a rise of 9.7² / 36 = 2.6 m; a jump rises 7.92² / 36
+    // = 1.74
+    assert_eq!(w.players[0].health, HEALTH - 21);
+    assert!(top > ONE * 23 / 10, "rose {}", fx::decimal(top, 2));
+}
+
+#[test]
+fn a_drum_grenade_bounces_along_the_floor_and_bursts_at_its_fuse() {
+    let mut w = bare(0, 0);
+    holding(&mut w, Weapon::Drum);
+    w.step(&[fire()]);
+    let start = w.flying[0].bounces;
+    let mut low = int(10);
+    // its fuse is 90 ticks, the firing tick the first
+    for _ in 0..88 {
+        w.step(&[Input::default()]);
+        if let Some(q) = w.flying.first() {
+            low = low.min(q.at.y);
+        }
+    }
+    let q = w.flying[0];
+    assert!(q.bounces < start, "it has bounced");
+    assert!(low >= 0, "never below the floor: {}", fx::decimal(low, 3));
+    assert!(w.bursts.is_empty());
+    w.step(&[Input::default()]);
+    assert!(w.flying.is_empty());
+    assert_eq!(w.bursts.len(), 1);
+}
+
+#[test]
+fn a_collage_shot_bounces_off_one_wall_and_stops_at_the_next() {
+    // walls 10 m north and 10 m south; level from the eye, north: 9.3 m to
+    // the first, back 20 m to the second, 29 m at 40 m/s, 44 ticks
+    let mut w = bare(10, 10);
+    holding(&mut w, Weapon::Collage);
+    w.step(&[fire()]);
+    run(&mut w, Input::default(), 20);
+    let q = w.flying[0];
+    assert!(q.velocity.z > 0 && q.bounces == 0, "turned back south");
+    assert_eq!(q.velocity.len(), int(40), "keeping all its speed");
+    run(&mut w, Input::default(), 30);
+    assert!(w.flying.is_empty());
+    assert_eq!(w.marks.len(), 1, "it marks the second wall");
+}
+
+#[test]
+fn a_trabuco_nail_pins_a_body_with_a_wall_close_behind_it() {
+    let pinned_after = |wall: i32, at: Fx| {
+        let mut w = bare(wall, 0);
+        let mut other = Player::at((v3(0, 0, -at), 0));
+        other.pilot = None;
+        w.players.push(other);
+        run(&mut w, Input::default(), 5);
+        holding(&mut w, Weapon::Trabuco);
+        // level at the chest
+        w.players[0].aim.pitch = fx::wrap(fx::atan2(-(ONE / 2), at));
+        w.step(&[fire(), Input::default()]);
+        run2(&mut w, 15);
+        (w.players[1].pinned, w.players[1].health)
+    };
+    // 9.2 m off with a wall at 10: its back 0.32 m from the wall, its front
+    // 1.28 m, inside the 1.5
+    let (pinned, health) = pinned_after(10, ONE * 92 / 10);
+    assert!(pinned > 0, "pinned");
+    assert!(health < HEALTH && (HEALTH - health) % 15 == 0, "{health}");
+    // the same with the wall 6 m further back: hit, not pinned
+    let (pinned, health) = pinned_after(16, ONE * 92 / 10);
+    assert_eq!(pinned, 0);
+    assert!(health < HEALTH);
+}
+
+fn run2(w: &mut World, ticks: usize) {
+    for _ in 0..ticks {
+        w.step(&[Input::default(), Input::default()]);
+    }
+}
+
+#[test]
+fn a_katana_swing_hits_a_straw_target_within_reach_once_and_misses_one_beyond() {
+    let swing_from = |z_hundredths: i32| {
+        let mut w = settled(Bot::Moves);
+        w.players[0].body.origin = v3(int(8), 0, z_hundredths * ONE / 100);
+        holding(&mut w, Weapon::Katana);
+        w.step(&[fire()]);
+        run(&mut w, Input::default(), 12);
+        w.dummies[0].health
+    };
+    // the target at z = −4: from −2, its edge 1.52 m off, within the 1.6;
+    // one swing, 50, however many of its active ticks it is in the arc
+    assert_eq!(swing_from(-200), 50);
+    // from −1.8, 1.72 m: out of reach
+    assert_eq!(swing_from(-180), HEALTH);
+}
+
+#[test]
+fn a_navaja_from_behind_fells_a_straw_target_and_from_the_front_takes_thirty_five() {
+    // the target at (8, −4) faces the spawn, +z
+    let mut w = settled(Bot::Moves);
+    w.players[0].body.origin = v3(int(8), 0, -(ONE * 53 / 10));
+    w.players[0].aim.yaw = fx::HALF_TURN;
+    holding(&mut w, Weapon::Navaja);
+    w.step(&[fire()]);
+    run(&mut w, Input::default(), 8);
+    assert!(w.dummies[0].down > 0, "150 from behind");
+    let mut w = settled(Bot::Moves);
+    w.players[0].body.origin = v3(int(8), 0, -(ONE * 27 / 10));
+    holding(&mut w, Weapon::Navaja);
+    w.step(&[fire()]);
+    run(&mut w, Input::default(), 8);
+    assert_eq!(w.dummies[0].health, HEALTH - 35);
+}
+
+#[test]
+fn the_navaja_held_runs_ten_percent_faster_and_the_katana_allows_a_fourth_wall_jump() {
+    let mut w = World::practice();
+    holding(&mut w, Weapon::Navaja);
+    run(&mut w, keys(FORWARD), 90);
+    // 9 × 1.1 = 9.9
+    let s = w.players[0].body.speed();
+    assert!(near(s, ONE * 99 / 10, ONE / 20), "{}", fx::decimal(s, 3));
+    holding(&mut w, Weapon::Katana);
+    assert_eq!(w.players[0].tuning().wall_jumps, 4);
+    holding(&mut w, Weapon::Pistol);
+    assert_eq!(w.players[0].tuning().wall_jumps, 3);
+}
+
+/// A rocket from seat 1, 2.5 m in front of the player's eye at the spawn,
+/// flying at them at 20 m/s.
+fn rocket_at_the_player(w: &mut World) {
+    let eye = w.players[0].eye_now();
+    let at = eye.add(v3(0, 0, -(ONE * 25 / 10)));
+    w.flying.push(Projectile {
+        weapon: Weapon::Toro,
+        owner: 1,
+        at,
+        prev: at,
+        velocity: v3(0, 0, int(20)),
+        age: 0,
+        bounces: 0,
+    });
+}
+
+#[test]
+fn a_katana_swing_in_time_turns_a_rocket_back_and_it_fells_the_target_behind() {
+    let mut w = settled(Bot::Moves);
+    holding(&mut w, Weapon::Katana);
+    w.players[0].aim.pitch = pitch_at(110);
+    rocket_at_the_player(&mut w);
+    // and one 2.5 m behind the player, flying away: out of the arc
+    let mut behind = w.flying[0];
+    behind.at = behind.at.add(v3(0, 0, int(5)));
+    w.flying.push(behind);
+    w.step(&[fire()]);
+    assert_eq!(w.flying[1].owner, 1, "the one behind is not turned");
+    let q = w.flying[0];
+    assert_eq!(q.owner, 0, "the parrier's now");
+    assert!(q.velocity.z < 0, "flying north, the way the player faces");
+    // north 20 m at 20 m/s to the straw target at (8, −4)
+    run(&mut w, Input::default(), 70);
+    assert_eq!(w.players[0].health, HEALTH);
+    assert!(w.dummies[0].down > 0, "100 direct");
+}
+
+#[test]
+fn a_katana_swing_after_its_six_parry_ticks_does_not_turn_a_rocket() {
+    let mut w = settled(Bot::Moves);
+    holding(&mut w, Weapon::Katana);
+    w.step(&[fire()]);
+    // the swing's age is 1 after its tick; six more and it is past the parry
+    run(&mut w, Input::default(), crate::weapons::PARRY as usize);
+    rocket_at_the_player(&mut w);
+    run(&mut w, Input::default(), 10);
+    assert!(!w.players[0].alive(), "100 direct");
+}
+
+#[test]
+fn a_katana_lunge_flings_you_about_seven_metres_before_you_land() {
+    let mut w = bare(0, 0);
+    holding(&mut w, Weapon::Katana);
+    w.step(&[alt()]);
+    assert!(!w.players[0].body.on_ground);
+    let mut ticks = 0;
+    while !w.players[0].body.on_ground && ticks < 120 {
+        w.step(&[Input::default()]);
+        ticks += 1;
+    }
+    // 4 m/s up under 18 m/s²: 0.44 s; at 16 m/s, 7.1 m
+    let z = -w.players[0].body.origin.z;
+    assert!(z > ONE * 66 / 10 && z < ONE * 76 / 10, "{}", fx::decimal(z, 2));
+}
+
+#[test]
+fn the_guadana_hook_pulls_you_to_a_wall_in_reach_while_held_and_lets_go_when_released() {
+    let mut w = bare(10, 0);
+    holding(&mut w, Weapon::Guadana);
+    w.players[0].aim.pitch = fx::deg(20);
+    w.step(&[alt()]);
+    assert!(w.players[0].hook.is_some());
+    // lifted off the floor as it catches
+    assert_eq!(w.players[0].body.velocity.y, crate::weapons::HOOK_LIFT);
+    run(&mut w, alt(), 30);
+    let b = w.players[0].body;
+    // the hook holds 10 × tan 20° = 3.64 m above the eye, at y 5.29; the
+    // line from the body's middle (0.9) rises at about 24°, so 40 m/s² of
+    // pull is about 16 up. With the line bearing the body's weight, half a
+    // second from 4 m/s up rises 4 × 0.5 + 16 × 0.5² / 2 = 4 m (less as the
+    // angle changes); without it, 16 − 18 = −2 m/s², 1.75 m; without the
+    // lift, 2 m
+    assert!(b.origin.z < -ONE && b.origin.y > ONE * 25 / 10, "{:?}", b.origin);
+    w.step(&[Input::default()]);
+    assert!(w.players[0].hook.is_none());
+    // a wall 20 m off is past the 12 m reach
+    let mut w = bare(20, 0);
+    holding(&mut w, Weapon::Guadana);
+    w.players[0].aim.pitch = fx::deg(20);
+    w.step(&[alt()]);
+    assert!(w.players[0].hook.is_none());
+}
+
+#[test]
+fn a_campana_at_your_feet_costs_you_thirty_percent_and_its_toll_pushes_a_player_beside_you_away() {
+    let mut w = bare(0, 0);
+    let mut other = Player::at((v3(int(3), 0, 0), 0));
+    other.pilot = None;
+    w.players.push(other);
+    run2(&mut w, 5);
+    holding(&mut w, Weapon::Campana);
+    w.players[0].aim.pitch = crate::camera::PITCH_MIN;
+    w.step(&[fire(), Input::default()]);
+    run2(&mut w, 10);
+    // within 1 m of your own burst: 120 × 30% = 36
+    assert_eq!(w.players[0].health, HEALTH - 36);
+    let o = &w.players[1];
+    assert!(o.health < HEALTH, "hurt");
+    assert!(o.body.origin.x > int(3), "pushed away, east");
+}
+
+#[test]
+fn the_same_records_with_projectiles_and_swings_give_the_same_world() {
+    use crate::input::{MELEE, SLOT_10, SLOT_6, SLOT_7, SLOT_8, SLOT_9};
+    let slots = [SLOT_6, SLOT_7, SLOT_8, SLOT_9, SLOT_10, MELEE];
+    let script = |t: u64| Input {
+        keys: [FORWARD, FORWARD | JUMP, LEFT | JUMP, CROUCH][(t / 23 % 4) as usize]
+            | if t.is_multiple_of(50) {
+                slots[(t / 50 % 6) as usize]
+            } else {
+                0
+            },
+        buttons: if t % 7 < 2 { crate::input::FIRE } else { 0 }
+            | if t.is_multiple_of(31) {
+                crate::input::ALT
+            } else {
+                0
+            },
+        dx: ((t * 37) % 400) as i32 - 200,
+        ..Input::default()
+    };
+    let play = || {
+        let mut w = World::room(Bot::Shoots);
+        for t in 0..900 {
+            w.step(&[script(t)]);
+        }
+        w
+    };
+    assert_eq!(play(), play());
+}
+
+#[test]
+fn a_drum_grenade_that_meets_a_body_takes_its_ninety_and_not_its_burst_as_well() {
+    // the target 5 m in front: level from the eye at 24 m/s, the grenade
+    // falls 9 × 0.2² = 0.36 m on the way and meets the body at 1.3 m
+    let mut w = settled(Bot::Moves);
+    w.players[0].body.origin = v3(int(8), 0, ONE);
+    holding(&mut w, Weapon::Drum);
+    w.step(&[fire()]);
+    run(&mut w, Input::default(), 20);
+    assert_eq!(w.dummies[0].health, HEALTH - 90);
+}
