@@ -67,4 +67,4 @@ Before trusting a test run, check it compiled: filter for `error` lines as well 
 
 ## Check
 
-`./scripts/check.sh` on 2026-11-04 after M3: BUILDER CHECK PASSED (format, lint, 202 tests, the WebAssembly build and import audit, the art check, the notebook, the journal, and the browser check in Chromium, Firefox and WebKit).
+`./scripts/check.sh` on 2026-11-04 after M4: BUILDER CHECK PASSED (format, lint, 234 tests, the WebAssembly build and import audit, the art check, the notebook, the journal, and the browser check in Chromium, Firefox and WebKit). Live at 6c528ce: the browser check passed there, and `tests/browser/online.py` played three browsers through the live invite link.

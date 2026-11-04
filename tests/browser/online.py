@@ -20,6 +20,7 @@ plays, the seats not being the ones the host gave, the browsers disagreeing,
 or a browser reporting anything but playing.
 
     python3 tests/browser/online.py [chromium firefox ...]   (default: chromium)
+    BUILDER_ORIGIN=https://sgilson7.github.io/chumontillado python3 tests/browser/online.py
 """
 import functools
 import http.server
@@ -179,12 +180,16 @@ def run(p, engine, origin):
 
 
 def main(engines):
-    server = serve()
-    origin = f"http://127.0.0.1:{server.server_address[1]}"
+    # BUILDER_ORIGIN, as for the browser check: the live site, whose invite
+    # link is then the real one
+    import os
+    server = None if os.environ.get("BUILDER_ORIGIN") else serve()
+    origin = os.environ.get("BUILDER_ORIGIN") or f"http://127.0.0.1:{server.server_address[1]}"
     with sync_playwright() as p:
         for engine in engines:
             run(p, engine, origin)
-    server.shutdown()
+    if server:
+        server.shutdown()
     print()
     if failures:
         print(f"ONLINE CHECK FAILED: {len(failures)} problem(s)")
