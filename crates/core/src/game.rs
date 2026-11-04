@@ -487,6 +487,16 @@ impl Game {
                 self.leave_online();
                 self.open_room(false, &code);
             }
+            // the host switches a free seat's bot on or off (the seat's
+            // index, 1 to 3)
+            "online.bot" => {
+                let seat: usize = v.parse().map_err(|_| format!("\"{value}\" is not a seat."))?;
+                let changed = self.versus.as_mut().is_some_and(|x| x.toggle_bot(seat));
+                if !changed {
+                    return Err(self.strings.get("online.not_host"));
+                }
+                self.ui_version += 1;
+            }
             "online.start" => {
                 let started = self.versus.as_mut().is_some_and(|x| x.start());
                 if !started {
@@ -560,6 +570,27 @@ impl Game {
                 let step: i32 = v.parse().map_err(|_| format!("\"{value}\" is not a step."))?;
                 self.fov = (self.fov + step * 5).clamp(camera::FOV_MIN, camera::FOV_MAX);
                 self.ui_version += 1;
+                self.draw();
+            }
+            // for tests and the journal's shots: the four skins standing in
+            // a row 5 m in front of the spawn, each holding a different
+            // weapon (seat 4 wears seat 1's skin, the Hidalgo's)
+            "place.lineup" => {
+                let w = &mut self.world;
+                let spawn = w.players[0].spawn;
+                w.players.truncate(1);
+                let held = [
+                    crate::weapons::Weapon::Rifle,
+                    crate::weapons::Weapon::Toro,
+                    crate::weapons::Weapon::Katana,
+                    crate::weapons::Weapon::Shotgun,
+                ];
+                for (k, g) in held.iter().enumerate() {
+                    let at = spawn.0.add(v3(fx::int(k as i32 * 2 - 3), 0, -fx::int(5)));
+                    let mut p = crate::world::Player::at((at, fx::HALF_TURN));
+                    p.arms.weapon = *g;
+                    w.players.push(p);
+                }
                 self.draw();
             }
             // for tests and the journal's shots: stand the player at x y z
@@ -725,9 +756,14 @@ pub(crate) mod tests {
             ("open", true, format!("chumontillado-p1-{code}"))
         );
         // the host's seats: itself, and three bots until guests come
-        let rows: Vec<String> = ui.panels[0].rows.iter().map(|r| r.does.clone()).collect();
-        assert_eq!(rows[0], g.strings.get("seat_you"));
-        assert_eq!(rows[3], g.strings.get("seat_bot"));
+        let seats: Vec<(String, bool)> = ui.panels[0]
+            .actions
+            .iter()
+            .filter(|a| a.name == "online.bot")
+            .map(|a| (a.label.clone(), a.enabled))
+            .collect();
+        assert_eq!(seats[0], ("Seat 1: you".to_string(), false));
+        assert_eq!(seats[3], ("Seat 4: bot on".to_string(), true));
     }
 
     #[test]
@@ -804,5 +840,45 @@ pub(crate) mod tests {
         h.act("online.start", "").unwrap();
         assert_eq!(frames(&mut h, 2_000), yaw_once);
         assert_ne!(yaw_once, 0);
+    }
+
+    #[test]
+    fn the_hosts_lobby_has_a_switch_for_each_free_seat_and_it_flips_the_seat_to_empty() {
+        let mut g = game();
+        g.act("online.host", "").unwrap();
+        let switches = |g: &Game| -> Vec<String> {
+            crate::api::ui(g).panels[0]
+                .actions
+                .iter()
+                .filter(|a| a.name == "online.bot" && a.enabled)
+                .map(|a| a.label.clone())
+                .collect()
+        };
+        assert_eq!(
+            switches(&g),
+            vec!["Seat 2: bot on", "Seat 3: bot on", "Seat 4: bot on"]
+        );
+        g.act("online.bot", "2").unwrap();
+        assert_eq!(switches(&g)[1], "Seat 3: bot off");
+        assert!(g.act("online.bot", "0").is_err(), "the host's own seat");
+        g.act("online.start", "").unwrap();
+        let w = &g.versus.as_ref().unwrap().session().unwrap().world;
+        assert!(w.players[2].out && !w.players[1].out);
+    }
+
+    #[test]
+    fn the_pause_shows_your_shooting_by_speed() {
+        let mut g = game();
+        g.act("menu.practice", "").unwrap();
+        g.world.players[0].shooting.fired = [4, 0, 2, 0];
+        g.world.players[0].shooting.hit = [3, 0, 1, 0];
+        g.act("key.escape", "").unwrap();
+        let ui = crate::api::ui(&g);
+        let card = ui.panels.iter().find(|p| p.id == "shooting").expect("the card");
+        let does: Vec<&str> = card.rows.iter().map(|r| r.does.as_str()).collect();
+        assert_eq!(
+            &does[..4],
+            &["75% · 3 of 4", "No shots yet", "50% · 1 of 2", "No shots yet"]
+        );
     }
 }

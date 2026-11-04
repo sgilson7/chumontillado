@@ -23,7 +23,7 @@
 
 use std::rc::Rc;
 
-use crate::arms::{Arms, Shot, RECOIL};
+use crate::arms::{Arms, Shot};
 use crate::camera::{self, Aim};
 use crate::fx::{self, int, Fx, ONE};
 use crate::geom::{facing, right_of, v3, Affine, V3};
@@ -89,6 +89,46 @@ pub struct Player {
     pub hook: Option<Hook>,
     /// ticks a nail still holds it to a wall
     pub pinned: i32,
+    /// M4: a seat nobody holds and the host left empty: not in the match
+    pub out: bool,
+    /// CS-Q22: its shooting by speed, and ticks since its last wall jump or
+    /// slide
+    pub shooting: Shooting,
+    pub since_trick: i32,
+}
+
+/// CS-Q22 (the journal's Feel mockups page): a seat's shots and hits in
+/// four bands of how fast it was going when it fired, and its ticks alive
+/// and at run speed or more. Part of the world, so every browser's copy
+/// agrees and rollback keeps it right; it changes nothing about play.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Shooting {
+    pub fired: [i32; BANDS],
+    pub hit: [i32; BANDS],
+    pub ticks: i32,
+    pub fast_ticks: i32,
+}
+
+/// The bands: under 3 m/s, 3 to 9 (a run), over 9, and within half a
+/// second of a wall jump or a slide, which takes precedence.
+pub const BANDS: usize = 4;
+pub const BAND_WALK: Fx = int(3);
+pub const BAND_TRICK_TICKS: i32 = 30;
+
+impl Player {
+    /// The band a shot fired now falls in.
+    pub fn band(&self) -> usize {
+        let v = self.body.speed();
+        if self.since_trick < BAND_TRICK_TICKS {
+            3
+        } else if v >= TUNING.run {
+            2
+        } else if v >= BAND_WALK {
+            1
+        } else {
+            0
+        }
+    }
 }
 
 /// A melee swing under way: its weapon, its age in ticks, whether it is the
@@ -121,7 +161,22 @@ pub struct Projectile {
     pub velocity: V3,
     pub age: i32,
     pub bounces: i32,
+    /// the band its owner fired it in (CS-Q22), and whether it has hit
+    /// another body yet
+    pub band: u8,
+    pub scored: bool,
 }
+
+/// An X on the head a shot struck: where, whose shot, ticks left.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HeadMark {
+    pub at: V3,
+    pub by: usize,
+    pub ticks: i32,
+}
+
+/// Ticks an X stays on a struck head (a third of a second).
+pub const HEAD_MARK: i32 = 20;
 
 /// A burst, drawn as a ball of light that grows and fades.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -132,7 +187,7 @@ pub struct Burst {
 }
 
 impl Player {
-    fn at(spawn: (V3, i32)) -> Player {
+    pub fn at(spawn: (V3, i32)) -> Player {
         let body = Body::at(spawn.0);
         Player {
             body,
@@ -152,15 +207,20 @@ impl Player {
             swing: None,
             hook: None,
             pinned: 0,
+            out: false,
+            shooting: Shooting::default(),
+            since_trick: 1_000,
         }
     }
 
-    /// Back at its spawn, as new, keeping its look speed and its pilot.
+    /// Back at its spawn, as new, keeping its look speed, its pilot and its
+    /// shooting's counts.
     fn respawn(&mut self) {
-        let (pct, pilot) = (self.aim.pct, self.pilot);
+        let (pct, pilot, shooting) = (self.aim.pct, self.pilot, self.shooting);
         *self = Player::at(self.spawn);
         self.aim.pct = pct;
         self.pilot = pilot;
+        self.shooting = shooting;
     }
 
     /// The eye between last tick and this one, `alpha` of the way.
@@ -170,7 +230,7 @@ impl Player {
     }
 
     pub fn alive(&self) -> bool {
-        self.dead == 0
+        self.dead == 0 && !self.out
     }
 
     /// What a shot meets of it.
@@ -240,6 +300,9 @@ pub struct World {
     pub marks: Vec<Mark>,
     pub flying: Vec<Projectile>,
     pub bursts: Vec<Burst>,
+    /// the X held on a head a shot struck, seen by the shooter (the
+    /// journal's Feel page, claim 1)
+    pub head_marks: Vec<HeadMark>,
     /// the field of view across, degrees (a reader's setting)
     pub fov: i32,
     /// an online match (M4)
@@ -259,7 +322,7 @@ impl crate::rollback::Sim for World {
             .players
             .iter()
             .zip(inputs)
-            .filter(|(p, _)| p.pilot.is_none())
+            .filter(|(p, _)| p.pilot.is_none() && !p.out)
             .map(|(_, i)| *i)
             .collect();
         self.step(&people);
@@ -315,6 +378,7 @@ impl World {
             marks: Vec::new(),
             flying: Vec::new(),
             bursts: Vec::new(),
+            head_marks: Vec::new(),
             fov: camera::FOV_START,
             online: false,
         }
@@ -322,13 +386,15 @@ impl World {
 
     /// M4: an online match in the practice room: four seats at its four
     /// spawns, those `seats` does not hold played by bots that shoot back
-    /// (CS-Q17: A), and the straw targets.
-    pub fn online(seats: crate::online::Seats) -> World {
+    /// (CS-Q17: A) unless the host left them `empty`, and the straw targets.
+    pub fn online(seats: crate::online::Seats, empty: crate::online::Seats) -> World {
         let mut w = World::room(Bot::Shoots);
         w.players = (0..crate::online::SEATS)
             .map(|s| {
                 let mut p = Player::at(w.map.spawns[s]);
-                if !crate::online::holds(seats, s) {
+                if crate::online::holds(empty, s) && !crate::online::holds(seats, s) {
+                    p.out = true;
+                } else if !crate::online::holds(seats, s) {
                     p.pilot = Some(Pilot {
                         shoots: true,
                         ..Pilot::default()
@@ -365,6 +431,7 @@ impl World {
                 p.health,
                 p.dead,
                 p.pinned,
+                p.out as i32,
                 p.body.wall_jumps,
                 p.arms.weapon as i32,
                 p.arms.cooldown,
@@ -441,6 +508,8 @@ impl World {
                     r
                 }
                 Some(_) => Input::default(),
+                // a seat left empty takes no record
+                None if self.players[id].out => Input::default(),
                 None => given.next().copied().unwrap_or_default(),
             };
             records.push(r);
@@ -457,6 +526,9 @@ impl World {
                 p.hit_mark = (p.hit_mark - 1).max(0);
                 p.kill_mark = (p.kill_mark - 1).max(0);
                 p.flash = (p.flash - 1).max(0);
+                if p.out {
+                    continue;
+                }
                 if p.dead > 0 {
                     p.dead -= 1;
                     if p.dead == 0 {
@@ -485,7 +557,19 @@ impl World {
                     p.events = mover.tick(&mut p.body, input, from, p.aim.yaw);
                 }
                 p.top_speed = p.top_speed.max(p.body.speed());
+                p.since_trick = p.since_trick.saturating_add(1);
+                if p.events.wall_jumped || p.events.slid || p.events.slide_jumped {
+                    p.since_trick = 0;
+                }
+                p.shooting.ticks += 1;
+                if p.body.speed() >= TUNING.run {
+                    p.shooting.fast_ticks += 1;
+                }
                 if let Some(s) = p.arms.tick(input) {
+                    if s.weapon.swing().is_none() {
+                        let band = p.band();
+                        p.shooting.fired[band] += 1;
+                    }
                     shots.push((id, s));
                 }
             }
@@ -519,6 +603,10 @@ impl World {
             b.ticks -= 1;
         }
         self.bursts.retain(|b| b.ticks > 0);
+        for m in &mut self.head_marks {
+            m.ticks -= 1;
+        }
+        self.head_marks.retain(|m| m.ticks > 0);
         self.tick += 1;
     }
 
@@ -589,6 +677,7 @@ impl World {
         let p = &self.players[id];
         let (yaw, pitch) = (p.aim.yaw, p.aim.pitch);
         let from = muzzle(p.eye_now(), yaw, pitch);
+        let p_band = p.band();
         let salt = (self.tick as u32).wrapping_mul(31).wrapping_add(id as u32);
         for d in weapons::pellets(g, yaw, pitch, salt) {
             if self.flying.len() >= FLYING_MOST {
@@ -602,6 +691,8 @@ impl World {
                 velocity: d.scale(f.speed).add(v3(0, f.lift, 0)),
                 age: 0,
                 bounces: f.bounces,
+                band: p_band as u8,
+                scored: false,
             });
         }
     }
@@ -639,6 +730,10 @@ impl World {
                     let hit = q.at.add(d.scale(at));
                     let dmg = q.weapon.stats().damage;
                     self.hurt(q.owner, who, dmg);
+                    if who != q.owner && !q.scored {
+                        self.players[q.owner].shooting.hit[q.band as usize] += 1;
+                        q.scored = true;
+                    }
                     if f.pins > 0 && who < self.players.len() {
                         let behind = weapons::wall_distance(&self.map, scratch, hit, d, weapons::PIN_BEHIND);
                         if behind < weapons::PIN_BEHIND && self.players[who].alive() {
@@ -659,7 +754,11 @@ impl World {
                         q.at = wall.end.add(n.scale(ONE / 100));
                         q.bounces -= 1;
                     } else if let Some(b) = f.blast {
-                        self.burst(q.owner, wall.end.add(n.scale(ONE / 50)), &b, None, scratch);
+                        if self.burst(q.owner, wall.end.add(n.scale(ONE / 50)), &b, None, scratch)
+                            && !q.scored
+                        {
+                            self.players[q.owner].shooting.hit[q.band as usize] += 1;
+                        }
                         gone = true;
                     } else {
                         self.mark(wall.end, n);
@@ -671,7 +770,9 @@ impl World {
             }
             if !gone && f.fuse > 0 && q.age >= f.fuse {
                 if let Some(b) = f.blast {
-                    self.burst(q.owner, q.at, &b, None, scratch);
+                    if self.burst(q.owner, q.at, &b, None, scratch) && !q.scored {
+                        self.players[q.owner].shooting.hit[q.band as usize] += 1;
+                    }
                 }
                 gone = true;
             }
@@ -688,7 +789,9 @@ impl World {
     /// how near its surface is, `by`'s own at 30% (CS-Q16), and a push away
     /// from it on every player, its maker too: the weapon jump. `spared`
     /// took the direct hit already.
-    fn burst(&mut self, by: usize, at: V3, b: &Blast, spared: Option<usize>, scratch: &mut Scratch) {
+    /// Whether it hurt any body but its maker's.
+    fn burst(&mut self, by: usize, at: V3, b: &Blast, spared: Option<usize>, scratch: &mut Scratch) -> bool {
+        let mut hurt_another = false;
         self.bursts.push(Burst {
             at,
             radius: b.outer,
@@ -736,8 +839,10 @@ impl World {
             }
             if dmg > 0 {
                 self.hurt(by, k, dmg);
+                hurt_another |= k != by;
             }
         }
+        hurt_another
     }
 
     /// A melee weapon's use: a swing that carries you on a little, the
@@ -861,11 +966,23 @@ impl World {
             (p.body.origin.add(v3(0, p.body.eye(), 0)), p.aim.yaw, p.aim.pitch)
         };
         let mut targets = self.targets(id, false);
+        let band = self.players[id].band();
+        let mut landed = false;
         let from = muzzle(eye, yaw, pitch);
         let salt = (self.tick as u32).wrapping_mul(31).wrapping_add(id as u32);
         for d in weapons::pellets(g, yaw, pitch, salt) {
             let (hits, stop) = weapons::cast(&self.map, scratch, eye, d, g.range, &targets, g.pierce);
+            landed |= !hits.is_empty();
             for h in &hits {
+                if h.head {
+                    if let Some(t) = targets[h.who] {
+                        self.head_marks.push(HeadMark {
+                            at: t.head,
+                            by: id,
+                            ticks: HEAD_MARK,
+                        });
+                    }
+                }
                 let dmg = weapons::damage(g, s.charged, h.head);
                 if self.hurt(id, h.who, dmg) {
                     targets[h.who] = None;
@@ -883,6 +1000,9 @@ impl World {
                 self.mark(end, d.neg());
             }
         }
+        if landed {
+            self.players[id].shooting.hit[band] += 1;
+        }
         let p = &mut self.players[id];
         if g.kick > 0 && !p.body.on_ground {
             // the shotgun's jump: pushed back along the aim, so a shot at the
@@ -895,11 +1015,10 @@ impl World {
     /// tick, with the mouse movement not yet given to a tick already turned.
     pub fn camera(&self, id: usize, alpha: Fx, pending: Mouse, aspect: Fx) -> Camera {
         let p = &self.players[id];
-        camera::eye_view(
-            p.eye(alpha),
-            p.aim.turned(pending),
-            camera::vertical_fov(self.fov, aspect),
-        )
+        // the view tips up with a shot's kick, drawn only (hands.rs)
+        let mut aim = p.aim.turned(pending);
+        aim.pitch = (aim.pitch + crate::hands::view_kick(&p.arms)).min(camera::PITCH_MAX);
+        camera::eye_view(p.eye(alpha), aim, camera::vertical_fov(self.fov, aspect))
     }
 
     /// The moving things, seen by seat `me`: the other players, the straw
@@ -909,8 +1028,21 @@ impl World {
         let (pal, ink) = (&look.palette, look.ink());
         for (k, p) in self.players.iter().enumerate() {
             if k != me && p.alive() {
-                let feet = p.prev.lerp(p.body.origin, alpha);
-                draw_figure(out, feet, p.aim.yaw, p.body.ducked, p.flash > 0, pal, ink);
+                // M6: each seat in its skin, holding its weapon as it
+                // holds it, legs in stride
+                let figure = crate::skins::Figure {
+                    skin: crate::skins::Skin::of_seat(k),
+                    feet: p.prev.lerp(p.body.origin, alpha),
+                    yaw: p.aim.yaw,
+                    pitch: p.aim.pitch,
+                    ducked: p.body.ducked,
+                    flashed: p.flash > 0,
+                    speed: p.body.speed(),
+                    on_ground: p.body.on_ground,
+                    moment: (self.tick as i32).wrapping_mul(ONE).wrapping_add(alpha),
+                    arms: Some((&p.arms, p.swing)),
+                };
+                crate::skins::draw(out, &figure, look);
             }
         }
         for d in &self.dummies {
@@ -947,10 +1079,28 @@ impl World {
                 out.solid(Mesh::Cube, bar(from, h.at, ONE * 2 / 100), rgb(pal.wood), 0);
             }
         }
+        // the X on a head your shot struck, square to your view, fading
+        let eye = self.players[me].eye(alpha);
+        for m in self.head_marks.iter().filter(|m| m.by == me) {
+            let to = m.at.sub(eye).norm();
+            let right = crate::geom::v3(-to.z, 0, to.x).norm();
+            let up = right.cross(to);
+            let fade = ONE * m.ticks / HEAD_MARK;
+            let arm = ONE * 32 / 100;
+            for (a, b) in [
+                (right.add(up), right.neg().sub(up)),
+                (right.sub(up), right.neg().add(up)),
+            ] {
+                let from = m.at.add(a.scale(arm)).sub(to.scale(ONE / 3));
+                let till = m.at.add(b.scale(arm)).sub(to.scale(ONE / 3));
+                out.glow(Mesh::Cube, bar(from, till, ONE * 5 / 100), rgb(pal.stroke), fade);
+            }
+        }
         let p = &self.players[me];
         if hands && p.alive() {
             let aim = p.aim.turned(pending);
-            draw_gun(out, p.eye(alpha), aim.yaw, aim.pitch, p, pal);
+            let moment = (self.tick as i32).wrapping_mul(ONE).wrapping_add(alpha);
+            crate::hands::draw_hands(out, p.eye(alpha), aim.yaw, aim.pitch, p, moment, pal);
         }
     }
 }
@@ -1000,41 +1150,6 @@ fn bar(a: V3, b: V3, thick: Fx) -> Affine {
         .then(&Affine::scale(v3(thick, thick, len)))
 }
 
-/// The bot's figure (M6 brings the skins): a dark body, a pale head under
-/// a tall hat, gone pale for a moment when hit.
-pub(crate) fn draw_figure(
-    out: &mut Shapes,
-    feet: V3,
-    yaw: i32,
-    ducked: bool,
-    flashed: bool,
-    pal: &Palette,
-    ink: Rgb,
-) {
-    let k = if ducked { ONE * 62 / 100 } else { ONE };
-    let turn = Affine::translate(feet).then(&Affine::rot_y(yaw));
-    let colour = |c: [i32; 3]| if flashed { rgb(pal.flash) } else { rgb(c) };
-    let parts = [
-        // T5: as wide as the hit envelope allows (the body 0.92 of its 0.96 m,
-        // the head 0.52 of 0.56), and no hat above it, which a shot would
-        // pass through
-        // (a faceted ball fills its box; the capsule mesh is only 0.36 of it
-        // across, which drew the body a third as wide as meant, R6.2)
-        (Mesh::Facet, 72, [92, 140, 66], pal.figure),
-        (Mesh::Facet, 165, [52, 54, 52], pal.head),
-    ];
-    for (mesh, y, size, c) in parts {
-        let a = turn
-            .then(&Affine::translate(v3(0, fx::mul(y * ONE / 100, k), 0)))
-            .then(&Affine::scale(v3(
-                size[0] * ONE / 100,
-                fx::mul(size[1] * ONE / 100, k),
-                size[2] * ONE / 100,
-            )));
-        out.inked(mesh, a, colour(c), ink);
-    }
-}
-
 /// A straw target on its post, lying on its back while down.
 pub(crate) fn draw_dummy(out: &mut Shapes, d: &Dummy, pal: &Palette, ink: Rgb) {
     let base = if d.down > 0 {
@@ -1058,141 +1173,6 @@ pub(crate) fn draw_dummy(out: &mut Shapes, d: &Dummy, pal: &Palette, ink: Rgb) {
             .then(&Affine::translate(v3(cm(at[0]), cm(at[1]), cm(at[2]))))
             .then(&Affine::scale(v3(cm(size[0]), cm(size[1]), cm(size[2]))));
         out.inked(mesh, a, rgb(c), ink);
-    }
-}
-
-/// One part of a weapon in the hands' frame: its mesh, centre, size and
-/// colour, in centimetres, x right, y up, z back toward the eye.
-type GunPart = (Mesh, [i32; 3], [i32; 3], [i32; 3]);
-
-/// A weapon's parts: the true ones in steel, wood and brass, the painted
-/// ones in the painted palette (the Roster page).
-fn gun_parts(g: Weapon, pal: &Palette) -> Vec<GunPart> {
-    let (steel, dark, wood, brass) = (pal.steel, pal.dark_steel, pal.wood, pal.brass);
-    let (bone, blue, ochre, umber, red) = (pal.bone, pal.blue, pal.ochre, pal.umber, pal.stroke);
-    match g {
-        Weapon::Pistol => vec![
-            (Mesh::Cube, [0, 2, -6], [4, 4, 18], steel),
-            (Mesh::Cube, [0, -5, 0], [3, 9, 4], dark),
-        ],
-        Weapon::Shotgun => vec![
-            (Mesh::Cube, [0, 2, -28], [3, 3, 60], steel),
-            (Mesh::Cube, [0, -1, -22], [3, 3, 44], dark),
-            (Mesh::Cube, [0, -1, -30], [5, 5, 12], wood),
-            (Mesh::Cube, [0, 0, 2], [5, 7, 14], steel),
-            (Mesh::Cube, [0, -3, 20], [5, 8, 24], wood),
-        ],
-        Weapon::MachinePistol => vec![
-            (Mesh::Cube, [0, 1, -8], [5, 6, 22], dark),
-            (Mesh::Cube, [0, 2, -24], [2, 2, 10], steel),
-            (Mesh::Cube, [0, -8, -6], [3, 12, 3], steel),
-            (Mesh::Cube, [0, -6, 2], [3, 8, 4], dark),
-        ],
-        Weapon::Rifle => vec![
-            (Mesh::Cube, [0, 3, -40], [2, 2, 70], steel),
-            (Mesh::Cube, [0, 1, -2], [4, 6, 16], brass),
-            (Mesh::Cube, [0, 0, -25], [4, 4, 25], wood),
-            (Mesh::Cube, [0, -2, 20], [5, 9, 26], wood),
-            (Mesh::Cube, [0, -6, 0], [1, 5, 8], steel),
-        ],
-        Weapon::Pincel => vec![
-            (Mesh::Cube, [0, 2, -35], [3, 3, 60], bone),
-            (Mesh::Cube, [0, -1, 10], [6, 7, 22], blue),
-            (Mesh::Cube, [0, 4, -20], [4, 2, 12], ochre),
-            (Mesh::Facet, [0, 2, -68], [5, 5, 8], umber),
-            (Mesh::Facet, [0, 2, -74], [3, 3, 5], red),
-        ],
-        // a fat tube over a drum, drawn true
-        Weapon::Drum => vec![
-            (Mesh::Cube, [0, 2, -28], [6, 6, 36], dark),
-            (Mesh::Cyl, [0, -5, -16], [10, 7, 10], steel),
-            (Mesh::Cube, [0, -6, 0], [3, 9, 4], wood),
-            (Mesh::Cube, [0, 0, 4], [4, 6, 10], wood),
-        ],
-        // a painted blunderbuss: a flared mouth and a blue stock
-        Weapon::Trabuco => vec![
-            (Mesh::Cube, [0, 2, -30], [4, 4, 46], umber),
-            (Mesh::Facet, [0, 2, -54], [11, 11, 6], ochre),
-            (Mesh::Cube, [0, 2, -14], [5, 5, 3], bone),
-            (Mesh::Cube, [0, -2, 10], [6, 8, 24], blue),
-        ],
-        // a painted tube with horns
-        Weapon::Toro => vec![
-            (Mesh::Cube, [0, 3, -30], [7, 7, 46], red),
-            (Mesh::Facet, [0, 3, -54], [9, 9, 4], umber),
-            (Mesh::Cube, [5, 9, -48], [2, 7, 2], bone),
-            (Mesh::Cube, [-5, 9, -48], [2, 7, 2], bone),
-            (Mesh::Cube, [0, -6, 0], [4, 10, 5], umber),
-        ],
-        // a painted bell on a handle
-        Weapon::Campana => vec![
-            (Mesh::Cone, [0, 0, -30], [16, 15, 16], brass),
-            (Mesh::Facet, [0, -7, -30], [4, 4, 4], dark),
-            (Mesh::Cube, [0, -4, -6], [4, 4, 34], wood),
-            (Mesh::Cube, [0, -8, 8], [4, 10, 5], umber),
-        ],
-        // painted planes stuck together
-        Weapon::Collage => vec![
-            (Mesh::Cube, [0, 2, -14], [5, 6, 26], blue),
-            (Mesh::Cube, [2, 5, -20], [3, 4, 10], ochre),
-            (Mesh::Cube, [-1, -1, -28], [4, 3, 12], red),
-            (Mesh::Cube, [0, 3, -32], [2, 2, 8], bone),
-            (Mesh::Cube, [0, -6, 0], [4, 9, 5], umber),
-        ],
-        Weapon::Katana => vec![
-            (Mesh::Cube, [0, 2, -50], [1, 4, 80], steel),
-            (Mesh::Cube, [0, 2, -9], [7, 7, 1], brass),
-            (Mesh::Cube, [0, 2, 2], [3, 3, 20], dark),
-        ],
-        Weapon::Navaja => vec![
-            (Mesh::Cube, [0, 2, -17], [1, 3, 16], steel),
-            (Mesh::Cube, [0, 1, -8], [3, 4, 2], brass),
-            (Mesh::Cube, [0, 0, 0], [3, 4, 14], wood),
-        ],
-        // a painted scythe: a long shaft, the blade across its end
-        Weapon::Guadana => vec![
-            (Mesh::Cube, [0, 0, -34], [3, 3, 90], umber),
-            (Mesh::Cube, [-16, 6, -78], [34, 3, 5], bone),
-            (Mesh::Cube, [0, 0, 6], [4, 4, 8], ochre),
-        ],
-    }
-}
-
-/// The weapon in the hands: below and right of the eye, kicked back for a
-/// moment after a shot, lowered while reloading or raising; a melee
-/// weapon sweeps right to left through its swing, and thrusts in a lunge.
-fn draw_gun(out: &mut Shapes, eye: V3, yaw: i32, pitch: i32, p: &Player, pal: &Palette) {
-    let a = &p.arms;
-    let frame = Affine::translate(eye).then(&Affine::looking(facing(yaw, pitch)));
-    let cm = |c: i32| c * ONE / 100;
-    let back = cm(12) * a.recoil / RECOIL;
-    let low = if a.reloading > 0 || a.raise > 0 { cm(8) } else { 0 };
-    let mut hold = frame.then(&Affine::translate(v3(cm(18), -cm(16) - low, -cm(42) + back)));
-    if let Some(s) = p.swing {
-        let sw = s.weapon.swing().expect("a swing is a melee weapon's");
-        if s.lunge {
-            hold = hold.then(&Affine::translate(v3(-cm(10), cm(4), -cm(20))));
-        } else {
-            // from 60° right to 60° left over the swing's ticks
-            let along = ONE * s.age.min(sw.until) / sw.until.max(1);
-            let turn = fx::deg(60) - fx::mul(fx::deg(120), along);
-            hold = hold.then(&Affine::rot_y(turn));
-        }
-    }
-    for (mesh, at, size, colour) in gun_parts(a.weapon, pal) {
-        let part = hold
-            .then(&Affine::translate(v3(cm(at[0]), cm(at[1]), cm(at[2]))))
-            .then(&Affine::scale(v3(cm(size[0]), cm(size[1]), cm(size[2]))));
-        // no ink: an outline sized for figures across the room is a black
-        // band half a metre from the eye (R5.4)
-        out.solid(mesh, part, rgb(colour), 0);
-    }
-    if a.recoil > RECOIL - 2 {
-        // the flash at the muzzle
-        let tip = hold
-            .then(&Affine::translate(v3(0, cm(2), -cm(70))))
-            .then(&Affine::scale(v3(cm(12), cm(12), cm(12))));
-        out.glow(Mesh::Sphere, tip, rgb(pal.flash), ONE);
     }
 }
 

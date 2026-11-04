@@ -157,6 +157,19 @@ impl Versus {
         }
     }
 
+    /// The host switches a free seat's bot on or off (in the lobby only).
+    pub fn toggle_bot(&mut self, seat: usize) -> bool {
+        match &mut self.stage {
+            Stage::Lobby(n) => n.toggle_bot(seat),
+            Stage::Match(_) => false,
+        }
+    }
+
+    /// The seats left empty, as this browser knows.
+    pub fn empty(&self) -> Seats {
+        self.links().empty
+    }
+
     /// Which seats people hold, as this browser knows.
     pub fn seats(&self) -> Seats {
         match &self.stage {
@@ -193,7 +206,7 @@ impl Versus {
         }
         let started = match &mut self.stage {
             Stage::Lobby(n) => match n.message(peer, text) {
-                Some(Event::Start { seats }) => Some(seats),
+                Some(Event::Start { seats, empty }) => Some((seats, empty)),
                 _ => None,
             },
             Stage::Match(s) => {
@@ -202,8 +215,8 @@ impl Versus {
             }
         };
         match started {
-            Some(seats) => {
-                self.begin(seats);
+            Some((seats, empty)) => {
+                self.begin(seats, empty);
                 true
             }
             None => false,
@@ -219,19 +232,24 @@ impl Versus {
         if !self.host || self.error.is_some() {
             return false;
         }
-        let seats = n.start();
-        self.begin(seats);
+        let (seats, empty) = n.start();
+        self.begin(seats, empty);
         true
     }
 
     /// From the lobby to the match, on the world every browser builds alike.
-    fn begin(&mut self, seats: Seats) {
+    fn begin(&mut self, seats: Seats, empty: Seats) {
         let links = match &mut self.stage {
             Stage::Lobby(n) => std::mem::replace(n, Net::new(self.host, "")),
             Stage::Match(_) => return,
         };
         let Some(seat) = links.seat else { return };
-        self.stage = Stage::Match(Box::new(Rollback::new(links, seat, seats, World::online(seats))));
+        self.stage = Stage::Match(Box::new(Rollback::new(
+            links,
+            seat,
+            seats,
+            World::online(seats, empty),
+        )));
     }
 
     /// A guest that has not heard the host for `TIMEOUT_US` has lost it.

@@ -744,16 +744,64 @@ fn the_same_records_with_shots_give_the_same_world() {
 }
 
 #[test]
-fn the_drawn_bot_and_straw_target_stay_inside_the_hit_envelope() {
-    // CS-5: nothing solid drawn outside what a shot meets: within the body's
-    // radius across, and no higher than the top of the head
+fn every_skin_and_the_straw_target_stay_inside_the_hit_envelope() {
+    // CS-5: nothing of a body drawn outside what a shot meets: within the
+    // body's radius across, and no higher than the top of the head. Each
+    // skin is drawn standing and in stride, looking level, up and down,
+    // without its weapon (only the held weapon may reach out)
     use crate::render::Pass;
+    use crate::skins::{draw, Figure, SKINS};
     use crate::weapons::{BODY_R, HEAD_R};
     let look = crate::look::Look::parse(include_str!("../../../../data/look.json")).unwrap();
+    let top = ONE * 165 / 100 + HEAD_R;
+    let table = crate::prim::MeshTable::default();
+    let check = |shapes: &crate::render::Shapes, what: &str| -> Fx {
+        let mut widest = 0;
+        for sh in shapes.list.iter().filter(|s| s.pass == Pass::Solid) {
+            let v = table.vertices(sh.mesh);
+            for p in v.chunks(crate::prim::VERTEX_VALUES) {
+                let at = sh.at.apply(v3(p[0], p[1], p[2]));
+                widest = widest.max(at.len_xz());
+                assert!(
+                    at.len_xz() <= BODY_R,
+                    "{what}: a part reaches {} out",
+                    fx::decimal(at.len_xz(), 3)
+                );
+                assert!(at.y <= top, "{what}: a part reaches {} up", fx::decimal(at.y, 3));
+            }
+        }
+        widest
+    };
+    for skin in SKINS {
+        for pitch in [0, crate::camera::PITCH_MAX, crate::camera::PITCH_MIN] {
+            // 7 ticks is the stride's widest: sin(7 × 13°) ≈ 1
+            for (moment, ground) in [(0, true), (ONE * 7, true), (ONE * 21, true), (0, false)] {
+                let mut shapes = crate::render::Shapes::default();
+                let f = Figure {
+                    skin,
+                    feet: V3::ZERO,
+                    yaw: 0,
+                    pitch,
+                    ducked: false,
+                    flashed: false,
+                    speed: TUNING.run,
+                    on_ground: ground,
+                    moment,
+                    arms: None,
+                };
+                draw(&mut shapes, &f, &look);
+                let widest = check(&shapes, &format!("{skin:?} pitch {pitch} at {moment}"));
+                // and each fills most of it, so it reads as wide as it is hit
+                // (R6.2): at least 0.36 m out
+                assert!(
+                    widest >= ONE * 36 / 100,
+                    "{skin:?} reaches only {}",
+                    fx::decimal(widest, 3)
+                );
+            }
+        }
+    }
     let mut shapes = crate::render::Shapes::default();
-    draw_figure(&mut shapes, V3::ZERO, 0, false, false, &look.palette, look.ink());
-    // the bot alone must fill most of the envelope (R6.2)
-    let bot_parts = shapes.list.len();
     let dummy = Dummy {
         feet: V3::ZERO,
         health: HEALTH,
@@ -761,37 +809,7 @@ fn the_drawn_bot_and_straw_target_stay_inside_the_hit_envelope() {
         flash: 0,
     };
     draw_dummy(&mut shapes, &dummy, &look.palette, look.ink());
-    let top = ONE * 165 / 100 + HEAD_R;
-    // every vertex of every solid part, where it is drawn: the meshes' own
-    // shapes, not their boxes (the capsule fills a third of its box, R6.2)
-    let table = crate::prim::MeshTable::default();
-    let mut widest = 0;
-    for (k, sh) in shapes
-        .list
-        .iter()
-        .enumerate()
-        .filter(|(_, s)| s.pass == Pass::Solid)
-    {
-        let v = table.vertices(sh.mesh);
-        for p in v.chunks(crate::prim::VERTEX_VALUES) {
-            let at = sh.at.apply(v3(p[0], p[1], p[2]));
-            if k < bot_parts {
-                widest = widest.max(at.len_xz());
-            }
-            assert!(
-                at.len_xz() <= BODY_R,
-                "a part reaches {} out",
-                fx::decimal(at.len_xz(), 3)
-            );
-            assert!(at.y <= top, "a part reaches {} up", fx::decimal(at.y, 3));
-        }
-    }
-    // and the bot fills most of it: its body at least 0.4 m out
-    assert!(
-        widest >= ONE * 4 / 10,
-        "the widest part reaches only {}",
-        fx::decimal(widest, 3)
-    );
+    check(&shapes, "straw target");
 }
 
 // ---- M3: projectiles, bursts and melee -------------------------------------
@@ -1019,6 +1037,8 @@ fn rocket_at_the_player(w: &mut World) {
         velocity: v3(0, 0, int(20)),
         age: 0,
         bounces: 0,
+        band: 0,
+        scored: false,
     });
 }
 
@@ -1157,4 +1177,71 @@ fn a_drum_grenade_that_meets_a_body_takes_its_ninety_and_not_its_burst_as_well()
     w.step(&[fire()]);
     run(&mut w, Input::default(), 20);
     assert_eq!(w.dummies[0].health, HEALTH - 90);
+}
+
+// ---- CS-Q22: shooting by speed ---------------------------------------------
+
+#[test]
+fn a_shot_is_counted_in_the_band_of_how_fast_you_were_going_and_a_hit_with_it() {
+    // standing, a pistol at the straw head 20 m off: band 0, a hit
+    let mut w = settled(Bot::Moves);
+    w.step(&[fire()]);
+    let sh = w.players[0].shooting;
+    assert_eq!((sh.fired, sh.hit), ([1, 0, 0, 0], [1, 0, 0, 0]));
+    // at 9 m/s in the air (band 2; on the ground, friction would take
+    // 0.9 m/s off before the shot, leaving band 1), aimed at the sky: a miss
+    let mut w = settled(Bot::Moves);
+    w.players[0].body.origin.y = int(3);
+    w.players[0].body.on_ground = false;
+    w.players[0].body.velocity = v3(0, 0, -int(9));
+    w.players[0].aim.pitch = crate::camera::PITCH_MAX;
+    w.step(&[fire()]);
+    let sh = w.players[0].shooting;
+    assert_eq!((sh.fired, sh.hit), ([0, 0, 1, 0], [0, 0, 0, 0]));
+}
+
+#[test]
+fn within_half_a_second_of_a_slide_a_shot_is_the_fourth_band_whatever_the_speed() {
+    let mut p = Player::at((V3::ZERO, 0));
+    assert_eq!(p.band(), 0);
+    p.body.velocity = v3(int(5), 0, 0);
+    assert_eq!(p.band(), 1);
+    p.since_trick = BAND_TRICK_TICKS - 1;
+    assert_eq!(p.band(), 3);
+    p.since_trick = BAND_TRICK_TICKS;
+    assert_eq!(p.band(), 1);
+}
+
+#[test]
+fn a_rockets_hit_counts_in_the_band_it_was_fired_from() {
+    let mut w = settled(Bot::Moves);
+    holding(&mut w, Weapon::Toro);
+    w.players[0].aim.pitch = pitch_at(110);
+    w.step(&[fire()]);
+    run(&mut w, Input::default(), 70);
+    let sh = w.players[0].shooting;
+    assert_eq!(
+        (sh.fired[0], sh.hit[0]),
+        (1, 1),
+        "fired standing, felled the target"
+    );
+}
+
+#[test]
+fn a_headshot_leaves_an_x_on_the_head_for_the_shooter_and_the_kick_never_moves_the_aim() {
+    let mut w = settled(Bot::Moves);
+    let pitch = w.players[0].aim.pitch;
+    w.step(&[fire()]);
+    // level from the eye at the straw head 20 m off (see the pistol test)
+    assert_eq!(w.head_marks.len(), 1);
+    let m = w.head_marks[0];
+    assert_eq!((m.by, m.at), (0, v3(int(8), ONE * 165 / 100, -int(4))));
+    assert_eq!(w.players[0].aim.pitch, pitch, "the kick is drawn only");
+    run(&mut w, Input::default(), HEAD_MARK as usize);
+    assert!(w.head_marks.is_empty());
+    // a body shot leaves none
+    let mut w = settled(Bot::Moves);
+    w.players[0].aim.pitch = pitch_at(110);
+    w.step(&[fire()]);
+    assert!(w.head_marks.is_empty());
 }

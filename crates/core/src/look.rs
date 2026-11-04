@@ -99,6 +99,8 @@ pub struct Look {
     pub ink_bias_millionths: [i32; 2],
     pub palette: Palette,
     pub grit: Grit,
+    /// M6: each skin's colours by part name (`skins.rs`)
+    pub skins: std::collections::BTreeMap<String, std::collections::BTreeMap<String, [i32; 3]>>,
 }
 
 /// T4: the texture every map surface carries, so a face reads as tile, brick

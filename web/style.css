@@ -58,9 +58,11 @@ body[data-screen="title"] #overlay, body[data-screen="menu"] #overlay { align-it
 .field input[readonly] { font-family: ui-monospace, Menlo, monospace; letter-spacing: 0.04em; }
 #room-code { font-size: 26px; letter-spacing: 0.3em; text-align: center; }
 .field + button { margin-top: 4px; }
-/* the two copy buttons sit side by side, smaller than a screen's choices */
-.panel button[data-copies] { display: inline-block; width: calc(50% - 5px); padding: 8px 10px; font-size: 13px; letter-spacing: 0.06em; box-shadow: none; margin: 0 0 10px; }
-.panel button[data-copies] + button[data-copies] { margin-left: 10px; margin-top: 0; }
+/* the copy buttons and seat switches sit side by side, smaller than a
+   screen's choices */
+.panel .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; margin: 0 0 12px; }
+.panel .pair button.small { margin: 0; padding: 8px 10px; font-size: 13px; letter-spacing: 0.06em; box-shadow: none; }
+.panel .pair button.small:disabled { opacity: 0.55; cursor: default; }
 #online h1 { margin-bottom: 8px; }
 #online table.controls td { padding: 2px 0; }
 .setting output { min-width: 64px; text-align: right; font-weight: 700; color: var(--ochre); }

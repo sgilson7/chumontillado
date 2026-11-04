@@ -102,6 +102,7 @@ async function main() {
     node.dataset.action = a.name;
     node.dataset.value = a.value;
     if (a.copies) node.dataset.copies = a.copies;
+    if (a.small) node.classList.add("small");
     node.addEventListener("click", () => {
       // M4: a copy button puts a field's text on the clipboard, and says so
       // (the core then labels it Copied; where the clipboard is refused,
@@ -164,7 +165,20 @@ async function main() {
       box.append(row);
     });
     (p.fields || []).forEach((f) => box.append(field(f)));
-    (p.actions || []).forEach((a) => box.append(button(a)));
+    // small buttons that follow one another sit together, two to a row
+    let pair = null;
+    for (const a of p.actions || []) {
+      if (!a.small) {
+        pair = null;
+        box.append(button(a));
+        continue;
+      }
+      if (!pair) {
+        pair = make("div", undefined, "pair");
+        box.append(pair);
+      }
+      pair.append(button(a));
+    }
     if (p.rows) {
       if (p.rows_heading) box.append(make("h2", p.rows_heading));
       const table = make("table", undefined, "controls");

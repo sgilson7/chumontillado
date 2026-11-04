@@ -126,15 +126,17 @@ def run(p, engine, origin):
     typed.fill("#room-in", code.lower())
     typed.click('button[data-action="online.room"]')
 
-    you, player, bot = STRINGS["seat_you"], STRINGS["seat_player"], STRINGS["seat_bot"]
+    you = STRINGS["seat_you"]
+    held = STRINGS["seat_player_n"].replace("{n}", "3")
     try:
-        host.locator("#online table.controls tr", has_text=player).nth(1).wait_for(state="attached", timeout=TIMEOUT_MS * 2)
+        host.locator('button[data-action="online.bot"]', has_text=held).wait_for(state="attached", timeout=TIMEOUT_MS * 2)
         ok = True
     except Exception:
         ok = False
     check(ok, "both guests take a seat in the host's lobby")
-    rows = seat_rows(host)
-    check(len(rows) == 4 and you in rows[0] and bot in rows[3], f"the host holds seat 1 and seat 4 is a bot's ({rows})")
+    seats = [b.inner_text() for b in host.query_selector_all('button[data-action="online.bot"]')]
+    want = [STRINGS["seat_you_n"].replace("{n}", "1"), STRINGS["seat_player_n"].replace("{n}", "2"), held, STRINGS["seat_bot_on"].replace("{n}", "4")]
+    check([x.lower() for x in seats] == [x.lower() for x in want], f"the host holds seat 1, the guests 2 and 3, and seat 4 is a bot's ({seats})")
     for who, page in (("linked", linked), ("typed", typed)):
         try:
             page.locator("#online table.controls tr", has_text=you).wait_for(state="attached", timeout=TIMEOUT_MS)

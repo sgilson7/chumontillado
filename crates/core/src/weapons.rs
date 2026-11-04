@@ -210,6 +210,13 @@ const SWING: Swing = Swing {
     wall_jumps: 3,
 };
 
+/// The beat every semi-automatic gun's and melee weapon's interval, and
+/// every reload, is a whole or half of: 30 ticks, 120 beats a minute
+/// (CS-Q20: A; the journal's Feel page, claim 2). One edit changes the
+/// tempo. The automatics (machine pistol, Collage) fire a stream, not taps,
+/// and keep their rates.
+pub const BEAT: i32 = 30;
+
 /// Self-damage from your own burst, percent of what another body would take
 /// (CS-Q16: A).
 pub const SELF_PCT: i32 = 30;
@@ -226,7 +233,7 @@ pub const LUNGE_LIFT: Fx = int(4);
 /// A lunge's damage (the Roster page).
 pub const LUNGE_DAMAGE: i32 = 100;
 pub const LUNGE_TICKS: i32 = 18;
-pub const LUNGE_INTERVAL: i32 = 90;
+pub const LUNGE_INTERVAL: i32 = BEAT * 3;
 /// The guadaña's hook: how far it reaches, how hard it pulls (m/s²), and
 /// the ticks it holds at most.
 pub const HOOK_REACH: Fx = int(12);
@@ -243,9 +250,9 @@ pub const WEAPONS: [Stats; COUNT] = [
     Stats {
         name: "gun_pistol",
         damage: 25,
-        interval: 15,
+        interval: BEAT / 2,
         magazine: 8,
-        reload: 60,
+        reload: BEAT * 2,
         range: int(120),
         ..HITSCAN
     },
@@ -254,9 +261,9 @@ pub const WEAPONS: [Stats; COUNT] = [
         damage: 12,
         pellets: 8,
         spread: fx::deg(5),
-        interval: 55,
+        interval: BEAT * 2,
         magazine: 8,
-        reload: 90,
+        reload: BEAT * 3,
         range: int(40),
         kick: int(6),
         ..HITSCAN
@@ -268,24 +275,24 @@ pub const WEAPONS: [Stats; COUNT] = [
         interval: 5,
         auto: true,
         magazine: 30,
-        reload: 75,
+        reload: BEAT * 3,
         range: int(80),
         ..HITSCAN
     },
     Stats {
         name: "gun_rifle",
         damage: 70,
-        interval: 60,
+        interval: BEAT * 2,
         magazine: 5,
-        reload: 120,
+        reload: BEAT * 4,
         ..HITSCAN
     },
     Stats {
         name: "gun_pincel",
         damage: 40,
-        interval: 30,
+        interval: BEAT,
         magazine: 4,
-        reload: 120,
+        reload: BEAT * 4,
         charge: 60,
         charged_damage: 100,
         pierce: true,
@@ -313,9 +320,9 @@ pub const WEAPONS: [Stats; COUNT] = [
             ..FLIGHT
         }),
         damage: 90,
-        interval: 50,
+        interval: BEAT * 2,
         magazine: 6,
-        reload: 120,
+        reload: BEAT * 4,
         ..HITSCAN
     },
     Stats {
@@ -331,9 +338,9 @@ pub const WEAPONS: [Stats; COUNT] = [
         damage: 15,
         pellets: 7,
         spread: fx::deg(4),
-        interval: 67,
+        interval: BEAT * 2,
         magazine: 1,
-        reload: 45,
+        reload: BEAT * 2,
         ..HITSCAN
     },
     Stats {
@@ -352,9 +359,9 @@ pub const WEAPONS: [Stats; COUNT] = [
             ..FLIGHT
         }),
         damage: 100,
-        interval: 75,
+        interval: BEAT * 3,
         magazine: 3,
-        reload: 120,
+        reload: BEAT * 4,
         ..HITSCAN
     },
     Stats {
@@ -375,9 +382,9 @@ pub const WEAPONS: [Stats; COUNT] = [
             ..FLIGHT
         }),
         damage: 120,
-        interval: 100,
+        interval: BEAT * 3,
         magazine: 2,
-        reload: 120,
+        reload: BEAT * 4,
         ..HITSCAN
     },
     Stats {
@@ -394,7 +401,7 @@ pub const WEAPONS: [Stats; COUNT] = [
         interval: 20,
         auto: true,
         magazine: 12,
-        reload: 75,
+        reload: BEAT * 3,
         ..HITSCAN
     },
     // M3: the melee weapons (CS-Q7: A)
@@ -409,7 +416,7 @@ pub const WEAPONS: [Stats; COUNT] = [
             ..SWING
         }),
         damage: 50,
-        interval: 43,
+        interval: BEAT * 3 / 2,
         ..HITSCAN
     },
     Stats {
@@ -424,7 +431,7 @@ pub const WEAPONS: [Stats; COUNT] = [
             ..SWING
         }),
         damage: 35,
-        interval: 20,
+        interval: BEAT / 2,
         ..HITSCAN
     },
     Stats {
@@ -438,7 +445,7 @@ pub const WEAPONS: [Stats; COUNT] = [
             ..SWING
         }),
         damage: 70,
-        interval: 75,
+        interval: BEAT * 3,
         ..HITSCAN
     },
 ];
@@ -869,8 +876,8 @@ mod tests {
 
     #[test]
     fn the_numbers_are_the_rosters() {
-        // the Roster page: pistol 4/s, 8 rounds; shotgun 1.1/s, 8; machine
-        // pistol 12/s, 30; rifle 1/s, 5; Pincel 4
+        // the Roster page: pistol 4/s, 8 rounds; shotgun 1.1/s, 8, on the
+        // beat 1/s (CS-Q20); machine pistol 12/s, 30; rifle 1/s, 5; Pincel 4
         let rate = |g: Weapon| g.stats().interval;
         assert_eq!(
             (
@@ -879,7 +886,7 @@ mod tests {
                 rate(Weapon::MachinePistol),
                 rate(Weapon::Rifle)
             ),
-            (15, 55, 5, 60)
+            (15, 60, 5, 60)
         );
         let mag = |g: Weapon| g.stats().magazine;
         assert_eq!(ALL.map(mag)[..5], [8, 8, 30, 5, 4]);
@@ -944,5 +951,19 @@ mod tests {
         let o = v3(ONE * 56 / 100, ONE, 0);
         assert_eq!(meets(o, v3(0, 0, -ONE), &t, 0), None);
         assert!(meets(o, v3(0, 0, -ONE), &t, ONE * 15 / 100).is_some());
+    }
+
+    #[test]
+    fn every_tapped_interval_and_every_reload_is_a_whole_or_half_beat() {
+        // CS-Q20: A. A beat is 30 ticks (120 a minute), so a half beat is
+        // 15; the two automatics fire a stream and are left out
+        for g in ALL {
+            let st = g.stats();
+            if !st.auto {
+                assert_eq!(st.interval % 15, 0, "{:?} fires every {} ticks", g, st.interval);
+            }
+            assert_eq!(st.reload % 30, 0, "{:?} reloads in {} ticks", g, st.reload);
+        }
+        assert_eq!(BEAT, 30);
     }
 }

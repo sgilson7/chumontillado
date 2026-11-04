@@ -39,6 +39,9 @@ pub struct Action {
     /// clipboard; nothing goes through `act`)
     #[serde(skip_serializing_if = "String::is_empty")]
     pub copies: String,
+    /// M4: a small button beside others (the copy buttons, the seat switches)
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub small: bool,
 }
 
 /// M4: a box of text: a code or link to copy (`fixed`), or a box to type
@@ -139,6 +142,7 @@ fn action(g: &Game, name: &str, value: &str, label_key: &str, engage: bool) -> A
         engage,
         from: String::new(),
         copies: String::new(),
+        small: false,
     }
 }
 
@@ -149,6 +153,45 @@ fn field(g: &Game, id: &str, label: &str, value: &str, fixed: bool) -> Field {
         value: value.into(),
         fixed,
     }
+}
+
+/// CS-Q22: the shooting-by-speed card for seat `me`: hits of shots fired
+/// in each band of speed, time at run speed or more, and the best speed.
+fn shooting_panel(g: &Game) -> Panel {
+    let s = &g.strings;
+    let p = &g.view_world().players[g.me()];
+    let sh = &p.shooting;
+    let mut out = panel("shooting");
+    out.heading = s.get("shooting");
+    let pct = |a: i32, b: i32| if b > 0 { a * 100 / b } else { 0 };
+    out.rows = ["band_walk", "band_run", "band_fast", "band_trick"]
+        .iter()
+        .enumerate()
+        .map(|(k, key)| Row {
+            key: s.get(key),
+            does: if sh.fired[k] == 0 {
+                s.get("band_none")
+            } else {
+                s.get("band_count")
+                    .replace("{pct}", &pct(sh.hit[k], sh.fired[k]).to_string())
+                    .replace("{hit}", &sh.hit[k].to_string())
+                    .replace("{fired}", &sh.fired[k].to_string())
+            },
+        })
+        .collect();
+    out.rows.push(Row {
+        key: s.get("time_fast"),
+        does: s
+            .get("percent")
+            .replace("{n}", &pct(sh.fast_ticks, sh.ticks).to_string()),
+    });
+    out.rows.push(Row {
+        key: s.get("best_speed"),
+        does: s
+            .get("hud_speed")
+            .replace("{speed}", &world::speed_text(p.top_speed)),
+    });
+    out
 }
 
 /// M4: the online screen: hosting (the room code, the invite link, the
@@ -188,6 +231,7 @@ fn online_panel(g: &Game) -> Panel {
     // a copy button says Copied once its text is on the clipboard
     let copy = |id: &str, label: &str| Action {
         copies: id.into(),
+        small: true,
         ..action(g, "", "", if g.copied == id { "copied" } else { label }, false)
     };
     let mut copies = vec![copy("room-code", "copy_code")];
@@ -198,11 +242,32 @@ fn online_panel(g: &Game) -> Panel {
     }
     p.actions = copies;
     if v.host {
+        // the host's seats, two to a row: its own and each guest's say who
+        // holds them; each free one is a switch, a bot or empty (T10)
+        for k in 0..crate::online::SEATS {
+            let n = (k + 1).to_string();
+            let held = k == 0 || crate::online::holds(v.seats(), k);
+            let label = if k == 0 {
+                "seat_you_n"
+            } else if held {
+                "seat_player_n"
+            } else if crate::online::holds(v.empty(), k) {
+                "seat_bot_off"
+            } else {
+                "seat_bot_on"
+            };
+            p.actions.push(Action {
+                label: s.get(label).replace("{n}", &n),
+                small: true,
+                enabled: !held,
+                ..action(g, "online.bot", &k.to_string(), "", false)
+            });
+        }
         p.actions.push(action(g, "online.start", "", "start_match", true));
     }
     p.actions.push(leave);
-    // the seats, once this browser knows them
-    if v.host || v.seat().is_some() {
+    // a guest's seats, once it knows them (the host's are its switches)
+    if !v.host && v.seat().is_some() {
         p.rows_heading = s.get("seats");
         p.rows = (0..crate::online::SEATS)
             .map(|k| Row {
@@ -211,6 +276,8 @@ fn online_panel(g: &Game) -> Panel {
                     "seat_you"
                 } else if crate::online::holds(v.seats(), k) {
                     "seat_player"
+                } else if crate::online::holds(v.empty(), k) {
+                    "seat_empty"
                 } else {
                     "seat_bot"
                 }),
@@ -426,6 +493,8 @@ pub fn ui(g: &Game) -> Ui {
             p.rows_heading = g.strings.get("controls");
             p.rows = controls(g);
             panels.push(p);
+            // CS-Q22: A, the shooting card beside the pause
+            panels.push(shooting_panel(g));
         }
         Screen::Settings => {
             let mut p = panel("settings");
@@ -434,7 +503,16 @@ pub fn ui(g: &Game) -> Ui {
             p.actions = vec![action(g, "settings.back", "", "back", false)];
             panels.push(p);
         }
-        Screen::Online => panels.push(online_panel(g)),
+        Screen::Online => {
+            panels.push(online_panel(g));
+            // CS-Q22: A, and after an online match
+            if g.versus
+                .as_ref()
+                .is_some_and(|v| v.ended() && v.session().is_some())
+            {
+                panels.push(shooting_panel(g));
+            }
+        }
     }
     Ui {
         title: g.strings.get("title"),

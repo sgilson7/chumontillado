@@ -84,13 +84,19 @@ pub enum Msg {
     Welcome {
         seat: usize,
     },
-    /// host to everyone, before the match: which seats people hold
+    /// host to everyone, before the match: which seats people hold, and
+    /// which of the rest the host has left empty (no bot)
     Roster {
         seats: Seats,
+        #[serde(default)]
+        empty: Seats,
     },
-    /// host to everyone: the match begins, these seats held by people
+    /// host to everyone: the match begins, these seats held by people and
+    /// these left empty; bots play the others
     Start {
         seats: Seats,
+        #[serde(default)]
+        empty: Seats,
     },
     /// one seat's record for one tick
     Input {
@@ -151,6 +157,9 @@ pub struct Net {
     pub seat: Option<usize>,
     /// which seats people hold
     pub seats: Seats,
+    /// which seats the host has left empty: no bot plays them (the rest
+    /// that nobody holds are bots')
+    pub empty: Seats,
     /// the match has begun
     pub started: bool,
     /// this browser's checksums and the others', by tick, kept until each
@@ -176,6 +185,7 @@ pub enum Event {
     },
     Start {
         seats: Seats,
+        empty: Seats,
     },
     /// a guest left during the match (the host only): drop its seat
     Gone {
@@ -192,6 +202,7 @@ impl Net {
             others: BTreeMap::new(),
             seat: host.then_some(0),
             seats: if host { 1 } else { 0 },
+            empty: 0,
             started: false,
             mine: BTreeMap::new(),
             theirs: BTreeMap::new(),
@@ -272,8 +283,7 @@ impl Net {
             Some(Event::Gone { seat })
         } else {
             self.seats &= !(1 << seat);
-            let seats = self.seats;
-            self.broadcast(&Msg::Roster { seats }, None);
+            self.send_roster();
             None
         }
     }
@@ -300,8 +310,7 @@ impl Net {
                     o.seat = Some(seat);
                 }
                 self.send(peer, &Msg::Welcome { seat });
-                let seats = self.seats;
-                self.broadcast(&Msg::Roster { seats }, None);
+                self.send_roster();
             }
             _ => {
                 self.send(
@@ -315,13 +324,34 @@ impl Net {
         }
     }
 
-    /// The host starts the match with the seats held now.
-    pub fn start(&mut self) -> Seats {
+    /// The host tells everyone who holds which seat and which are empty.
+    fn send_roster(&mut self) {
+        // a seat a guest takes is no longer empty
+        self.empty &= !self.seats;
+        let (seats, empty) = (self.seats, self.empty);
+        self.broadcast(&Msg::Roster { seats, empty }, None);
+    }
+
+    /// The host switches the bot in a seat nobody holds on or off. Whether
+    /// it changed anything: a seat a person holds, or a match under way,
+    /// is not the host's to change.
+    pub fn toggle_bot(&mut self, seat: usize) -> bool {
+        if !self.host || self.started || seat == 0 || seat >= SEATS || holds(self.seats, seat) {
+            return false;
+        }
+        self.empty ^= 1 << seat;
+        self.send_roster();
+        true
+    }
+
+    /// The host starts the match with the seats held now, and those left
+    /// empty.
+    pub fn start(&mut self) -> (Seats, Seats) {
         self.started = true;
         self.status = PLAYING;
-        let seats = self.seats;
-        self.broadcast(&Msg::Start { seats }, None);
-        seats
+        let (seats, empty) = (self.seats, self.empty & !self.seats);
+        self.broadcast(&Msg::Start { seats, empty }, None);
+        (seats, empty)
     }
 
     /// Text from a browser. Anything that cannot be a message, or that no
@@ -385,8 +415,7 @@ impl Net {
                         return Some(Event::Gone { seat });
                     }
                     self.seats &= !(1 << seat);
-                    let seats = self.seats;
-                    self.broadcast(&Msg::Roster { seats }, None);
+                    self.send_roster();
                 }
                 None
             }
@@ -404,18 +433,20 @@ impl Net {
                 self.status = LOBBY;
                 None
             }
-            Msg::Roster { seats } if o.host && !self.host => {
+            Msg::Roster { seats, empty } if o.host && !self.host => {
                 self.seats = seats;
+                self.empty = empty;
                 None
             }
-            Msg::Start { seats } if o.host && !self.host => {
+            Msg::Start { seats, empty } if o.host && !self.host => {
                 if self.started || self.seat.is_none_or(|s| !holds(seats, s)) {
                     return None;
                 }
                 self.seats = seats;
+                self.empty = empty;
                 self.started = true;
                 self.status = PLAYING;
-                Some(Event::Start { seats })
+                Some(Event::Start { seats, empty })
             }
             Msg::Drop { seat, from: at } if o.host && !self.host => Some(Event::Drop { seat, from: at }),
             Msg::Input { seat, tick, input } => {
@@ -519,8 +550,14 @@ pub(crate) mod tests {
                 host: true,
             },
             Msg::Welcome { seat: 2 },
-            Msg::Roster { seats: 0b1011 },
-            Msg::Start { seats: 0b11 },
+            Msg::Roster {
+                seats: 0b1011,
+                empty: 0b0100,
+            },
+            Msg::Start {
+                seats: 0b11,
+                empty: 0b1000,
+            },
             Msg::Input {
                 seat: 3,
                 tick: 7,
@@ -656,5 +693,39 @@ pub(crate) mod tests {
         g.summed(60, 8);
         deliver(&mut g, A, &mut [(&mut host, HOST)]);
         assert_eq!(host.status, DESYNC);
+    }
+
+    #[test]
+    fn the_host_switches_a_free_seats_bot_off_and_on_and_a_guest_taking_it_fills_it() {
+        let mut host = Net::new(true, "b");
+        let mut g = Net::new(false, "b");
+        host.connected(A);
+        g.connected(HOST);
+        deliver(&mut g, A, &mut [(&mut host, HOST)]);
+        deliver(&mut host, HOST, &mut [(&mut g, A)]);
+        // the guest holds seat 1; seats 2 and 3 are free
+        assert!(host.toggle_bot(3));
+        assert_eq!(host.empty, 0b1000);
+        deliver(&mut host, HOST, &mut [(&mut g, A)]);
+        assert_eq!(g.empty, 0b1000, "every guest is told");
+        assert!(
+            !host.toggle_bot(1),
+            "a seat a person holds is not the host's to empty"
+        );
+        assert!(!host.toggle_bot(0));
+        assert!(!g.toggle_bot(2), "only the host switches");
+        assert!(host.toggle_bot(3));
+        assert_eq!(host.empty, 0);
+        // switched off again, then a second guest arrives and takes seat 2,
+        // the lowest free: seat 3 stays empty
+        host.toggle_bot(3);
+        host.toggle_bot(2);
+        let mut g2 = Net::new(false, "b");
+        host.connected(B);
+        g2.connected(HOST);
+        deliver(&mut g2, B, &mut [(&mut host, HOST)]);
+        assert_eq!((host.seats, host.empty), (0b0111, 0b1000));
+        assert_eq!(host.start(), (0b0111, 0b1000));
+        assert!(!host.toggle_bot(3), "not once the match is under way");
     }
 }

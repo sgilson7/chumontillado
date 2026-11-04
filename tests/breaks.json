@@ -156,8 +156,8 @@
   {
     "name": "M1 view: the pending mouse turns the frame's view",
     "file": "crates/core/src/world.rs",
-    "find": "            p.aim.turned(pending),",
-    "replace": "            p.aim,",
+    "find": "        let mut aim = p.aim.turned(pending);",
+    "replace": "        let mut aim = p.aim;",
     "test": "the_mouse_turns_the_view_on_the_frame_it_moves_before_any_tick_takes_it"
   },
   {
@@ -449,10 +449,10 @@
   },
   {
     "name": "T5 the drawn bot stays inside the envelope",
-    "file": "crates/core/src/world.rs",
-    "find": "        (Mesh::Facet, 72, [92, 140, 66], pal.figure),",
-    "replace": "        (Mesh::Facet, 72, [120, 140, 66], pal.figure),",
-    "test": "the_drawn_bot_and_straw_target_stay_inside_the_hit_envelope"
+    "file": "crates/core/src/skins.rs",
+    "find": "            p(Facet, [0, 128, 0], [80, 70, 56], \"black\"),",
+    "replace": "            p(Facet, [0, 128, 0], [120, 70, 56], \"black\"),",
+    "test": "every_skin_and_the_straw_target_stay_inside_the_hit_envelope"
   },
   {
     "name": "T6 the view carries the origin",
@@ -463,10 +463,10 @@
   },
   {
     "name": "R6.2 the bot's body is drawn as wide as meant",
-    "file": "crates/core/src/world.rs",
-    "find": "        (Mesh::Facet, 72, [92, 140, 66], pal.figure),",
-    "replace": "        (Mesh::Capsule, 72, [92, 140, 66], pal.figure),",
-    "test": "the_drawn_bot_and_straw_target_stay_inside_the_hit_envelope"
+    "file": "crates/core/src/skins.rs",
+    "find": "            p(Facet, [0, 128, 0], [80, 70, 56], \"black\"),",
+    "replace": "            p(Capsule, [0, 128, 0], [80, 70, 56], \"black\"),",
+    "test": "every_part_is_drawn_as_wide_as_it_says"
   },
   {
     "name": "M3 a burst's damage falls off",
@@ -527,22 +527,22 @@
   {
     "name": "M3 the katana's interval",
     "file": "crates/core/src/weapons.rs",
-    "find": "        damage: 50,\n        interval: 43,",
-    "replace": "        damage: 50,\n        interval: 30,",
-    "test": "a_held_katana_swings_every_forty_three_ticks_and_lunges_once_in_ninety"
+    "find": "        damage: 50,\n        interval: BEAT * 3 / 2,",
+    "replace": "        damage: 50,\n        interval: BEAT,",
+    "test": "a_held_katana_swings_every_forty_five_ticks_and_lunges_once_in_ninety"
   },
   {
     "name": "M3 a lunge waits ninety ticks",
     "file": "crates/core/src/arms.rs",
     "find": "                    Alt::Lunge => LUNGE_INTERVAL,",
     "replace": "                    Alt::Lunge => 30,",
-    "test": "a_held_katana_swings_every_forty_three_ticks_and_lunges_once_in_ninety"
+    "test": "a_held_katana_swings_every_forty_five_ticks_and_lunges_once_in_ninety"
   },
   {
     "name": "M3 the Trabuco holds one round",
     "file": "crates/core/src/weapons.rs",
-    "find": "        interval: 67,\n        magazine: 1,",
-    "replace": "        interval: 67,\n        magazine: 2,",
+    "find": "        interval: BEAT * 2,\n        magazine: 1,",
+    "replace": "        interval: BEAT * 2,\n        magazine: 2,",
     "test": "a_trabuco_reloads_after_its_one_shot"
   },
   {
@@ -842,8 +842,8 @@
   {
     "name": "M4 empty seats are bots",
     "file": "crates/core/src/world.rs",
-    "find": "                if !crate::online::holds(seats, s) {",
-    "replace": "                if s > 3 && !crate::online::holds(seats, s) {",
+    "find": "                } else if !crate::online::holds(seats, s) {",
+    "replace": "                } else if s > 3 && !crate::online::holds(seats, s) {",
     "test": "two_people_play_with_bots_in_the_empty_seats"
   },
   {
@@ -898,8 +898,8 @@
   {
     "name": "M4 the lobby shows empty seats as bots'",
     "file": "crates/core/src/api.rs",
-    "find": "                } else if crate::online::holds(v.seats(), k) {",
-    "replace": "                } else if k < 9 {",
+    "find": "            let held = k == 0 || crate::online::holds(v.seats(), k);",
+    "replace": "            let held = k < 9;",
     "test": "hosting_shows_the_room_code_and_an_invite_link_and_tells_the_transport_to_open_the_room"
   },
   {
@@ -915,5 +915,138 @@
     "find": "                self.open_room(false, &code);",
     "replace": "                let _ = code;",
     "test": "an_invite_link_joins_its_room_at_once_and_a_bad_code_is_refused_in_words"
+  },
+  {
+    "name": "CS-Q20 every tapped interval is on the beat",
+    "file": "crates/core/src/weapons.rs",
+    "find": "pub const BEAT: i32 = 30;",
+    "replace": "pub const BEAT: i32 = 32;",
+    "test": "every_tapped_interval_and_every_reload_is_a_whole_or_half_beat"
+  },
+  {
+    "name": "M4 the host switches a seat's bot",
+    "file": "crates/core/src/online.rs",
+    "find": "        self.empty ^= 1 << seat;",
+    "replace": "        self.empty ^= 0;",
+    "test": "the_host_switches_a_free_seats_bot_off_and_on_and_a_guest_taking_it_fills_it"
+  },
+  {
+    "name": "M4 a held seat is not the host's to empty",
+    "file": "crates/core/src/online.rs",
+    "find": "seat >= SEATS || holds(self.seats, seat) {",
+    "replace": "seat >= SEATS {",
+    "test": "the_host_switches_a_free_seats_bot_off_and_on_and_a_guest_taking_it_fills_it"
+  },
+  {
+    "name": "M4 a guest taking an empty seat fills it",
+    "file": "crates/core/src/online.rs",
+    "find": "        self.empty &= !self.seats;",
+    "replace": "        self.empty &= !0;",
+    "test": "the_host_switches_a_free_seats_bot_off_and_on_and_a_guest_taking_it_fills_it"
+  },
+  {
+    "name": "M4 an empty seat has nobody in it",
+    "file": "crates/core/src/world.rs",
+    "find": "                    p.out = true;",
+    "replace": "                    p.out = false;",
+    "test": "a_seat_the_host_left_empty_has_nobody_in_it_on_every_browser"
+  },
+  {
+    "name": "M4 the lobby's seat switch says what it does",
+    "file": "crates/core/src/api.rs",
+    "find": "            } else if crate::online::holds(v.empty(), k) {\n                \"seat_bot_off\"\n            } else {\n                \"seat_bot_on\"\n            };",
+    "replace": "            } else if crate::online::holds(v.empty(), k) {\n                \"seat_bot_on\"\n            } else {\n                \"seat_bot_on\"\n            };",
+    "test": "the_hosts_lobby_has_a_switch_for_each_free_seat_and_it_flips_the_seat_to_empty"
+  },
+  {
+    "name": "CS-Q22 a shot after a trick is the fourth band",
+    "file": "crates/core/src/world.rs",
+    "find": "        if self.since_trick < BAND_TRICK_TICKS {",
+    "replace": "        if false {",
+    "test": "within_half_a_second_of_a_slide_a_shot_is_the_fourth_band_whatever_the_speed"
+  },
+  {
+    "name": "CS-Q22 the fast band starts at the run speed",
+    "file": "crates/core/src/world.rs",
+    "find": "        } else if v >= TUNING.run {",
+    "replace": "        } else if v >= TUNING.run * 2 {",
+    "test": "a_shot_is_counted_in_the_band_of_how_fast_you_were_going_and_a_hit_with_it"
+  },
+  {
+    "name": "CS-Q22 a hitscan hit is counted",
+    "file": "crates/core/src/world.rs",
+    "find": "        if landed {\n            self.players[id].shooting.hit[band] += 1;",
+    "replace": "        if false {\n            self.players[id].shooting.hit[band] += 1;",
+    "test": "a_shot_is_counted_in_the_band_of_how_fast_you_were_going_and_a_hit_with_it"
+  },
+  {
+    "name": "CS-Q22 a projectile's hit is counted in its band",
+    "file": "crates/core/src/world.rs",
+    "find": "                        self.players[q.owner].shooting.hit[q.band as usize] += 1;\n                        q.scored = true;",
+    "replace": "                        self.players[q.owner].shooting.hit[q.band as usize] += 0;\n                        q.scored = true;",
+    "test": "a_rockets_hit_counts_in_the_band_it_was_fired_from"
+  },
+  {
+    "name": "CS-Q22 the card shows the counts",
+    "file": "crates/core/src/api.rs",
+    "find": "            does: if sh.fired[k] == 0 {",
+    "replace": "            does: if true {",
+    "test": "the_pause_shows_your_shooting_by_speed"
+  },
+  {
+    "name": "Feel the view kick settles",
+    "file": "crates/core/src/hands.rs",
+    "find": "    fx::deg(tenths) / 10 * a.recoil / RECOIL",
+    "replace": "    fx::deg(tenths) / 10",
+    "test": "the_view_kicks_with_a_shot_and_settles_over_the_kicks_ticks"
+  },
+  {
+    "name": "Feel the lever works between shots",
+    "file": "crates/core/src/hands.rs",
+    "find": "        p.work = hump(along(t, st.interval / 5, st.interval * 4 / 5));",
+    "replace": "        p.work = hump(along(t, 0, 1));",
+    "test": "the_lever_works_between_rifle_shots_and_is_home_when_it_can_fire_again"
+  },
+  {
+    "name": "Feel a reload drops the magazine",
+    "file": "crates/core/src/hands.rs",
+    "find": "        p.mag = hump(",
+    "replace": "        p.mag = 0 * hump(",
+    "test": "a_reload_drops_the_magazine_and_brings_it_back"
+  },
+  {
+    "name": "Feel no bob in the air",
+    "file": "crates/core/src/hands.rs",
+    "find": "    if on_ground && speed > 0 {",
+    "replace": "    if speed > 0 {",
+    "test": "a_still_player_holds_the_weapon_still_and_a_runner_bobs_it"
+  },
+  {
+    "name": "Feel a headshot leaves an X",
+    "file": "crates/core/src/world.rs",
+    "find": "                if h.head {",
+    "replace": "                if h.head && false {",
+    "test": "a_headshot_leaves_an_x_on_the_head_for_the_shooter_and_the_kick_never_moves_the_aim"
+  },
+  {
+    "name": "Feel the X fades",
+    "file": "crates/core/src/world.rs",
+    "find": "        self.head_marks.retain(|m| m.ticks > 0);",
+    "replace": "        self.head_marks.retain(|m| m.ticks > -100);",
+    "test": "a_headshot_leaves_an_x_on_the_head_for_the_shooter_and_the_kick_never_moves_the_aim"
+  },
+  {
+    "name": "M6 the seats wear the skins in turn",
+    "file": "crates/core/src/skins.rs",
+    "find": "pub const SKINS: [Skin; 4] = [Skin::Hidalgo, Skin::Infanta, Skin::Harlequin, Skin::Sordo];",
+    "replace": "pub const SKINS: [Skin; 4] = [Skin::Infanta, Skin::Hidalgo, Skin::Harlequin, Skin::Sordo];",
+    "test": "the_seats_wear_the_four_skins_in_turn"
+  },
+  {
+    "name": "M6 the stride stays inside the envelope",
+    "file": "crates/core/src/skins.rs",
+    "find": "pub const STRIDE: i32 = fx::deg(16);",
+    "replace": "pub const STRIDE: i32 = fx::deg(30);",
+    "test": "every_skin_and_the_straw_target_stay_inside_the_hit_envelope"
   }
 ]

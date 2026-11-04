@@ -16,12 +16,13 @@ tests/breaks.json is a list of objects:
 
 The file is restored after each break, whatever happens. The script exits
 non-zero when a break leaves its test passing, when the broken code does not
-compile (R6.5), when its text is no longer in its file (the break has
+compile (R6.5) or its test name matches no test (R9.8), when its text is no longer in its file (the break has
 rotted), or when the list is empty (a proof with nothing in it proves
 nothing). It is slow on a large list, so it runs outside
 the everyday check; run it after adding tests and before a handoff.
 """
 import json
+import re
 import pathlib
 import subprocess
 import sys
@@ -52,7 +53,12 @@ def main(words):
             )
         finally:
             path.write_text(original)
-        if run.returncode == 0:
+        if run.returncode == 0 and not any(m != "0" for m in re.findall(r"running (\d+) tests?", run.stdout)):
+            # a test name that matches no test runs nothing and passes: the
+            # row names a test that is gone (renamed), not a weak one (R9.8)
+            print(f"  NOTEST  {b['name']}: no test is named {b['test']}")
+            bad.append(b["name"])
+        elif run.returncode == 0:
             print(f"  MISSED  {b['name']}: {b['test']} still passes with the behaviour broken")
             bad.append(b["name"])
         elif "could not compile" in run.stderr:

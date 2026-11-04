@@ -86,6 +86,8 @@ fn four_seats_with_the_air_full_of_grenades_tick_in_well_under_a_millisecond() {
                 velocity: v3(int(k % 7 - 3), int(5), int(k % 5 - 2)),
                 age: 0,
                 bounces: 10_000,
+                band: 0,
+                scored: false,
             });
         }
     };

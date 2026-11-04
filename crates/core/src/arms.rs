@@ -328,12 +328,13 @@ mod tests {
     }
 
     #[test]
-    fn a_held_katana_swings_every_forty_three_ticks_and_lunges_once_in_ninety() {
+    fn a_held_katana_swings_every_forty_five_ticks_and_lunges_once_in_ninety() {
         let mut a = Arms {
             weapon: Weapon::Katana,
             ..Arms::default()
         };
-        // held for two seconds: swings at 0, 43, 86: three
+        // held for two seconds: swings at 0, 45, 90: three (a beat and a
+        // half apart, CS-Q20)
         let swings = (0..120).filter(|_| a.tick(&rec(0, true)).is_some()).count();
         assert_eq!(swings, 3);
         assert_eq!(a.rounds, Arms::default().rounds, "no rounds are spent");
@@ -360,8 +361,8 @@ mod tests {
         raised(&mut a, SLOT_7);
         assert!(a.tick(&rec(0, true)).is_some());
         a.tick(&rec(0, false));
-        // empty: the next press reloads, 45 ticks
+        // empty: the next press reloads, two beats (CS-Q20): 60 ticks
         a.tick(&rec(0, true));
-        assert_eq!(a.reloading, 45);
+        assert_eq!(a.reloading, 60);
     }
 }

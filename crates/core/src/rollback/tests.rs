@@ -32,7 +32,7 @@ fn script(seat: usize, t: u32) -> Input {
 /// The world a browser reaches with every seat's record on time, the seats
 /// `seats` holds by people and seat `gone` (if any) its bot's from `from`.
 fn truth(seats: Seats, ticks: u32, gone: Option<(usize, u32)>) -> World {
-    let mut w = World::online(seats);
+    let mut w = World::online(seats, 0);
     for t in 0..ticks {
         if let Some((s, from)) = gone {
             if t == from {
@@ -153,10 +153,10 @@ impl Room {
                     }
                     None => self.nets[*b].message(id(*a), &text),
                 };
-                if let Some(crate::online::Event::Start { seats }) = start {
+                if let Some(crate::online::Event::Start { seats, empty }) = start {
                     let links = std::mem::replace(&mut self.nets[*b], Net::new(false, "b"));
                     let seat = links.seat.expect("a started guest has a seat");
-                    self.sessions[*b] = Some(Rollback::new(links, seat, seats, World::online(seats)));
+                    self.sessions[*b] = Some(Rollback::new(links, seat, seats, World::online(seats, empty)));
                 }
             }
         }
@@ -166,8 +166,8 @@ impl Room {
     /// The host starts the match.
     fn start(&mut self) {
         let mut links = std::mem::replace(&mut self.nets[0], Net::new(true, "b"));
-        let seats = links.start();
-        self.sessions[0] = Some(Rollback::new(links, 0, seats, World::online(seats)));
+        let (seats, empty) = links.start();
+        self.sessions[0] = Some(Rollback::new(links, 0, seats, World::online(seats, empty)));
     }
 
     /// One frame: every browser in the match makes its record and steps once.
@@ -258,6 +258,32 @@ fn two_people_play_with_bots_in_the_empty_seats() {
     let w = &room.session(1).world;
     assert!(w.players[2].pilot.is_some() && w.players[3].pilot.is_some());
     assert!(w.players[0].pilot.is_none() && w.players[1].pilot.is_none());
+}
+
+#[test]
+fn a_seat_the_host_left_empty_has_nobody_in_it_on_every_browser() {
+    let mut room = Room::new(2, |_, _| 3, &[]);
+    room.nets[0].toggle_bot(3);
+    room.start();
+    room.play_to(300);
+    for b in 0..2 {
+        let s = room.session(b);
+        assert!(
+            s.world.players[3].out && !s.world.players[3].alive(),
+            "browser {b}"
+        );
+        assert!(s.world.players[2].pilot.is_some(), "seat 2 is still a bot's");
+        assert_eq!(s.links.status, PLAYING);
+        for &(t, sum) in &s.made {
+            let mut w = World::online(0b11, 0b1000);
+            for k in 0..t {
+                let rec: [Input; SEATS] = std::array::from_fn(|s| script(s, k));
+                Sim::tick(&mut w, &rec);
+            }
+            assert_eq!(sum, w.sum(), "browser {b} at tick {t}");
+        }
+        assert!(!s.made.is_empty());
+    }
 }
 
 #[test]
