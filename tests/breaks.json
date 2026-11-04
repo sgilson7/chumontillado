@@ -81,14 +81,14 @@
     "file": "crates/core/src/movement.rs",
     "find": "            if b.since_slide_began >= self.t.slide_rest {",
     "replace": "            if b.since_slide_began >= 0 {",
-    "test": "a_second_slide_within_a_second_gives_no_boost"
+    "test": "a_second_slide_within_a_quarter_second_gives_no_boost"
   },
   {
-    "name": "M1 slide jump",
+    "name": "M1 slide jump: a push along",
     "file": "crates/core/src/movement.rs",
     "find": "        if b.sliding || b.since_slide <= self.t.slide_jump_ticks {",
     "replace": "        if false {",
-    "test": "a_jump_out_of_a_slide_adds_a_metre_and_a_half_a_second"
+    "test": "a_jump_out_of_a_slide_adds_two_and_a_half_metres_a_second_and_goes_higher"
   },
   {
     "name": "M1 wall jump: three a flight",
@@ -208,5 +208,40 @@
     "find": "                let c2 = if c0.dot(c1.cross(c2)) < 0 { c2.neg() } else { c2 };",
     "replace": "                let c2 = c2;",
     "test": "every_drawn_brush_keeps_its_handedness_so_none_draws_inside_out"
+  },
+  {
+    "name": "T1 the jump is twice as high",
+    "file": "crates/core/src/movement.rs",
+    "find": "    jump: ONE * 792 / 100,",
+    "replace": "    jump: ONE * 56 / 10,",
+    "test": "a_jump_rises_twice_as_high_as_the_mockups"
+  },
+  {
+    "name": "T1 a slide jump goes higher",
+    "file": "crates/core/src/movement.rs",
+    "find": "            up += self.t.slide_jump_up;",
+    "replace": "            up += 0;",
+    "test": "a_jump_out_of_a_slide_adds_two_and_a_half_metres_a_second_and_goes_higher"
+  },
+  {
+    "name": "T1 a slide jump's window is 200 ms",
+    "file": "crates/core/src/movement.rs",
+    "find": "    slide_jump_ticks: 12,",
+    "replace": "    slide_jump_ticks: 3,",
+    "test": "a_slide_jump_counts_up_to_a_fifth_of_a_second_after_the_slide_ends"
+  },
+  {
+    "name": "T1 the boost comes back within a flight",
+    "file": "crates/core/src/movement.rs",
+    "find": "    slide_rest: 15,",
+    "replace": "    slide_rest: 60,",
+    "test": "a_slide_a_third_of_a_second_after_the_last_boosts_again"
+  },
+  {
+    "name": "T1 a slam needs 3 m of air",
+    "file": "crates/core/src/movement.rs",
+    "find": "    slam_above: int(3),",
+    "replace": "    slam_above: ONE * 15 / 10,",
+    "test": "crouching_on_the_way_down_from_a_jump_readies_a_slide_and_does_not_slam"
   }
 ]

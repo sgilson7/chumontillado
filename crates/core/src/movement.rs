@@ -66,9 +66,10 @@ pub struct Tuning {
     /// ticks before another slide gives the boost again
     pub slide_rest: i32,
     /// a jump while sliding, or this many ticks after, adds this much along
-    /// the way of travel (m/s)
+    /// the way of travel and this much more up (m/s)
     pub slide_jump_ticks: i32,
     pub slide_jump: Fx,
+    pub slide_jump_up: Fx,
     /// a wall jump: so far off the wall to find it (m), and out and up (m/s)
     pub wall_reach: Fx,
     pub wall_out: Fx,
@@ -91,7 +92,9 @@ pub const TUNING: Tuning = Tuning {
     friction: int(6),
     stop_speed: ONE * 25 / 10,
     gravity: int(18),
-    jump: ONE * 56 / 10,
+    // T1: twice as high as the Mockup page's 0.87 m: height goes with the
+    // square of the speed, so 5.6 × √2 = 7.92 m/s, 1.74 m
+    jump: ONE * 792 / 100,
     max_velocity: int(50),
     step: ONE * 4 / 10,
     duck_speed_pct: 34,
@@ -102,15 +105,22 @@ pub const TUNING: Tuning = Tuning {
     slide_from: int(6),
     slide_until: int(4),
     slide_friction: ONE * 6 / 10,
-    slide_rest: 60,
-    slide_jump_ticks: 3,
-    slide_jump: ONE * 15 / 10,
+    // T1: a quarter second, shorter than any jump's flight, so a slide on
+    // every landing gets its boost (a second blocked every chained slide)
+    slide_rest: 15,
+    // T1: 200 ms to jump out of a slide (was 50 ms), +2.5 m/s along (was 1.5)
+    // and 1.5 m/s more up
+    slide_jump_ticks: 12,
+    slide_jump: ONE * 25 / 10,
+    slide_jump_up: ONE * 15 / 10,
     wall_reach: ONE / 5,
     wall_out: int(5),
     wall_up: int(6),
     wall_jumps: 3,
     slam_speed: int(30),
-    slam_above: ONE * 15 / 10,
+    // T1: above a jump's 1.74 m, so crouch on the way down readies a slide
+    // instead of slamming (was 1.5 m)
+    slam_above: int(3),
     slam_bounce_ticks: 6,
     slam_bounce_pct: 60,
     slam_bounce_most: int(6),
@@ -204,6 +214,7 @@ pub struct Events {
     pub slid: bool,
     pub slammed: bool,
     pub bounced: bool,
+    pub slide_jumped: bool,
 }
 
 /// The keys of a record as forward and side moves, each `run` or none, the
@@ -448,6 +459,8 @@ impl<'a> Mover<'a> {
             b.slam_fell = 0;
         }
         if b.sliding || b.since_slide <= self.t.slide_jump_ticks {
+            up += self.t.slide_jump_up;
+            ev.slide_jumped = true;
             let sp = b.speed();
             if sp > 0 {
                 let k = fx::div(sp + self.t.slide_jump, sp);

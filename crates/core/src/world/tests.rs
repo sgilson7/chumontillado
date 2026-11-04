@@ -97,9 +97,9 @@ fn holding_jump_hops_again_on_every_landing() {
             jumps += 1;
         }
     }
-    // 5.6 m/s up under 18 m/s²: 0.62 s, 37 ticks a hop, so 180 ticks hold
-    // 4 whole hops and the start of a fifth
-    assert_eq!(jumps, 5);
+    // 7.92 m/s up under 18 m/s² (T1): 0.88 s, 53 ticks a hop, so 180 ticks
+    // hold hops starting at about 0, 53, 106 and 159
+    assert_eq!(jumps, 4);
 }
 
 #[test]
@@ -148,8 +148,15 @@ fn hopping_and_strafing_builds_speed_past_the_run_and_landing_late_does_not() {
     // 2.5 s of hops on time: each tick in the air adds 0.64 to speed², from
     // 64: about √(64 + 0.64 × 140) ≈ 12.4 m/s, a little less for the ticks
     // on the ground
+    // with T1's longer flights a late hop still gains a little in the air,
+    // but the two ticks of friction at each landing give most of it back
     assert!(on_time > int(11), "on time: {}", fx::decimal(on_time, 2));
-    assert!(late < int(9), "late: {}", fx::decimal(late, 2));
+    assert!(
+        on_time - late > int(2),
+        "on time {}, late {}",
+        fx::decimal(on_time, 2),
+        fx::decimal(late, 2)
+    );
 }
 
 #[test]
@@ -220,7 +227,7 @@ fn crouching_at_a_run_slides_at_eleven_metres_a_second_and_slows_slowly() {
 }
 
 #[test]
-fn a_second_slide_within_a_second_gives_no_boost() {
+fn a_second_slide_within_a_quarter_second_gives_no_boost() {
     let mut w = World::practice();
     run(&mut w, keys(FORWARD), 60);
     run(&mut w, keys(FORWARD | CROUCH), 5);
@@ -228,11 +235,12 @@ fn a_second_slide_within_a_second_gives_no_boost() {
     let before = w.players[0].body.speed();
     w.step(&[keys(FORWARD | CROUCH)]);
     assert!(w.players[0].events.slid);
+    // 10 ticks after the first slide began, inside slide_rest's 15
     assert!(w.players[0].body.speed() <= before, "no boost inside slide_rest");
 }
 
 #[test]
-fn a_jump_out_of_a_slide_adds_a_metre_and_a_half_a_second() {
+fn a_jump_out_of_a_slide_adds_two_and_a_half_metres_a_second_and_goes_higher() {
     let mut w = World::practice();
     run(&mut w, keys(FORWARD), 60);
     run(&mut w, keys(FORWARD | CROUCH), 4);
@@ -240,9 +248,15 @@ fn a_jump_out_of_a_slide_adds_a_metre_and_a_half_a_second() {
     w.step(&[keys(CROUCH | JUMP)]);
     assert!(w.players[0].events.jumped);
     let gain = w.players[0].body.speed() - before;
-    // + slide_jump 1.5: the jump comes before friction (Source's order), so
-    // that tick takes none
-    assert!(near(gain, ONE * 15 / 10, ONE / 50), "{}", fx::decimal(gain, 3));
+    // + slide_jump 2.5 (T1): the jump comes before friction (Source's
+    // order), so that tick takes none
+    assert!(near(gain, ONE * 25 / 10, ONE / 50), "{}", fx::decimal(gain, 3));
+    // up: 7.92 + 1.5 = 9.42. Crouch is held, so the body is ducked, and a
+    // ducked jump sets the speed up rather than adding to it: the half of
+    // gravity before the jump is dropped, and the two after it (in the jump
+    // and at the tick's end) take 0.15 each: 9.12
+    let up = w.players[0].body.velocity.y;
+    assert!(near(up, ONE * 912 / 100, ONE / 50), "{}", fx::decimal(up, 3));
 }
 
 #[test]
@@ -374,6 +388,7 @@ fn speed_reads_with_one_decimal() {
 fn the_tuning_is_the_mockup_pages_numbers() {
     // the journal's Mockup page, 2026-11-04: run 8, gravity 18, jump 5.6,
     // cap 0.8, air accel 40, slide 1.4× run, three wall jumps
+    // T1 doubled the jump's height: 5.6 × √2 = 7.92 m/s
     assert_eq!(
         (
             TUNING.run,
@@ -382,7 +397,119 @@ fn the_tuning_is_the_mockup_pages_numbers() {
             TUNING.air_cap,
             TUNING.air_accelerate
         ),
-        (int(8), int(18), ONE * 56 / 10, ONE * 8 / 10, int(40))
+        (int(8), int(18), ONE * 792 / 100, ONE * 8 / 10, int(40))
     );
     assert_eq!((TUNING.slide_boost_pct, TUNING.wall_jumps), (140, 3));
+}
+
+#[test]
+fn a_jump_rises_twice_as_high_as_the_mockups() {
+    let w = World::practice();
+    let height = |jump: Fx| {
+        let mut m = Mover::new(&w.map);
+        m.t.jump = jump;
+        let mut b = body_at(v3(int(8), 0, int(16)));
+        for _ in 0..30 {
+            m.tick(&mut b, &Input::default(), 0, 0);
+        }
+        let floor = b.origin.y;
+        m.tick(&mut b, &keys(JUMP), 0, 0);
+        let mut top = floor;
+        for _ in 0..60 {
+            m.tick(&mut b, &Input::default(), 0, 0);
+            top = top.max(b.origin.y);
+        }
+        top - floor
+    };
+    let (before, now) = (height(ONE * 56 / 10), height(TUNING.jump));
+    // height goes with the square of the speed: (7.92 / 5.6)² = 2.0 (T1);
+    // each about v² / 2g, 0.87 and 1.74 m, less the ticks' steps
+    let ratio = fx::div(now, before);
+    assert!(
+        near(ratio, int(2), ONE / 20),
+        "{} over {}: {}",
+        fx::decimal(now, 3),
+        fx::decimal(before, 3),
+        fx::decimal(ratio, 3)
+    );
+    assert!(near(now, ONE * 1742 / 1000, ONE / 10), "{}", fx::decimal(now, 3));
+}
+
+#[test]
+fn a_slide_jump_counts_up_to_a_fifth_of_a_second_after_the_slide_ends() {
+    let after = |ticks: usize| {
+        let mut w = World::practice();
+        run(&mut w, keys(FORWARD), 60);
+        run(&mut w, keys(FORWARD | CROUCH), 4);
+        // let go of crouch: the slide ends, then wait before jumping
+        run(&mut w, keys(FORWARD), ticks);
+        w.step(&[keys(FORWARD | JUMP)]);
+        w.players[0].events.slide_jumped
+    };
+    // slide_jump_ticks is 12 (T1): the slide ends on the first tick without
+    // crouch, so a jump 11 ticks later is the 12th tick since
+    assert!(after(11), "200 ms after");
+    assert!(!after(15), "250 ms after");
+}
+
+#[test]
+fn holding_crouch_and_jump_chains_slide_jumps_landing_after_landing() {
+    let mut w = World::practice();
+    // a bare floor, room to run straight
+    w.map = crate::map::Map {
+        brushes: vec![crate::map::block(
+            v3(-int(400), -ONE, -int(400)),
+            v3(int(400), 0, int(400)),
+            crate::map::Surface::Floor,
+        )],
+        spawns: vec![(V3::ZERO, 0)],
+    };
+    w.players[0].body.origin = V3::ZERO;
+    run(&mut w, keys(FORWARD), 60);
+    let mut chained = 0;
+    for _ in 0..300 {
+        w.step(&[keys(FORWARD | CROUCH | JUMP)]);
+        if w.players[0].events.slide_jumped {
+            chained += 1;
+        }
+    }
+    // each landing slides (crouch held) and jumps out of it at once: five
+    // seconds of 0.88 s flights hold five; each adds 2.5 m/s, from the
+    // boost's 11.2 on the first: about 11.2 + 5 × 2.5 = 23.7 m/s
+    assert!(chained >= 5, "{chained} slide jumps in a row");
+    let s = w.players[0].body.speed();
+    assert!(s > int(20), "{}", fx::decimal(s, 2));
+}
+
+#[test]
+fn crouching_on_the_way_down_from_a_jump_readies_a_slide_and_does_not_slam() {
+    let mut w = World::practice();
+    run(&mut w, keys(FORWARD), 60);
+    w.step(&[keys(FORWARD | JUMP)]);
+    run(&mut w, keys(FORWARD), 40);
+    // at the top of a jump, 1.74 m up: under slam_above's 3 m
+    w.step(&[keys(FORWARD | CROUCH)]);
+    assert!(!w.players[0].events.slammed);
+    let mut slid = false;
+    for _ in 0..30 {
+        w.step(&[keys(FORWARD | CROUCH)]);
+        slid |= w.players[0].events.slid;
+    }
+    assert!(slid, "landing with crouch held slides");
+}
+
+#[test]
+fn a_slide_a_third_of_a_second_after_the_last_boosts_again() {
+    let mut w = World::practice();
+    run(&mut w, keys(FORWARD), 60);
+    run(&mut w, keys(FORWARD | CROUCH), 3);
+    // back to running: friction takes the 11.2 back down to 8 within a few
+    // ticks, and acceleration holds it there
+    run(&mut w, keys(FORWARD), 17);
+    let before = w.players[0].body.speed();
+    assert!(near(before, int(8), ONE / 10), "{}", fx::decimal(before, 2));
+    // 20 ticks since the first slide began: past slide_rest's 15 (T1)
+    w.step(&[keys(FORWARD | CROUCH)]);
+    let s = w.players[0].body.speed();
+    assert!(s > int(11), "boosted again: {}", fx::decimal(s, 2));
 }
