@@ -73,28 +73,14 @@ fn yard(half_x: i32, half_z: i32, high: i32) -> Vec<crate::map::Brush> {
     ]
 }
 
-/// The Plaza: a bullring 40 m across inside a barrier you can hop, the
-/// stands round it a ring of surf ramps, wooden shields to wall jump from,
-/// and a low plinth in the middle with the Toro on it.
+/// The Plaza: a bullring 40 m across, the stands round it a ring of surf
+/// ramps, wooden shields to wall jump from, and a low plinth in the middle
+/// with the Toro on it. T17: the barrier at the foot of the stands is gone;
+/// a surf round the ring caught on it.
 pub fn plaza() -> Map {
     // the walls stand 5 m behind the stands: at 36 m, the probe test found
     // the corners behind them 9 m from anything
     let mut bs = yard(32, 32, 16);
-    // the barrier: 24 boards round the ring at 20 m, 1.3 m high, so a jump
-    // (1.74 m) clears it
-    for k in 0..24 {
-        let a = fx::TURN * k / 24;
-        let board = block(
-            v3(-(ONE * 275 / 100), 0, -ONE / 4),
-            v3(ONE * 275 / 100, ONE * 13 / 10, ONE / 4),
-            Surface::Trim,
-        );
-        bs.push(turned(
-            board,
-            a,
-            v3(fx::mul(int(20), fx::sin(a)), 0, fx::mul(int(20), fx::cos(a))),
-        ));
-    }
     // the stands: 32 surf ramps from 21 m out to 27, 8 m high (53°)
     for k in 0..32 {
         let a = fx::TURN * k / 32;
@@ -865,6 +851,36 @@ pub fn distance_to(br: &crate::map::Brush, p: V3) -> Fx {
 mod tests {
     use super::*;
     use crate::trace::{trace_box, Scratch};
+
+    /// T17: a surf round the foot of the Plaza's stands meets only the
+    /// ramps. Every 5° round the ring at 20.5 m, from ankle to head height,
+    /// nothing but a ramp or the floor is within a metre.
+    #[test]
+    fn a_surf_round_the_foot_of_the_plazas_stands_meets_nothing_but_the_ramps() {
+        let m = plaza();
+        for k in 0..72 {
+            let a = fx::TURN * k / 72;
+            let (x, z) = (
+                fx::mul(ONE * 205 / 10, fx::sin(a)),
+                fx::mul(ONE * 205 / 10, fx::cos(a)),
+            );
+            for y in [ONE / 2, ONE, ONE * 3 / 2] {
+                let p = v3(x, y, z);
+                for br in &m.brushes {
+                    if matches!(br.surface, Surface::Ramp | Surface::Floor) {
+                        continue;
+                    }
+                    let d = distance_to(br, p);
+                    assert!(
+                        d > ONE,
+                        "{:?} {} m from the ring at {k}",
+                        br.surface,
+                        fx::decimal(d, 2)
+                    );
+                }
+            }
+        }
+    }
 
     /// CS-Q24: A. Every 4 m over each map's floor, at 1 m up, a point a
     /// player could stand at (inside no brush, floor beneath at ground

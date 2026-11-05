@@ -174,7 +174,7 @@ pub fn prism(corners: [(Fx, Fx); 3], along_z: bool, from: Fx, to: Fx, surface: S
 }
 
 /// M5: a brush built about the origin, turned `yaw` about the vertical and
-/// moved to `to`: the bullring's barrier, stands and shields. Every plane
+/// moved to `to`: the bullring's stands and shields. Every plane
 /// turns with it; the box round the turned corners is added as bevels, as
 /// Source adds them, so a box swept against it cannot snag on an edge.
 pub fn turned(b: Brush, yaw: i32, to: V3) -> Brush {

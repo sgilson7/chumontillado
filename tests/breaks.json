@@ -1489,5 +1489,12 @@
     "find": "        molino(),\n        alcazar(),\n",
     "replace": "        molino(),\n        acueducto(),\n",
     "test": "a_match_goes_round_the_eight_maps_in_turn"
+  },
+  {
+    "name": "T17 the Plaza's barrier stays gone",
+    "file": "crates/core/src/maps.rs",
+    "find": "    // the stands: 32 surf ramps from 21 m out to 27, 8 m high (53°)\n",
+    "replace": "    for k in 0..24 {\n        let a = fx::TURN * k / 24;\n        let board = block(\n            v3(-(ONE * 275 / 100), 0, -ONE / 4),\n            v3(ONE * 275 / 100, ONE * 13 / 10, ONE / 4),\n            Surface::Trim,\n        );\n        bs.push(turned(\n            board,\n            a,\n            v3(fx::mul(int(20), fx::sin(a)), 0, fx::mul(int(20), fx::cos(a))),\n        ));\n    }\n    // the stands: 32 surf ramps from 21 m out to 27, 8 m high (53°)\n",
+    "test": "a_surf_round_the_foot_of_the_plazas_stands_meets_nothing_but_the_ramps"
   }
 ]

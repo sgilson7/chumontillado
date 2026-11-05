@@ -214,7 +214,7 @@ Not: railgun, brush gun
 
 ### Plaza
 
-The bullring: a ring inside a barrier you can hop, its stands a ring of surf ramps.
+The bullring: an open ring, its stands a ring of surf ramps.
 
 Not: arena, bullring map
 
