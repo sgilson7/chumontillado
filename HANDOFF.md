@@ -35,7 +35,7 @@ Chumontillado is a first-person movement shooter for up to four players online, 
 
 ## Commands
 
-- `cargo test`: the core's tests. `python3 scripts/break_tests.py`: 248 rows; run a commit's own rows by name (`break_tests.py T19`), the whole list before a milestone (a row whose broken code does not compile now fails, R7.8).
+- `cargo test`: the core's tests. `python3 scripts/break_tests.py`: 253 rows; run a commit's own rows by name (`break_tests.py T19`), the whole list before a milestone (a row whose broken code does not compile now fails, R7.8).
 - `./scripts/check.sh`: BUILDER CHECK PASSED (recorded below).
 - `./scripts/publish.sh`, with `GIT_AUTHOR_NAME`/`GIT_COMMITTER_NAME` set (this machine has no git identity), then `git push origin main`: the push runs `.github/workflows/pages.yml`, which deploys the gh-pages branch (R2.3). Pages' own branch builder hung, so it is not used.
 
@@ -74,10 +74,12 @@ Before trusting a test run, check it compiled: filter for `error` lines as well 
 - R9.7 (person): how the animations, the kick, the skins and the fire rates on the beat feel, from play.
 - R13.3 (person): how the sounds sound, from play (`data/sounds.json`).
 - R15.4 (person): how the Friar, the Torero, the Puñal, the Molino and the Alcázar look and play (T16).
-- R18.4 (person): how the smoothed costumes look and the bots fight at Easy, Normal and Hard (T20, T21).
+- R18.4 (person): how the smoothed costumes look and the bots fight at Easy, Normal and Hard (T20, T21); the bots eased after T22 (R19.1).
 - R16.4 (person): how the health bar, the shake, the red edge and the arc feel, and how the bots hunt (T18, T19).
 - R7.10 (person): how the projectile guns, melee weapons and weapon jumps feel, from play (`weapons::WEAPONS` and the constants beside it).
 
 ## Check
 
 `./scripts/check.sh` on 2026-11-05 after T20 and T21: see the commit's check line in the journal entry `2026-11-05-t20-t21`. `python3 scripts/break_tests.py T20 T21`: the 19 new rows caught (the T16 hood row repointed after the merge, and caught). The full run (248 rows) was last complete after T17 (214 of 214); Sam asked on 2026-11-05 for quick tests per commit, so it is not rerun every commit.
+
+After T22 (bots eased): `./scripts/check.sh` passed; `break_tests.py EASE`: 5 of 5 caught (253 rows).

@@ -29,10 +29,22 @@ pub const LOOP: [(i32, i32); 4] = [(8, -28), (16, -28), (16, -16), (6, -16)];
 /// A waypoint is reached within this distance (m).
 const REACHED: Fx = ONE * 15 / 10;
 /// The most the bot turns in a tick, and the wobble on its aim (angle units).
-pub const TURN_RATE: i32 = fx::deg(8);
-pub const WOBBLE: i32 = fx::deg(3);
+pub const TURN_RATE: i32 = fx::deg(6);
+pub const WOBBLE: i32 = fx::deg(6);
 /// Ticks between first seeing the player and the first shot.
-pub const REACTION: i32 = 24;
+pub const REACTION: i32 = 40;
+/// Sam, after T21: bots fire in bursts, `burst` ticks of every `BURST_CYCLE`
+/// once their reaction is past.
+pub const BURST_CYCLE: i32 = 120;
+/// Its aim strays no further than this from the target (m), so a far
+/// target is not out of its reach.
+pub const STRAY: Fx = ONE;
+/// Its aim's stray narrows by a quarter over this many ticks of keeping a
+/// target in sight: a person who stays in its sight is found.
+pub const SETTLE: i32 = 120;
+/// A target out of sight this many ticks is forgotten: seen again, the bot
+/// reacts and settles its aim anew.
+pub const MEMORY: i32 = 30;
 /// It fires when its aim is within this of the player's chest.
 pub const FIRE_WITHIN: i32 = fx::deg(2);
 /// It sees no further than this (m).
@@ -94,6 +106,8 @@ pub struct Traits {
     pub wobble: i32,
     /// it fires when its aim is within this of the target (angle units)
     pub fire_within: i32,
+    /// ticks of every `BURST_CYCLE` it fires in
+    pub burst: i32,
     /// how much of a moving target's lead it aims ahead, percent
     pub lead_pct: i32,
     /// it dodges when hit
@@ -108,10 +122,11 @@ impl Skill {
     pub fn traits(self) -> Traits {
         match self {
             Skill::Easy => Traits {
-                reaction: 40,
-                turn: fx::deg(5),
-                wobble: fx::deg(6),
+                reaction: 60,
+                turn: fx::deg(4),
+                wobble: fx::deg(10),
                 fire_within: fx::deg(3),
+                burst: 20,
                 lead_pct: 0,
                 dodges: false,
                 fall_back_at: 0,
@@ -122,16 +137,18 @@ impl Skill {
                 turn: TURN_RATE,
                 wobble: WOBBLE,
                 fire_within: FIRE_WITHIN,
+                burst: 24,
                 lead_pct: 70,
                 dodges: true,
                 fall_back_at: 30,
                 arms: true,
             },
             Skill::Hard => Traits {
-                reaction: 12,
-                turn: fx::deg(12),
-                wobble: fx::deg(1),
+                reaction: 24,
+                turn: fx::deg(9),
+                wobble: fx::deg(4),
                 fire_within: fx::deg(3) / 2,
+                burst: 40,
                 lead_pct: 100,
                 dodges: true,
                 fall_back_at: 40,
@@ -157,8 +174,9 @@ impl Skill {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Pilot {
     pub waypoint: usize,
-    /// ticks it has seen the player for
+    /// ticks it has seen the player for, and ticks since it last saw them
     pub seen: i32,
+    pub lost: i32,
     /// fires back, or only moves
     pub shoots: bool,
     /// T19: where it heads for on its way, ticks until it finds its way
@@ -371,7 +389,13 @@ pub fn record(p: &mut Pilot, v: &View) -> Input {
         go = yaw_of(p.dodging.sub(v.feet)).wrapping_add(side);
     }
     let go = go.wrapping_add(aside);
-    p.seen = if target.is_some() { p.seen + 1 } else { 0 };
+    // it keeps a target lost from sight in mind for `MEMORY` ticks
+    p.lost = if target.is_some() { 0 } else { p.lost + 1 };
+    p.seen = match (target, p.lost > MEMORY) {
+        (Some(_), _) => p.seen + 1,
+        (None, false) => p.seen,
+        (None, true) => 0,
+    };
     let (want_yaw, want_pitch) = match target {
         Some(c) => {
             // T20: ahead of a moving target by its flight, or by the lag
@@ -385,11 +409,17 @@ pub fn record(p: &mut Pilot, v: &View) -> Input {
             let lead = v.chest_velocity.scale(fx::mul(flight, ONE * t.lead_pct / 100));
             let to = c.add(lead).sub(v.eye);
             // a slow wobble on the aim, the same on every browser
-            let wob = fx::mul(fx::sin((v.tick as i32).wrapping_mul(fx::deg(7))), t.wobble);
+            let tick = v.tick as i32;
+            let settled = (p.seen - t.reaction).clamp(0, SETTLE);
+            let wobble = t.wobble - t.wobble / 4 * settled / SETTLE;
+            let wobble = wobble.min(fx::atan2(STRAY, far.max(ONE)));
+            let wob = fx::mul(fx::sin(tick.wrapping_mul(fx::deg(7))), wobble);
+            // and a slower one up and down, half as wide
+            let bob = fx::mul(fx::cos(tick.wrapping_mul(fx::deg(3))), wobble / 2);
             // atan2 gives 0 to a whole turn; a pitch is signed (R5.3)
             (
                 yaw_of(to).wrapping_add(wob),
-                fx::wrap(fx::atan2(to.y, to.len_xz())),
+                fx::wrap(fx::atan2(to.y, to.len_xz())) + bob,
             )
         }
         None => (go, 0),
@@ -436,7 +466,8 @@ pub fn record(p: &mut Pilot, v: &View) -> Input {
         // T19: a blade swings only in reach
         && v.reach.is_none_or(|r| target.is_some_and(|c| c.sub(v.eye).len() <= r + SWING_SLACK));
     // a semi-automatic needs the button let go between shots
-    let fire = aimed && p.seen >= t.reaction && v.tick.is_multiple_of(2);
+    let burst = (p.seen - t.reaction) % BURST_CYCLE < t.burst;
+    let fire = aimed && p.seen >= t.reaction && burst && v.tick.is_multiple_of(2);
     Input {
         keys,
         buttons: if fire { FIRE } else { 0 },
@@ -525,11 +556,63 @@ mod tests {
             first >= REACTION as u64 - 1,
             "fired at {first}, before its reaction"
         );
-        // a player out of sight: no shot, and the count starts again
+        // a player out of sight: no shot, and past its memory the count
+        // starts again
         v.chest = None;
         let r = record(&mut p, &v);
         assert!(!r.button(FIRE));
+        assert!(p.seen > 0, "kept in mind");
+        for _ in 0..MEMORY {
+            record(&mut p, &v);
+        }
         assert_eq!(p.seen, 0);
+    }
+
+    /// Sam, after T21 ("the bots are all still way too difficult"): at
+    /// every skill it fires only in its bursts, and rests between them.
+    #[test]
+    fn it_fires_in_bursts_and_rests_between() {
+        for skill in SKILLS {
+            let t = skill.traits();
+            let mut p = Pilot {
+                shoots: true,
+                ..Pilot::default()
+            };
+            // the player straight ahead, level, 10 m off
+            let mut v = View {
+                route: &LOOP,
+                nav: None,
+                hunt: None,
+                speed: 0,
+                frozen: false,
+                reach: None,
+                tick: 0,
+                feet: v3(int(8), 0, int(-16)),
+                eye: v3(int(8), ONE * 165 / 100, int(-16)),
+                yaw: 0,
+                pitch: 0,
+                on_ground: true,
+                chest: Some(v3(int(8), ONE * 165 / 100, int(-26))),
+                skill,
+                chest_velocity: V3::ZERO,
+                hit_from: None,
+                health: 100,
+                cover: None,
+                weapon: Weapon::Pistol,
+                owned: crate::arms::ROUND_OWNED,
+                pickups: &[],
+            };
+            let mut shots = 0;
+            for tick in 0..(t.reaction + 3 * BURST_CYCLE) as u64 {
+                v.tick = tick;
+                if record(&mut p, &v).button(FIRE) {
+                    shots += 1;
+                    let into = (p.seen - t.reaction) % BURST_CYCLE;
+                    assert!(into < t.burst, "{skill:?} fired {into} ticks into a cycle");
+                }
+            }
+            assert!(shots > 0, "{skill:?} never fired");
+        }
     }
 
     #[test]

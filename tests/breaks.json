@@ -1734,5 +1734,40 @@
     "find": ".filter(|_| me.hurt.ticks >= crate::hurt::HURT - 1);",
     "replace": ".filter(|_| false);",
     "test": "a_bot_hit_sees_its_shooter_and_low_a_spawn_out_of_its_sight"
+  },
+  {
+    "name": "EASE bots fire in bursts",
+    "file": "crates/core/src/pilot.rs",
+    "find": "let burst = (p.seen - t.reaction) % BURST_CYCLE < t.burst;",
+    "replace": "let burst = true;",
+    "test": "it_fires_in_bursts_and_rests_between"
+  },
+  {
+    "name": "EASE Normal fires in a fifth of each cycle",
+    "file": "crates/core/src/pilot.rs",
+    "find": "                burst: 24,",
+    "replace": "                burst: 120,",
+    "test": "a_harder_bot_fells_a_person_sooner"
+  },
+  {
+    "name": "EASE the aim strays no more than a metre",
+    "file": "crates/core/src/pilot.rs",
+    "find": "let wobble = wobble.min(fx::atan2(STRAY, far.max(ONE)));",
+    "replace": "let wobble = wobble.min(fx::atan2(STRAY * 8, far.max(ONE)));",
+    "test": "in_a_duel_the_bot_shoots_the_player_and_in_the_practice_room_it_never_does"
+  },
+  {
+    "name": "EASE the aim settles on a target kept in sight",
+    "file": "crates/core/src/pilot.rs",
+    "find": "let wobble = t.wobble - t.wobble / 4 * settled / SETTLE;",
+    "replace": "let wobble = t.wobble + 0 * settled;",
+    "test": "a_lone_bot_finds_and_fells_a_person_standing_still_on_every_map"
+  },
+  {
+    "name": "EASE a bot keeps a target lost from sight in mind",
+    "file": "crates/core/src/pilot.rs",
+    "find": "pub const MEMORY: i32 = 30;",
+    "replace": "pub const MEMORY: i32 = 0;",
+    "test": "it_waits_its_reaction_then_fires_only_with_its_aim_close"
   }
 ]

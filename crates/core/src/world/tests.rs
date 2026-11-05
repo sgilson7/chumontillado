@@ -1514,7 +1514,8 @@ fn a_hit_from_the_bot_shakes_the_view_points_to_it_and_leaves_the_aim_alone() {
 }
 
 /// T19: on every map, a round of four bots, and a round of three bots with
-/// a person who stands still, is decided inside a minute. Before, bots
+/// a person who stands still, is decided inside a minute (since the bots
+/// were eased after T21, inside 90 s: the slowest took 84; the limit is 150). Before, bots
 /// pressed into walls on the maps with corridors and rounds ran to the
 /// limit. Each is tried from three ticks, which turn the bots' aim and
 /// circling differently.
@@ -1529,7 +1530,7 @@ fn on_every_map_a_round_with_bots_is_decided_inside_a_minute() {
             w.tick = from;
             w.start_round(map);
             let mut ended = None;
-            for t in 0..crate::rounds::COUNT_TICKS + 60 * 60 {
+            for t in 0..crate::rounds::COUNT_TICKS + 90 * 60 {
                 w.step(&vec![Input::default(); person as usize]);
                 if w.rounds.unwrap().phase == crate::rounds::Phase::Over {
                     ended = Some(t);
@@ -1541,11 +1542,11 @@ fn on_every_map_a_round_with_bots_is_decided_inside_a_minute() {
             }
         }
     }
-    assert!(slow.is_empty(), "undecided after a minute: {slow:?}");
+    assert!(slow.is_empty(), "undecided after 90 s: {slow:?}");
 }
 
 /// T19: a lone bot finds a person standing still at their spawn and fells
-/// them inside a minute on every map, wherever its loop runs.
+/// them inside a minute (since the easing, 75 s) on every map, wherever its loop runs.
 #[test]
 fn a_lone_bot_finds_and_fells_a_person_standing_still_on_every_map() {
     let mut missed = Vec::new();
@@ -1554,7 +1555,7 @@ fn a_lone_bot_finds_and_fells_a_person_standing_still_on_every_map() {
         let mut w = World::online(0b0001, 0b1100, [0, 1, 2, 3]);
         w.tick = from;
         w.start_round(map);
-        for _ in 0..crate::rounds::COUNT_TICKS + 60 * 60 {
+        for _ in 0..crate::rounds::COUNT_TICKS + crate::rounds::XRAY_TICKS {
             w.step(&[Input::default()]);
             if !w.players[0].alive() {
                 break;
@@ -1591,6 +1592,10 @@ fn a_harder_bot_fells_a_person_sooner() {
     use crate::pilot::Skill::*;
     let (easy, normal, hard) = (took(Easy), took(Normal), took(Hard));
     assert!(easy > normal && normal > hard, "{easy} {normal} {hard}");
+    // Sam, after T21: "the bots are all still way too difficult". Eased,
+    // each skill is slower than the one below it was at T21 (Easy 21034,
+    // Normal 16708, Hard 13959 ticks).
+    assert!(normal > 21034 && hard > 16708, "{normal} {hard}");
 }
 
 /// T20: a bot sees the shot that hit it, and low, the nearest spawn out
