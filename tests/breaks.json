@@ -1496,5 +1496,110 @@
     "find": "    // the stands: 32 surf ramps from 21 m out to 27, 8 m high (53°)\n",
     "replace": "    for k in 0..24 {\n        let a = fx::TURN * k / 24;\n        let board = block(\n            v3(-(ONE * 275 / 100), 0, -ONE / 4),\n            v3(ONE * 275 / 100, ONE * 13 / 10, ONE / 4),\n            Surface::Trim,\n        );\n        bs.push(turned(\n            board,\n            a,\n            v3(fx::mul(int(20), fx::sin(a)), 0, fx::mul(int(20), fx::cos(a))),\n        ));\n    }\n    // the stands: 32 surf ramps from 21 m out to 27, 8 m high (53°)\n",
     "test": "a_surf_round_the_foot_of_the_plazas_stands_meets_nothing_but_the_ramps"
+  },
+  {
+    "name": "T18 a hit is felt by the one hit",
+    "file": "crates/core/src/world.rs",
+    "find": "            victim.hurt.struck(victim.health, dmg, from);\n",
+    "replace": "",
+    "test": "a_hit_from_the_bot_shakes_the_view_points_to_it_and_leaves_the_aim_alone"
+  },
+  {
+    "name": "T18 the view shakes when hit",
+    "file": "crates/core/src/world.rs",
+    "find": "let (across, up) = if shake { p.hurt.shake(alpha) } else { (0, 0) };",
+    "replace": "let (across, up) = if shake { (0, 0) } else { (0, 0) };",
+    "test": "a_hit_from_the_bot_shakes_the_view_points_to_it_and_leaves_the_aim_alone"
+  },
+  {
+    "name": "T18 the shake setting stills it",
+    "file": "crates/core/src/world.rs",
+    "find": "let (across, up) = if shake { p.hurt.shake(alpha) } else { (0, 0) };",
+    "replace": "let (across, up) = if shake || !shake { p.hurt.shake(alpha) } else { (0, 0) };",
+    "test": "a_hit_from_the_bot_shakes_the_view_points_to_it_and_leaves_the_aim_alone"
+  },
+  {
+    "name": "T18 your own blast has no shooter",
+    "file": "crates/core/src/world.rs",
+    "find": "let from = (k != by).then(|| self.players[by].eye_now());",
+    "replace": "let from = Some(self.players[by].eye_now());",
+    "test": "a_hit_from_the_bot_shakes_the_view_points_to_it_and_leaves_the_aim_alone"
+  },
+  {
+    "name": "T18 the arc points clockwise",
+    "file": "crates/core/src/hurt.rs",
+    "find": "fx::atan2(right, ahead)",
+    "replace": "fx::atan2(-right, ahead)",
+    "test": "the_arc_points_to_the_shooter_clockwise_from_straight_ahead"
+  },
+  {
+    "name": "T18 the bar holds what was lost",
+    "file": "crates/core/src/hurt.rs",
+    "find": "            self.hold -= 1;\n",
+    "replace": "            self.hold = 0;\n",
+    "test": "the_bar_holds_what_was_lost_then_drains_to_the_health"
+  },
+  {
+    "name": "T18 a harder hit shakes harder",
+    "file": "crates/core/src/hurt.rs",
+    "find": "let tenths = SHAKE_LEAST + fx::mul(SHAKE_MOST - SHAKE_LEAST, self.hardness());",
+    "replace": "let tenths = SHAKE_MOST;",
+    "test": "a_hit_shakes_the_view_harder_for_more_damage_and_then_stills"
+  },
+  {
+    "name": "T18 low health pulses",
+    "file": "crates/core/src/api.rs",
+    "find": "p.alive() && p.health * 4 <= world::HEALTH",
+    "replace": "p.alive() && p.health * 4 < 0",
+    "test": "a_hit_shows_on_the_health_bar_the_red_edge_and_the_arc_and_shake_is_a_setting"
+  },
+  {
+    "name": "T18 the bar shows its lost part",
+    "file": "crates/core/src/api.rs",
+    "find": "trail: Some(full(hurt.trail.max(p.health))),",
+    "replace": "trail: Some(full(p.health)),",
+    "test": "a_hit_shows_on_the_health_bar_the_red_edge_and_the_arc_and_shake_is_a_setting"
+  },
+  {
+    "name": "T18 a picture's hit takes its damage",
+    "file": "crates/core/src/game.rs",
+    "find": "                p.health = (p.health - dmg).max(1);\n",
+    "replace": "",
+    "test": "place_at_stands_the_player_where_it_is_told_in_centimetres"
+  },
+  {
+    "name": "T19 bots find their way round walls",
+    "file": "crates/core/src/world.rs",
+    "find": "nav: self.nav.as_deref().filter(|_| in_match),",
+    "replace": "nav: self.nav.as_deref().filter(|_| false),",
+    "test": "on_every_map_a_round_with_bots_is_decided_inside_a_minute"
+  },
+  {
+    "name": "T19 bots hunt in a match",
+    "file": "crates/core/src/world.rs",
+    "find": "in_match && *k != id && p.alive()",
+    "replace": "false && *k != id && p.alive()",
+    "test": "in_a_match_a_bot_hunts_the_nearest_other_seat_standing"
+  },
+  {
+    "name": "T19 a hunting bot keeps its distance",
+    "file": "crates/core/src/pilot.rs",
+    "find": "if let (Some(c), Some(_), None) = (target, v.hunt, v.reach) {",
+    "replace": "if let (Some(c), Some(_), None, true) = (target, v.hunt, v.reach, false) {",
+    "test": "on_every_map_a_round_with_bots_is_decided_inside_a_minute"
+  },
+  {
+    "name": "T19 a wall closes its cells",
+    "file": "crates/core/src/nav.rs",
+    "find": "                        open[k] = false;\n",
+    "replace": "",
+    "test": "a_wall_closes_its_cells_and_the_way_round_it_heads_for_its_end"
+  },
+  {
+    "name": "T19 a bot with a blade runs in",
+    "file": "crates/core/src/pilot.rs",
+    "find": "if let (Some(c), Some(_), None) = (target, v.hunt, v.reach) {",
+    "replace": "if let (Some(c), Some(_)) = (target, v.hunt) {",
+    "test": "a_lone_bot_finds_and_fells_a_person_standing_still_on_every_map"
   }
 ]

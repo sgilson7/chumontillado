@@ -1490,3 +1490,97 @@ fn every_thrown_weapon_flies_drawn_in_ink() {
         );
     }
 }
+
+#[test]
+fn a_hit_from_the_bot_shakes_the_view_points_to_it_and_leaves_the_aim_alone() {
+    let mut w = settled(Bot::Moves);
+    let (aim, bot_eye) = (w.players[0].aim, w.players[1].eye_now());
+    let still = w.camera(0, 0, Mouse::default(), ONE, true);
+    w.hurt(1, 0, 30);
+    let h = w.players[0].hurt;
+    assert_eq!((w.players[0].health, h.trail, h.from), (70, 100, Some(bot_eye)));
+    w.step(&[Input::default()]);
+    assert_eq!(w.players[0].aim, aim, "the aim a tick reads never shakes");
+    let shaken = w.camera(0, 0, Mouse::default(), ONE, true);
+    assert_ne!(shaken.fwd, still.fwd, "the view shakes");
+    assert_eq!(
+        w.camera(0, 0, Mouse::default(), ONE, false).fwd,
+        still.fwd,
+        "and not with the setting off"
+    );
+    // your own blast shakes you with no shooter to point to
+    w.hurt(0, 0, 10);
+    assert_eq!(w.players[0].hurt.from, None);
+}
+
+/// T19: on every map, a round of four bots, and a round of three bots with
+/// a person who stands still, is decided inside a minute. Before, bots
+/// pressed into walls on the maps with corridors and rounds ran to the
+/// limit. Each is tried from three ticks, which turn the bots' aim and
+/// circling differently.
+#[test]
+fn on_every_map_a_round_with_bots_is_decided_inside_a_minute() {
+    let mut slow = Vec::new();
+    for map in 0..crate::maps::COUNT {
+        for (person, from) in [(0, 0), (0, 37), (0, 101), (1, 0), (1, 37), (1, 101)] {
+            let mut w = World::online(person, 0, [0, 1, 2, 3]);
+            w.tick = from;
+            w.start_round(map);
+            let mut ended = None;
+            for t in 0..crate::rounds::COUNT_TICKS + 60 * 60 {
+                w.step(&vec![Input::default(); person as usize]);
+                if w.rounds.unwrap().phase == crate::rounds::Phase::Over {
+                    ended = Some(t);
+                    break;
+                }
+            }
+            if ended.is_none() {
+                slow.push((w.map.name, person, from));
+            }
+        }
+    }
+    assert!(slow.is_empty(), "undecided after a minute: {slow:?}");
+}
+
+/// T19: a lone bot finds a person standing still at their spawn and fells
+/// them inside a minute on every map, wherever its loop runs.
+#[test]
+fn a_lone_bot_finds_and_fells_a_person_standing_still_on_every_map() {
+    let mut missed = Vec::new();
+    for (map, from) in (0..crate::maps::COUNT).flat_map(|m| [(m, 0), (m, 53), (m, 140)]) {
+        // seat 1 a person, seat 2 a bot, seats 3 and 4 left empty
+        let mut w = World::online(0b0001, 0b1100, [0, 1, 2, 3]);
+        w.tick = from;
+        w.start_round(map);
+        for _ in 0..crate::rounds::COUNT_TICKS + 60 * 60 {
+            w.step(&[Input::default()]);
+            if !w.players[0].alive() {
+                break;
+            }
+        }
+        if w.players[0].alive() {
+            missed.push((w.map.name, from));
+        }
+    }
+    assert!(missed.is_empty(), "the person still stands on {missed:?}");
+}
+
+/// T19: in a match a bot hunts the nearest other seat standing, seen or
+/// not; in the practice room it keeps its loop.
+#[test]
+fn in_a_match_a_bot_hunts_the_nearest_other_seat_standing() {
+    let mut w = World::online(0, 0, [0, 1, 2, 3]);
+    w.start_round(2);
+    let mut sc = Scratch::default();
+    let me = w.players[1].body.origin;
+    let nearest = [0, 2, 3]
+        .iter()
+        .map(|&k| w.players[k].body.origin)
+        .min_by_key(|f| f.sub(me).len())
+        .unwrap();
+    assert_eq!(w.view(1, &mut sc).hunt, Some(nearest));
+    assert!(w.view(1, &mut sc).nav.is_some());
+    let w = settled(Bot::Shoots);
+    assert_eq!(w.view(1, &mut sc).hunt, None);
+    assert!(w.view(1, &mut sc).nav.is_none());
+}

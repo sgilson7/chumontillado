@@ -282,6 +282,12 @@ async function main() {
         node.style.left = `${item.at[0] / 100}%`;
         node.style.top = `${item.at[1] / 100}%`;
       }
+      // T18: how full or strong, the bar's lost part, which way, and a state
+      // the stylesheet draws; the core sets each
+      if (item.fill !== undefined) node.style.setProperty("--fill", `${item.fill / 100}%`);
+      if (item.trail !== undefined) node.style.setProperty("--trail", `${item.trail / 100}%`);
+      if (item.turn !== undefined) node.style.setProperty("--turn", `${item.turn / 100}deg`);
+      node.dataset.tone = item.tone || "";
     }
     document.querySelectorAll("#overlay h1, #overlay h2, #overlay td span, #overlay button, #overlay .label").forEach(mark);
     if (!u.capture) input.release();

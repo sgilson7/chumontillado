@@ -144,6 +144,7 @@ pub const REQUIRED: &[&str] = &[
     "setting_filter",
     "filter_on",
     "filter_off",
+    "setting_shake",
     "quieter",
     "louder",
     "shooting",

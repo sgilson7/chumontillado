@@ -82,6 +82,9 @@ pub struct Player {
     pub hit_mark: i32,
     pub kill_mark: i32,
     pub flash: i32,
+    /// T18: its last hit as it feels it: the shake, the red edge, the arc
+    /// to the shooter, the bar's lost part (drawn only)
+    pub hurt: crate::hurt::Hurt,
     /// a bot's pilot; none for a person
     pub pilot: Option<Pilot>,
     /// the melee swing under way
@@ -206,6 +209,7 @@ impl Player {
             hit_mark: 0,
             kill_mark: 0,
             flash: 0,
+            hurt: crate::hurt::Hurt::default(),
             pilot: None,
             swing: None,
             hook: None,
@@ -321,6 +325,9 @@ pub struct World {
     pub pickups: Vec<Pickup>,
     /// M6: the sounds of the last tick run (`sound.rs`)
     pub heard: Vec<crate::sound::Heard>,
+    /// T19: in a match, where the bots can walk on the map and the way
+    /// round its walls; shared like the map
+    pub nav: Option<Rc<crate::nav::Nav>>,
 }
 
 /// A weapon lying on the map (CS-Q10: A), until someone walks over it.
@@ -415,6 +422,7 @@ impl World {
             rounds: None,
             pickups: Vec::new(),
             heard: Vec::new(),
+            nav: None,
         }
     }
 
@@ -465,6 +473,7 @@ impl World {
             p.arms = Arms::for_round();
             p.prev = p.body.origin;
         }
+        self.nav = Some(Rc::new(crate::nav::Nav::of(&m)));
         self.map = Rc::new(m);
         self.flying.clear();
         self.bursts.clear();
@@ -564,8 +573,22 @@ impl World {
                     && weapons::wall_distance(&self.map, scratch, eye, to.norm(), d) >= d - ONE / 50
             })
             .min_by_key(|c| c.sub(eye).len());
+        // T19: in a match, a bot hunts the nearest other seat standing,
+        // seen or not, so a round of bots ends
+        let hunt = self
+            .players
+            .iter()
+            .enumerate()
+            .filter(|(k, p)| in_match && *k != id && p.alive())
+            .map(|(_, p)| p.body.origin)
+            .min_by_key(|f| f.sub(me.body.origin).len());
         pilot::View {
             route: &self.map.bot_loop,
+            nav: self.nav.as_deref().filter(|_| in_match),
+            hunt,
+            speed: me.body.velocity.len_xz(),
+            frozen: self.rounds.is_some_and(|r| r.frozen()),
+            reach: me.arms.weapon.swing().map(|s| s.reach),
             tick: self.tick,
             feet: me.body.origin,
             eye,
@@ -623,6 +646,7 @@ impl World {
                 p.hit_mark = (p.hit_mark - 1).max(0);
                 p.kill_mark = (p.kill_mark - 1).max(0);
                 p.flash = (p.flash - 1).max(0);
+                p.hurt.step(p.health);
                 if p.out {
                     continue;
                 }
@@ -843,12 +867,15 @@ impl World {
         }
         if k < seats {
             let at = self.players[k].body.origin;
+            // T18: your own blast shakes you but has no shooter to point to
+            let from = (k != by).then(|| self.players[by].eye_now());
             self.heard.push(Heard {
                 voice: Voice::Hurt,
                 at,
                 by: k,
             });
             let victim = &mut self.players[k];
+            victim.hurt.struck(victim.health, dmg, from);
             victim.health -= dmg;
             victim.flash = FLASH;
             if victim.health <= 0 {
@@ -1252,12 +1279,17 @@ impl World {
     }
 
     /// The first-person camera for seat `id`, `alpha` of the way to the next
-    /// tick, with the mouse movement not yet given to a tick already turned.
-    pub fn camera(&self, id: usize, alpha: Fx, pending: Mouse, aspect: Fx) -> Camera {
+    /// tick, with the mouse movement not yet given to a tick already turned,
+    /// and (T18, a setting) shaken when hit.
+    pub fn camera(&self, id: usize, alpha: Fx, pending: Mouse, aspect: Fx, shake: bool) -> Camera {
         let p = &self.players[id];
         // the view tips up with a shot's kick, drawn only (hands.rs)
         let mut aim = p.aim.turned(pending);
         aim.pitch = (aim.pitch + crate::hands::view_kick(&p.arms)).min(camera::PITCH_MAX);
+        // T18: and shakes when hit, likewise drawn only
+        let (across, up) = if shake { p.hurt.shake(alpha) } else { (0, 0) };
+        aim.yaw += across;
+        aim.pitch = (aim.pitch + up).clamp(camera::PITCH_MIN, camera::PITCH_MAX);
         camera::eye_view(p.eye(alpha), aim, camera::vertical_fov(self.fov, aspect))
     }
 

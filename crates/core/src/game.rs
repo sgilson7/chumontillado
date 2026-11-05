@@ -115,6 +115,8 @@ pub struct Game {
     /// T15: the painted (Kuwahara) filter over the scene, a setting, off
     /// to start
     pub filter: bool,
+    /// T18: the view shakes when hit, a setting, on to start
+    pub shake: bool,
     /// the volume, percent (a setting)
     pub sounds: Vec<crate::sound::Play>,
     pub volume_pct: i32,
@@ -167,6 +169,7 @@ impl Game {
             sounds: Vec::new(),
             volume_pct: VOLUME_START,
             filter: false,
+            shake: true,
         };
         g.draw();
         Ok(g)
@@ -385,8 +388,13 @@ impl Game {
             let eye = v3(0, fx::int(16), 0).sub(fwd.scale(fx::int(30)));
             return camera::eye_view(eye, aim, camera::vertical_fov(self.fov, self.aspect));
         }
-        self.view_world()
-            .camera(self.eyes(), self.alpha, self.pending.peek(), self.aspect)
+        self.view_world().camera(
+            self.eyes(),
+            self.alpha,
+            self.pending.peek(),
+            self.aspect,
+            self.shake,
+        )
     }
 
     /// The seat whose eyes the view is from: yours, or in a match while you
@@ -726,6 +734,12 @@ impl Game {
                 self.filter = step > 0;
                 self.ui_version += 1;
             }
+            // T18: −1 stills the view when hit, 1 lets it shake
+            "shake.set" => {
+                let step: i32 = v.parse().map_err(|_| format!("\"{value}\" is not a step."))?;
+                self.shake = step > 0;
+                self.ui_version += 1;
+            }
             "volume.step" => {
                 let step: i32 = v.parse().map_err(|_| format!("\"{value}\" is not a step."))?;
                 self.volume_pct = (self.volume_pct + step * VOLUME_STEP).clamp(0, 100);
@@ -796,6 +810,22 @@ impl Game {
                 p.aim.yaw = fx::deg(yaw);
                 p.aim.pitch = 0;
                 self.draw();
+            }
+            // T18: for pictures, a hit of `dmg` on the first seat from (x, z)
+            // cm at eye height
+            "place.hurt" => {
+                let n: Vec<i32> = v
+                    .split_whitespace()
+                    .map(|t| t.parse())
+                    .collect::<Result<_, _>>()
+                    .map_err(|_| format!("\"{value}\" is not three whole numbers."))?;
+                let [dmg, x, z] = n[..] else {
+                    return Err(format!("\"{value}\" is not three whole numbers."));
+                };
+                let p = &mut self.world.players[0];
+                let from = v3(x * fx::ONE / 100, p.eye_now().y, z * fx::ONE / 100);
+                p.hurt.struck(p.health, dmg, Some(from));
+                p.health = (p.health - dmg).max(1);
             }
             "display.software" => {
                 self.software = v == "true";
@@ -898,6 +928,48 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn a_hit_shows_on_the_health_bar_the_red_edge_and_the_arc_and_shake_is_a_setting() {
+        let mut g = game();
+        g.act("menu.practice", "").unwrap();
+        let bar = hud_line(&g, "health");
+        assert_eq!(
+            (bar.fill, bar.trail, bar.tone),
+            (Some(10_000), Some(10_000), None)
+        );
+        assert!(!hud_line(&g, "hurt").shown && !hud_line(&g, "bearing").shown);
+        // a shot of 30 from straight behind
+        let p = &mut g.world.players[0];
+        let behind = p
+            .eye_now()
+            .add(crate::geom::facing(p.aim.yaw, 0).scale(-fx::int(10)));
+        p.hurt.struck(100, 30, Some(behind));
+        p.health = 70;
+        let bar = hud_line(&g, "health");
+        assert_eq!(
+            (bar.fill, bar.trail, bar.tone),
+            (Some(7_000), Some(10_000), Some("struck"))
+        );
+        let edge = hud_line(&g, "hurt");
+        assert!(edge.shown && edge.fill.unwrap() > crate::hurt::EDGE_LEAST);
+        let arc = hud_line(&g, "bearing");
+        assert!(arc.shown);
+        assert!((arc.turn.unwrap() - 18_000).abs() < 50, "{:?}", arc.turn);
+        // low health pulses once the jolt is over
+        g.world.players[0].health = 20;
+        g.world.players[0].hurt.ticks = crate::hurt::HURT - crate::hurt::STRUCK;
+        assert_eq!(hud_line(&g, "health").tone, Some("low"));
+        // the shake starts on, and its setting turns it off
+        assert!(g.shake);
+        g.act("shake.set", "-1").unwrap();
+        assert!(!g.shake);
+        let row = crate::api::settings(&g)
+            .into_iter()
+            .find(|s| s.id == "shake")
+            .unwrap();
+        assert_eq!((row.label.as_str(), row.value.as_str()), ("Screen shake", "Off"));
+    }
+
+    #[test]
     fn the_painted_filter_starts_off_and_its_setting_turns_it_on_and_off() {
         let mut g = game();
         assert!(!g.filter, "off until the player turns it on");
@@ -944,6 +1016,9 @@ pub(crate) mod tests {
         assert_eq!(p.body.origin, v3(-fx::int(18), fx::int(10), fx::int(25)));
         assert_eq!(p.aim.yaw, fx::deg(90));
         assert!(g.act("place.at", "1 2 3").is_err());
+        g.act("place.hurt", "40 0 0").unwrap();
+        assert_eq!(g.world.players[0].health, 60);
+        assert!(g.act("place.hurt", "40").is_err());
     }
 
     #[test]

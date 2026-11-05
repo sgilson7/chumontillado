@@ -103,7 +103,7 @@ pub struct Panel {
 }
 
 /// A line over the play view: its id, its text, and whether it shows.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct Hud {
     pub id: String,
     pub text: String,
@@ -112,6 +112,20 @@ pub struct Hud {
     /// down (the markers through walls); none for the fixed lines
     #[serde(skip_serializing_if = "Option::is_none")]
     pub at: Option<[i32; 2]>,
+    /// T18: how full (the health bar) or how strong (the red edge, the arc
+    /// to the shooter), hundredths of a percent
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fill: Option<i32>,
+    /// T18: the health bar's lost part, still shown to here (hundredths of
+    /// a percent)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trail: Option<i32>,
+    /// T18: turned clockwise this far (hundredths of a degree)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub turn: Option<i32>,
+    /// T18: a state the page styles: the bar `struck` or `low`
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tone: Option<&'static str>,
 }
 
 /// A term and its definition, for the page's hover hints.
@@ -385,6 +399,12 @@ pub fn settings(g: &Game) -> Vec<Setting> {
             actions: step("filter.set", "filter_off", "filter_on"),
         },
         Setting {
+            id: "shake".into(),
+            label: g.strings.get("setting_shake"),
+            value: g.strings.get(if g.shake { "filter_on" } else { "filter_off" }),
+            actions: step("shake.set", "filter_off", "filter_on"),
+        },
+        Setting {
             id: "look".into(),
             label: g.strings.get("setting_look"),
             value: g.strings.get("percent").replace("{n}", &g.look_pct.to_string()),
@@ -421,7 +441,7 @@ fn round_lines(g: &Game, playing: bool) -> Vec<Hud> {
         id: id.into(),
         text,
         shown: shown && playing,
-        at: None,
+        ..Hud::default()
     };
     let scores = (0..w.players.len())
         .filter(|&k| !w.players[k].out)
@@ -486,6 +506,7 @@ fn round_lines(g: &Game, playing: bool) -> Vec<Hud> {
             text: String::new(),
             shown: playing && spot.is_some(),
             at: spot,
+            ..Hud::default()
         });
     }
     out
@@ -519,8 +540,10 @@ pub fn hud(g: &Game) -> Vec<Hud> {
         id: id.into(),
         text,
         shown,
-        at: None,
+        ..Hud::default()
     };
+    let full = |n: i32| n.clamp(0, world::HEALTH) * 10_000 / world::HEALTH;
+    let hurt = &p.hurt;
     vec![
         line(
             "speed",
@@ -574,11 +597,42 @@ pub fn hud(g: &Game) -> Vec<Hud> {
             playing && g.in_match() && g.view_world().tick < 600,
         ),
         // M2: health, the gun and its rounds, reloading, the Pincel's charge
-        line(
-            "health",
-            g.strings.get("hud_health").replace("{n}", &p.health.to_string()),
-            playing,
-        ),
+        // T18: a bar, its lost part held a moment, jolting when hit and
+        // pulsing when low
+        Hud {
+            fill: Some(full(p.health)),
+            trail: Some(full(hurt.trail.max(p.health))),
+            tone: if hurt.jolted() {
+                Some("struck")
+            } else if p.alive() && p.health * 4 <= world::HEALTH {
+                Some("low")
+            } else {
+                None
+            },
+            ..line(
+                "health",
+                g.strings.get("hud_health").replace("{n}", &p.health.to_string()),
+                playing,
+            )
+        },
+        // T18: the screen's edges flush red when hit, and an arc round the
+        // crosshair points to the shooter: drawn, not read
+        Hud {
+            fill: Some(hurt.edge()),
+            ..line("hurt", String::new(), playing && hurt.edge() > 0)
+        },
+        {
+            let bearing = hurt.bearing(p.eye(g.alpha), p.aim.yaw);
+            Hud {
+                fill: Some(hurt.arc()),
+                turn: bearing,
+                ..line(
+                    "bearing",
+                    String::new(),
+                    playing && p.alive() && bearing.is_some(),
+                )
+            }
+        },
         line("gun", g.strings.get(p.arms.weapon.stats().name), playing),
         line(
             "ammo",

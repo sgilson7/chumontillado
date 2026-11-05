@@ -85,7 +85,26 @@ kbd { display: inline-block; padding: 2px 8px; border-radius: 3px; background: v
 .hud-item.shown { opacity: 1; }
 body:not([data-screen="play"]) #hud { display: none; }
 #hud-speed { left: 50%; bottom: 4vh; transform: translateX(-50%); font: 700 28px/1.2 ui-monospace, Menlo, Consolas, monospace; min-width: 180px; text-align: center; transition: none; }
-#hud-health { left: 24px; bottom: 4vh; font-size: 26px; font-weight: 700; transition: none; }
+/* T18: the health bar: what is left in ivory, the part just lost in
+   vermilion until it drains, the rest dark; it jolts when hit and pulses
+   red when low */
+#hud-health {
+  left: 24px; bottom: 4vh; width: 280px; padding: 4px 14px; font-size: 22px; font-weight: 700; transition: none;
+  color: var(--umber); text-shadow: 0 0 6px rgba(239, 227, 200, 0.6);
+  border: 2px solid var(--umber-edge);
+  background: linear-gradient(to right, var(--ink) 0 var(--fill, 100%), var(--accent) var(--fill, 100%) var(--trail, 100%), rgba(0, 0, 0, 0.6) var(--trail, 100%));
+}
+#hud-health[data-tone="struck"] { animation: jolt 0.13s linear; border-color: var(--accent); }
+#hud-health[data-tone="low"] { animation: low 0.9s ease-in-out infinite; color: var(--ink); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8); background: linear-gradient(to right, var(--accent) 0 var(--fill, 100%), var(--accent-deep) var(--fill, 100%) var(--trail, 100%), rgba(0, 0, 0, 0.6) var(--trail, 100%)); }
+@keyframes jolt { 0% { transform: translate(0, 0); } 25% { transform: translate(-5px, 2px); } 50% { transform: translate(4px, -2px); } 75% { transform: translate(-2px, 1px); } 100% { transform: translate(0, 0); } }
+@keyframes low { 0%, 100% { border-color: var(--umber-edge); } 50% { border-color: var(--accent); box-shadow: 0 0 14px var(--accent); } }
+/* T18: hit: the screen's edges flush red, and an arc round the crosshair
+   points to the shooter; the core sets how strong and which way */
+#hud-hurt { inset: 0; padding: 0; border-radius: 0; transition: none; background: radial-gradient(ellipse at center, transparent 45%, rgba(110, 29, 24, 0.55) 75%, rgba(179, 54, 31, 0.95) 100%); }
+#hud-hurt.shown { opacity: var(--fill); }
+#hud-bearing { left: 50%; top: 50%; width: 0; height: 0; padding: 0; background: none; border-radius: 0; transition: none; transform: rotate(var(--turn, 0deg)); }
+#hud-bearing.shown { opacity: var(--fill); }
+#hud-bearing::before { content: ""; position: absolute; width: 22vh; height: 22vh; left: -11vh; top: -11vh; border-radius: 50%; border: 7px solid transparent; border-top-color: var(--accent); filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.8)); }
 #hud-walls { left: 24px; bottom: calc(4vh + 52px); font-size: 16px; letter-spacing: 0.04em; transition: none; }
 #hud-doing { left: 24px; bottom: calc(4vh + 94px); font-size: 14px; color: var(--ink-soft); transition: none; }
 #hud-ammo { right: 24px; bottom: 4vh; font: 700 28px/1.2 ui-monospace, Menlo, Consolas, monospace; transition: none; }

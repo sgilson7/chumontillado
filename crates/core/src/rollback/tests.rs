@@ -388,6 +388,9 @@ fn a_late_record_is_heard_once_and_a_tick_run_again_repeats_no_sound() {
         ..Input::default()
     };
     let mut room = Room::new(2, |_, _| 4, &[]);
+    // T19: no bots, which hunt now and would fell the guest first
+    room.nets[0].toggle_bot(2);
+    room.nets[0].toggle_bot(3);
     room.start();
     let mut heard = Vec::new();
     while room.sessions[0].as_ref().is_none_or(|s| s.tick < 400) {
