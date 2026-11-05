@@ -20,13 +20,18 @@
 //! - `tube`: a ring of sixteen sides with a hole of `TUBE_HOLE_PCT`: a
 //!   well's wall, a wheel's rim, a key's bow.
 //! - `pyramid`: four sides to an apex: a shrine's roof, a post's cap.
+//! - T21: `round`, `rod`, `bell`: a box, a cylinder and a taper with their
+//!   edges rounded and their normals smooth, so the skins read as modelled
+//!   forms rather than blocks. Each is built from a flat shape whose
+//!   surface is pushed out from an inner core by the rounding radius,
+//!   the normal being the direction pushed.
 //!
 //! How a module joins the world (state, step, draw, scene, screen, act):
 //! the extension contract in `world.rs`.
 
 use crate::fx::{self, ONE};
 use crate::geom::{v3, V3};
-use crate::prim::push_coloured;
+use crate::prim::{push_coloured, push_smooth};
 
 const H: i32 = ONE / 2;
 const WHITE: [i32; 3] = [ONE; 3];
@@ -230,6 +235,122 @@ pub fn pyramid() -> Vec<i32> {
     o
 }
 
+/// T21: the rounding radius of the smooth shapes' edges, percent of the
+/// unit cube's side: the box's and the rod's, and the bell's, smaller, as
+/// a bell is drawn large (a skirt, a habit) and its hem should stay a hem.
+pub const ROUND_PCT: i32 = 20;
+pub const BELL_ROUND_PCT: i32 = 6;
+/// The smooth columns' sides, and the steps round each rounded edge.
+pub const SMOOTH_SIDES: i32 = 32;
+const ARC_STEPS: i32 = 4;
+
+/// The values across one axis of a rounded face: the rounding band at each
+/// end in `ARC_STEPS`, the flat between.
+fn band_steps(r: i32) -> Vec<i32> {
+    let mut v: Vec<i32> = (0..=ARC_STEPS).map(|k| -H + r * k / ARC_STEPS).collect();
+    v.extend((0..=ARC_STEPS).map(|k| H - r + r * k / ARC_STEPS));
+    v
+}
+
+/// A box with rounded edges: each point of a face grid is pulled in to the
+/// inner core (the box less `r` each way) and pushed out again by `r`
+/// along the way it was pulled, which is its normal.
+pub fn round() -> Vec<i32> {
+    let r = ONE * ROUND_PCT / 100;
+    let core = H - r;
+    let steps = band_steps(r);
+    let mut o = Vec::new();
+    let at = |c: V3| -> (V3, V3) {
+        let inner = v3(
+            c.x.clamp(-core, core),
+            c.y.clamp(-core, core),
+            c.z.clamp(-core, core),
+        );
+        let n = c.sub(inner).norm();
+        (inner.add(n.scale(r)), n)
+    };
+    // each face: its normal axis, and the two axes across it, ordered so
+    // (u × v) points out
+    let faces: [(V3, V3, V3); 6] = [
+        (v3(H, 0, 0), v3(0, 0, -ONE), v3(0, ONE, 0)),
+        (v3(-H, 0, 0), v3(0, 0, ONE), v3(0, ONE, 0)),
+        (v3(0, H, 0), v3(ONE, 0, 0), v3(0, 0, -ONE)),
+        (v3(0, -H, 0), v3(ONE, 0, 0), v3(0, 0, ONE)),
+        (v3(0, 0, H), v3(ONE, 0, 0), v3(0, ONE, 0)),
+        (v3(0, 0, -H), v3(-ONE, 0, 0), v3(0, ONE, 0)),
+    ];
+    for (mid, u, v) in faces {
+        let pt = |a: i32, b: i32| at(mid.add(u.scale(a)).add(v.scale(b)));
+        for i in 0..steps.len() - 1 {
+            for j in 0..steps.len() - 1 {
+                let (a0, a1, b0, b1) = (steps[i], steps[i + 1], steps[j], steps[j + 1]);
+                let (p, q, s, t) = (pt(a0, b0), pt(a1, b0), pt(a1, b1), pt(a0, b1));
+                push_smooth(&mut o, [p, q, s]);
+                push_smooth(&mut o, [p, s, t]);
+            }
+        }
+    }
+    o
+}
+
+/// A surface turned about y from a profile of (radius, height, normal
+/// across, normal up), bottom to top, `SMOOTH_SIDES` round.
+fn revolve(profile: &[(i32, i32, i32, i32)]) -> Vec<i32> {
+    let mut o = Vec::new();
+    let at = |k: usize, j: i32| -> (V3, V3) {
+        let (r, y, nr, ny) = profile[k];
+        let b = fx::TURN * j / SMOOTH_SIDES;
+        let (c, s) = (fx::cos(b), -fx::sin(b));
+        (
+            v3(fx::mul(r, c), y, fx::mul(r, s)),
+            v3(fx::mul(nr, c), ny, fx::mul(nr, s)),
+        )
+    };
+    for k in 0..profile.len() - 1 {
+        for j in 0..SMOOTH_SIDES {
+            let (a, b, c, d) = (at(k, j), at(k, j + 1), at(k + 1, j + 1), at(k + 1, j));
+            if profile[k].0 > 0 {
+                push_smooth(&mut o, [a, b, c]);
+            }
+            if profile[k + 1].0 > 0 {
+                push_smooth(&mut o, [a, c, d]);
+            }
+        }
+    }
+    o
+}
+
+/// The profile of a column of radius `H` at its foot and `top_pct` of that
+/// at its head, its rims rounded by `round_pct` of the cube's side.
+fn column(top_pct: i32, round_pct: i32) -> Vec<i32> {
+    let r = ONE * round_pct / 100;
+    let (foot, head) = (H, H * top_pct / 100);
+    // the side's outward normal, tilted up as the column narrows
+    let side = fx::wrap(fx::atan2(foot - head, ONE));
+    let mut p = vec![(0, -H, 0, -ONE)];
+    let arc = |p: &mut Vec<(i32, i32, i32, i32)>, centre: (i32, i32), from: i32, to: i32| {
+        for k in 0..=ARC_STEPS {
+            let a = from + (to - from) * k / ARC_STEPS;
+            let (nr, ny) = (fx::cos(a), fx::sin(a));
+            p.push((centre.0 + fx::mul(nr, r), centre.1 + fx::mul(ny, r), nr, ny));
+        }
+    };
+    arc(&mut p, (foot - r, -H + r), -fx::QUARTER_TURN, side);
+    arc(&mut p, (head - r, H - r), side, fx::QUARTER_TURN);
+    p.push((0, H, 0, ONE));
+    revolve(&p)
+}
+
+/// A cylinder with rounded rims.
+pub fn rod() -> Vec<i32> {
+    column(100, ROUND_PCT)
+}
+
+/// A column narrowing to `TAPER_PCT`, with rounded rims.
+pub fn bell() -> Vec<i32> {
+    column(TAPER_PCT, BELL_ROUND_PCT)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -256,6 +377,39 @@ mod tests {
     /// Every closed new shape winds its faces away from a point inside it,
     /// as `prim`'s test asks of the primitives; the tube's inner wall faces
     /// its axis, away from the ring's own body.
+    #[test]
+    fn the_smooth_shapes_wind_outward_agree_with_their_normals_and_fill_the_cube() {
+        for (name, vs) in [("round", round()), ("rod", rod()), ("bell", bell())] {
+            let (mut lo, mut hi) = (V3::ZERO, V3::ZERO);
+            for t in vs.chunks(3 * VERTEX_VALUES) {
+                let v = |i: usize| v3(t[i], t[i + 1], t[i + 2]);
+                let (a, b, c) = (v(0), v(VERTEX_VALUES), v(2 * VERTEX_VALUES));
+                for q in [a, b, c] {
+                    lo = v3(lo.x.min(q.x), lo.y.min(q.y), lo.z.min(q.z));
+                    hi = v3(hi.x.max(q.x), hi.y.max(q.y), hi.z.max(q.z));
+                }
+                let n = b.sub(a).cross(c.sub(a));
+                if n.len() == 0 {
+                    continue;
+                }
+                // the stored normal at each corner leans the way the face does
+                for k in 0..3 {
+                    let o = k * VERTEX_VALUES + 3;
+                    let stored = v3(t[o], t[o + 1], t[o + 2]);
+                    assert!(
+                        stored.dot(n.norm()) > 0,
+                        "{name}: a face at {a:?} turns from its normal"
+                    );
+                }
+            }
+            // inside the unit cube, and reaching its faces within a rounding
+            for (l, h) in [(lo.x, hi.x), (lo.y, hi.y), (lo.z, hi.z)] {
+                assert!(l >= -H - 2 && h <= H + 2, "{name}: {l} {h}");
+                assert!(h > H - ONE / 50 && l < -H + ONE / 50, "{name}: {l} {h}");
+            }
+        }
+    }
+
     #[test]
     fn every_new_shape_winds_its_faces_outward() {
         for (name, vs, centre) in [

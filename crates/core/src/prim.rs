@@ -60,10 +60,17 @@ pub enum Mesh {
     Tube = 14,
     /// four sides to an apex: roofs, caps
     Pyramid = 15,
+    // T21 (`mesh.rs`): smooth shapes for the skins
+    /// a box with rounded edges and corners, smooth-shaded
+    Round = 16,
+    /// an upright cylinder with rounded rims, smooth-shaded
+    Rod = 17,
+    /// a smooth column narrowing upward, rounded rims: skirts, habits
+    Bell = 18,
 }
 
 impl Mesh {
-    pub const ALL: [Mesh; 16] = [
+    pub const ALL: [Mesh; 19] = [
         Mesh::Cube,
         Mesh::Tri,
         Mesh::Square,
@@ -80,6 +87,9 @@ impl Mesh {
         Mesh::Taper,
         Mesh::Tube,
         Mesh::Pyramid,
+        Mesh::Round,
+        Mesh::Rod,
+        Mesh::Bell,
     ];
 
     /// Shapes whose faces are flat: one of them can lie in another's plane,
@@ -190,7 +200,7 @@ fn push_quad(out: &mut Vec<i32>, a: V3, b: V3, c: V3, d: V3) {
 }
 
 /// A triangle whose normals are given per vertex (smooth shading).
-fn push_smooth(out: &mut Vec<i32>, p: [(V3, V3); 3]) {
+pub(crate) fn push_smooth(out: &mut Vec<i32>, p: [(V3, V3); 3]) {
     for (q, n) in p {
         out.extend_from_slice(&[q.x, q.y, q.z, n.x, n.y, n.z, WHITE[0], WHITE[1], WHITE[2]]);
     }
@@ -347,6 +357,9 @@ pub fn vertices(mesh: Mesh) -> Vec<i32> {
         Mesh::Taper => o = crate::mesh::taper(),
         Mesh::Tube => o = crate::mesh::tube(),
         Mesh::Pyramid => o = crate::mesh::pyramid(),
+        Mesh::Round => o = crate::mesh::round(),
+        Mesh::Rod => o = crate::mesh::rod(),
+        Mesh::Bell => o = crate::mesh::bell(),
     }
     o
 }
