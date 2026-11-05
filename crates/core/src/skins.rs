@@ -133,31 +133,42 @@ pub fn parts(skin: Skin) -> Vec<Part> {
             leg(p(Rod, [11, 46, 0], [18, 92, 18], "hose"), LegR),
             leg(p(Round, [-11, 4, -3], [14, 8, 22], "shoe"), LegL),
             leg(p(Round, [11, 4, -3], [14, 8, 22], "shoe"), LegR),
-            p(Bell, [0, 100, 0], [74, 26, 60], "black"),
-            p(Sphere, [0, 128, 0], [80, 70, 56], "black"),
-            turned(p(Round, [0, 120, -26], [74, 9, 5], "crimson"), 15, 0),
-            p(Dot, [0, 128, -29], [4, 4, 3], "ochre"),
-            p(Dot, [0, 138, -27], [4, 4, 3], "ochre"),
-            p(Dot, [0, 148, -24], [4, 4, 3], "ochre"),
-            p(Rod, [0, 160, 0], [66, 10, 62], "bone"),
-            p(Sphere, [0, 170, 0], [36, 40, 38], "flesh"),
-            p(Round, [0, 155, -15], [12, 12, 8], "beard"),
-            p(Dot, [-7, 174, -18], [5, 3, 3], "ink"),
-            p(Dot, [7, 174, -18], [5, 3, 3], "ink"),
+            // T21, after El Greco: long and narrow. A tall slim doublet
+            // over a short skirt, a long face and a pointed beard
+            p(Bell, [0, 98, 0], [76, 24, 56], "black"),
+            p(Round, [0, 128, 0], [52, 52, 38], "black"),
+            turned(p(Round, [0, 122, -19], [56, 8, 5], "crimson"), 15, 0),
+            p(Dot, [0, 118, -20], [4, 4, 3], "ochre"),
+            p(Dot, [0, 130, -20], [4, 4, 3], "ochre"),
+            p(Dot, [0, 142, -20], [4, 4, 3], "ochre"),
+            p(Rod, [0, 160, 0], [46, 6, 42], "bone"),
+            p(Sphere, [0, 172, 0], [30, 42, 34], "flesh"),
+            turned(p(Bell, [0, 151, -11], [14, 16, 10], "beard"), 180, 0),
+            p(Dot, [-6, 175, -16], [5, 3, 3], "ink"),
+            p(Dot, [6, 175, -16], [5, 3, 3], "ink"),
             // the tall hat, cut to the envelope's top (R9.3)
             p(Rod, [0, 185, 0], [40, 3, 40], "black"),
             p(Rod, [0, 188, 0], [26, 9, 26], "black"),
-        ],
+        ]
+        .into_iter()
+        .chain(ruff())
+        .collect(),
         Skin::Infanta => vec![
             p(Round, [-12, 3, -4], [14, 6, 18], "shoe"),
             p(Round, [12, 3, -4], [14, 6, 18], "shoe"),
-            p(Bell, [0, 50, 0], [94, 96, 94], "silver"),
-            p(Rod, [0, 40, 0], [86, 6, 86], "salmon"),
-            p(Bell, [0, 121, 0], [56, 46, 44], "silver"),
-            p(Round, [0, 121, -21], [12, 40, 4], "salmon"),
-            p(Sphere, [-18, 136, -16], [20, 14, 12], "salmon"),
-            p(Sphere, [18, 136, -16], [20, 14, 12], "salmon"),
-            p(Sphere, [0, 170, 6], [60, 44, 46], "hair"),
+            // T21, after Velázquez: the farthingale wider across than
+            // front to back, a stiff bodice pointed at the waist, the hair
+            // a wide frame at each side of the face
+            p(Bell, [0, 50, 0], [94, 96, 64], "silver"),
+            p(Rod, [0, 40, 0], [88, 6, 60], "salmon"),
+            p(Rod, [0, 99, 0], [56, 6, 40], "salmon"),
+            turned(p(Bell, [0, 124, 0], [48, 44, 32], "silver"), 180, 0),
+            turned(p(Bell, [0, 120, -14], [14, 38, 6], "salmon"), 180, 0),
+            p(Sphere, [-18, 138, -10], [20, 14, 12], "salmon"),
+            p(Sphere, [18, 138, -10], [20, 14, 12], "salmon"),
+            p(Sphere, [-21, 166, 4], [22, 38, 30], "hair"),
+            p(Sphere, [21, 166, 4], [22, 38, 30], "hair"),
+            p(Sphere, [0, 172, 8], [40, 38, 34], "hair"),
             p(Sphere, [0, 168, -2], [34, 40, 36], "flesh"),
             p(Dot, [-7, 170, -19], [4, 3, 3], "ink"),
             p(Dot, [7, 170, -19], [4, 3, 3], "ink"),
@@ -197,16 +208,19 @@ pub fn parts(skin: Skin) -> Vec<Part> {
             leg(p(Rod, [11, 20, 0], [18, 40, 18], "umber"), LegR),
             leg(p(Round, [-11, 4, -3], [14, 8, 22], "shoe"), LegL),
             leg(p(Round, [11, 4, -3], [14, 8, 22], "shoe"), LegR),
-            p(Bell, [0, 77, 0], [90, 138, 80], "black"),
-            p(Round, [-12, 90, -29], [10, 90, 3], "umber"),
-            p(Sphere, [0, 146, 0], [78, 30, 52], "black"),
-            p(Sphere, [0, 174, 6], [56, 36, 50], "grey"),
-            p(Sphere, [0, 168, -2], [34, 40, 36], "flesh"),
-            p(Dot, [-8, 172, -19], [10, 9, 4], "bone"),
-            p(Dot, [8, 172, -19], [10, 9, 4], "bone"),
-            p(Dot, [-8, 172, -21], [3, 3, 2], "ink"),
-            p(Dot, [8, 172, -21], [3, 3, 2], "ink"),
-            p(Dot, [0, 157, -18], [9, 11, 3], "mouth"),
+            // T21, after Goya's dark paintings: the cloak leans forward
+            // from a hunched back, and the head sinks into it
+            turned(p(Bell, [0, 77, -4], [78, 138, 88], "black"), -6, 90),
+            turned(p(Round, [-12, 90, -32], [10, 90, 3], "umber"), -6, 90),
+            p(Sphere, [0, 142, -6], [78, 30, 52], "black"),
+            p(Sphere, [0, 146, 12], [54, 34, 34], "black"),
+            p(Sphere, [0, 166, 4], [56, 36, 50], "grey"),
+            p(Sphere, [0, 161, -6], [34, 38, 34], "flesh"),
+            p(Dot, [-8, 165, -22], [10, 9, 4], "bone"),
+            p(Dot, [8, 165, -22], [10, 9, 4], "bone"),
+            p(Dot, [-8, 165, -24], [3, 3, 2], "ink"),
+            p(Dot, [8, 165, -24], [3, 3, 2], "ink"),
+            p(Dot, [0, 151, -21], [9, 11, 3], "mouth"),
         ],
         // T16: after Zurbarán: a white habit to the ground in deep folds, a
         // scapular down its front, a rope belt and its cord, the hood
@@ -214,16 +228,20 @@ pub fn parts(skin: Skin) -> Vec<Part> {
         Skin::Fraile => vec![
             p(Round, [-11, 3, -6], [12, 6, 18], "sandal"),
             p(Round, [11, 3, -6], [12, 6, 18], "sandal"),
-            p(Bell, [0, 56, 0], [86, 112, 78], "habit"),
-            p(Round, [-20, 52, -30], [6, 96, 3], "fold"),
-            p(Round, [20, 52, -30], [6, 96, 3], "fold"),
-            p(Round, [0, 48, 34], [10, 90, 3], "fold"),
-            p(Sphere, [0, 126, 0], [72, 54, 52], "habit"),
-            p(Round, [0, 104, -27], [26, 92, 4], "scapular"),
-            p(Rod, [0, 100, 0], [74, 6, 60], "rope"),
-            p(Round, [-16, 78, -30], [3, 42, 3], "rope"),
-            p(Dot, [-16, 56, -30], [6, 6, 6], "rope"),
-            p(Sphere, [0, 150, 6], [62, 22, 50], "habit"),
+            // T21: one habit from the shoulders to the floor, deep folds
+            // down it as rods in its shade, and a cowl that falls over
+            // the shoulders
+            p(Bell, [0, 75, 0], [84, 150, 72], "habit"),
+            turned(p(Rod, [-15, 56, -28], [5, 104, 5], "fold"), 5, 90),
+            turned(p(Rod, [15, 56, -28], [5, 104, 5], "fold"), 5, 90),
+            turned(p(Rod, [-33, 54, 0], [5, 100, 5], "fold"), -7, 0),
+            turned(p(Rod, [33, 54, 0], [5, 100, 5], "fold"), 7, 0),
+            turned(p(Rod, [0, 56, 28], [6, 104, 6], "fold"), -5, 90),
+            turned(p(Round, [0, 104, -25], [24, 90, 4], "scapular"), 5, 90),
+            p(Rod, [0, 100, 0], [64, 6, 52], "rope"),
+            p(Round, [-14, 78, -28], [3, 42, 3], "rope"),
+            p(Dot, [-14, 56, -30], [6, 6, 6], "rope"),
+            p(Bell, [0, 146, 2], [60, 24, 52], "habit"),
             p(Sphere, [0, 170, 6], [46, 42, 44], "fold"),
             p(Sphere, [0, 168, -3], [30, 36, 32], "flesh"),
             p(Round, [0, 181, -14], [30, 8, 8], "fold"),
@@ -243,17 +261,22 @@ pub fn parts(skin: Skin) -> Vec<Part> {
             leg(p(Round, [19, 68, 0], [3, 46, 5], "gold"), LegR),
             leg(p(Round, [-10, 3, -3], [12, 6, 22], "black"), LegL),
             leg(p(Round, [10, 3, -3], [12, 6, 22], "black"), LegR),
-            p(Rod, [0, 97, 0], [50, 12, 38], "sash"),
-            p(Sphere, [0, 125, 0], [62, 50, 44], "suit"),
-            p(Round, [-14, 124, -21], [10, 40, 3], "gold"),
-            p(Round, [14, 124, -21], [10, 40, 3], "gold"),
-            p(Round, [0, 130, -22], [12, 30, 3], "shirt"),
-            p(Round, [0, 140, -24], [4, 14, 2], "sash"),
+            // T21: a short fitted jacket, broad at the shoulder, over a
+            // narrow waist
+            p(Rod, [0, 98, 0], [40, 14, 30], "sash"),
+            turned(p(Bell, [0, 130, 0], [58, 38, 36], "suit"), 180, 0),
+            p(Round, [-13, 130, -16], [8, 34, 3], "gold"),
+            p(Round, [13, 130, -16], [8, 34, 3], "gold"),
+            p(Round, [0, 134, -17], [12, 28, 3], "shirt"),
+            p(Round, [0, 142, -19], [4, 12, 2], "sash"),
             p(Sphere, [-27, 146, 0], [20, 12, 22], "gold"),
             p(Sphere, [27, 146, 0], [20, 12, 22], "gold"),
-            // the cape over the left shoulder, its yellow lining at the hem
-            turned(p(Round, [-36, 112, 2], [6, 70, 38], "cape"), 4, 0),
-            p(Round, [-37, 78, 2], [7, 6, 38], "lining"),
+            // the cape over the left shoulder, hanging in a curve, its
+            // yellow lining at the hem
+            turned(p(Round, [-31, 138, 2], [6, 22, 38], "cape"), 40, 0),
+            turned(p(Round, [-37, 114, 2], [6, 34, 38], "cape"), 4, 0),
+            turned(p(Round, [-35, 88, 2], [6, 24, 36], "cape"), -12, 0),
+            turned(p(Round, [-32, 76, 2], [7, 6, 36], "lining"), -12, 0),
             p(Rod, [0, 152, 0], [14, 10, 14], "flesh"),
             p(Sphere, [0, 168, -2], [32, 38, 34], "flesh"),
             p(Round, [-15, 166, -6], [3, 12, 6], "hair"),
@@ -267,6 +290,21 @@ pub fn parts(skin: Skin) -> Vec<Part> {
             p(Sphere, [9, 185, 2], [20, 12, 24], "black"),
         ],
     }
+}
+
+/// The Hidalgo's ruff (T21): pleats, small upright rods in a ring round
+/// the neck, over a disc.
+const PLEATS: i32 = 16;
+const RUFF_R: i32 = 22;
+
+fn ruff() -> Vec<Part> {
+    (0..PLEATS)
+        .map(|k| {
+            let a = fx::TURN / PLEATS * k;
+            let (x, z) = (fx::mul(RUFF_R, fx::sin(a)), fx::mul(RUFF_R, fx::cos(a)));
+            p(Mesh::Rod, [x, 160 + k % 2, z], [9, 10, 9], "bone")
+        })
+        .collect()
 }
 
 /// A part's colour from the look, or the ink's if the look lacks it (the

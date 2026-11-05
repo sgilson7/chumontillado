@@ -1458,8 +1458,8 @@
   {
     "name": "T16 the Friar's hood stays inside the envelope",
     "file": "crates/core/src/skins.rs",
-    "find": "            p(Facet, [0, 170, 6], [46, 42, 44], \"fold\"),",
-    "replace": "            p(Facet, [0, 172, 6], [46, 44, 44], \"fold\"),",
+    "find": "            p(Sphere, [0, 170, 6], [46, 42, 44], \"fold\"),",
+    "replace": "            p(Sphere, [0, 172, 6], [46, 44, 44], \"fold\"),",
     "test": "every_skin_and_the_straw_target_stay_inside_the_hit_envelope"
   },
   {
@@ -1601,5 +1601,33 @@
     "find": "if let (Some(c), Some(_), None) = (target, v.hunt, v.reach) {",
     "replace": "if let (Some(c), Some(_)) = (target, v.hunt) {",
     "test": "a_lone_bot_finds_and_fells_a_person_standing_still_on_every_map"
+  },
+  {
+    "name": "T21 the smooth shapes wind outward and fill their box",
+    "file": "crates/core/src/mesh.rs",
+    "find": "pub const ROUND_PCT: i32 = 20;",
+    "replace": "pub const ROUND_PCT: i32 = 70;",
+    "test": "the_smooth_shapes_wind_outward_agree_with_their_normals_and_fill_the_cube"
+  },
+  {
+    "name": "T21 El Sordo's cloak leans forward inside the envelope",
+    "file": "crates/core/src/skins.rs",
+    "find": "[0, 77, -4], [78, 138, 88], \"black\"), -6, 90)",
+    "replace": "[0, 77, -4], [78, 138, 88], \"black\"), 6, 90)",
+    "test": "every_skin_and_the_straw_target_stay_inside_the_hit_envelope"
+  },
+  {
+    "name": "T21 the slim Hidalgo still reads as wide as he is hit",
+    "file": "crates/core/src/skins.rs",
+    "find": "p(Bell, [0, 98, 0], [76, 24, 56], \"black\")",
+    "replace": "p(Bell, [0, 98, 0], [64, 22, 50], \"black\")",
+    "test": "every_skin_and_the_straw_target_stay_inside_the_hit_envelope"
+  },
+  {
+    "name": "T21 the Infanta's farthingale stays inside the envelope",
+    "file": "crates/core/src/skins.rs",
+    "find": "p(Bell, [0, 50, 0], [94, 96, 64], \"silver\")",
+    "replace": "p(Bell, [0, 50, 0], [100, 96, 64], \"silver\")",
+    "test": "every_skin_and_the_straw_target_stay_inside_the_hit_envelope"
   }
 ]
