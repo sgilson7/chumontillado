@@ -134,6 +134,10 @@ def run(p, engine, origin):
     except Exception:
         ok = False
     check(ok, "both guests take a seat in the host's lobby")
+    if not ok:
+        # what each guest was told, for the failure's record
+        for who, page in (("linked", linked), ("typed", typed)):
+            print(f"    {who} says: {page.inner_text('#online p') if page.query_selector('#online p') else '(no panel)'}")
     seats = [b.inner_text() for b in host.query_selector_all('button[data-action="online.bot"]')]
     want = [STRINGS["seat_you_n"].replace("{n}", "1"), STRINGS["seat_player_n"].replace("{n}", "2"), held, STRINGS["seat_bot_on"].replace("{n}", "4")]
     check([x.lower() for x in seats] == [x.lower() for x in want], f"the host holds seat 1, the guests 2 and 3, and seat 4 is a bot's ({seats})")

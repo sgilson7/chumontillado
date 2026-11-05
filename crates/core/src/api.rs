@@ -226,11 +226,21 @@ fn online_panel(g: &Game) -> Panel {
         return p;
     }
     p.heading = s.get(if v.host { "host_match" } else { "join_match" });
-    p.text = s.get(match (v.host, v.seat()) {
-        (true, _) => "host_text",
-        (false, None) => "joining_text",
-        (false, Some(_)) => "online.lobby",
-    });
+    use crate::versus::Notice;
+    let notice = v.notice(g.now_us);
+    let fill = |key: &str, secs: i64| {
+        s.get(key)
+            .replace("{code}", &v.code)
+            .replace("{n}", &secs.to_string())
+    };
+    p.text = match (v.host, v.seat(), notice) {
+        (true, _, Some(Notice::Knocking)) => format!("{} {}", s.get("host_text"), s.get("online.knocking")),
+        (true, _, _) => s.get("host_text"),
+        (false, None, Some(Notice::StillLooking { secs })) => fill("online.still_looking", secs),
+        (false, None, Some(Notice::Looking { secs })) => fill("joining_text", secs),
+        (false, None, _) => fill("joining_text", 0),
+        (false, Some(_), _) => s.get("online.lobby"),
+    };
     p.fields = vec![field(g, "room-code", "room_code", &v.code, true)];
     // a copy button says Copied once its text is on the clipboard
     let copy = |id: &str, label: &str| Action {
@@ -245,6 +255,10 @@ fn online_panel(g: &Game) -> Panel {
         copies.push(copy("invite-link", "copy_link"));
     }
     p.actions = copies;
+    // R10.12: a guest still looking can look again
+    if matches!(notice, Some(Notice::StillLooking { .. })) {
+        p.actions.push(action(g, "online.retry", "", "retry", false));
+    }
     if v.host {
         // the host's seats, two to a row: its own and each guest's say who
         // holds them; each free one is a switch, a bot or empty (T10)
@@ -519,6 +533,24 @@ pub fn hud(g: &Game) -> Vec<Hud> {
             "hint",
             g.strings.get("hint_play"),
             playing && g.versus.is_none() && g.world.tick < 600,
+        ),
+        // R10.12: in a match, whose connection holds it up, or who left
+        line(
+            "connection",
+            match g.versus.as_ref().and_then(|v| v.notice(g.now_us)) {
+                Some(crate::versus::Notice::WaitingFor(k)) => {
+                    g.strings.get("online.waiting_for").replace("{who}", &who(g, k))
+                }
+                Some(crate::versus::Notice::Dropped(k)) => {
+                    g.strings.get("online.dropped").replace("{who}", &who(g, k))
+                }
+                _ => String::new(),
+            },
+            playing
+                && matches!(
+                    g.versus.as_ref().and_then(|v| v.notice(g.now_us)),
+                    Some(crate::versus::Notice::WaitingFor(_) | crate::versus::Notice::Dropped(_))
+                ),
         ),
         // M4: online, which seat is yours, for the match's first seconds
         line(

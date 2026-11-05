@@ -104,7 +104,35 @@ pub struct Versus {
     pub error: Option<&'static str>,
     /// the page's clock when the host was last heard (a guest's)
     pub heard_us: Option<i64>,
+    /// R10.12: the page's clock when this room was opened, and when each
+    /// browser that has reached it but not said hello first did
+    pub opened_us: Option<i64>,
+    pub knocking: std::collections::BTreeMap<Peer, i64>,
 }
+
+/// R10.12: what to tell the player about the links, beyond the status.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Notice {
+    /// a guest looking for the room, `secs` so far
+    Looking { secs: i64 },
+    /// a guest that has looked for `STILL_LOOKING_US` and found nobody
+    StillLooking { secs: i64 },
+    /// the host: someone has reached the room but cannot finish joining
+    Knocking,
+    /// in the match: held waiting for this seat's records
+    WaitingFor(usize),
+    /// in the match: this seat's player left; its bot plays it
+    Dropped(usize),
+}
+
+/// A guest that has not found the host in 20 s is told so, with advice.
+pub const STILL_LOOKING_US: i64 = 20_000_000;
+/// The host hears of a browser stuck short of hello after 10 s.
+pub const KNOCKING_US: i64 = 10_000_000;
+/// The match says it waits for a seat after half a second held back.
+pub const WAITING_TICKS: u32 = 30;
+/// A drop is told for four seconds.
+pub const DROPPED_TICKS: u32 = 240;
 
 impl Versus {
     pub fn new(host: bool, code: &str, build: &str, skin: u8) -> Versus {
@@ -119,6 +147,42 @@ impl Versus {
             stage: Stage::Lobby(links),
             error: None,
             heard_us: None,
+            opened_us: None,
+            knocking: std::collections::BTreeMap::new(),
+        }
+    }
+
+    /// R10.12: what the player should be told now about the links.
+    pub fn notice(&self, now_us: i64) -> Option<Notice> {
+        if self.ended() {
+            return None;
+        }
+        match &self.stage {
+            Stage::Lobby(n) => {
+                let opened = self.opened_us.unwrap_or(now_us);
+                if !self.host && n.host_peer().is_none() {
+                    let secs = (now_us - opened).max(0) / 1_000_000;
+                    return Some(if now_us - opened >= STILL_LOOKING_US {
+                        Notice::StillLooking { secs }
+                    } else {
+                        Notice::Looking { secs }
+                    });
+                }
+                let stuck = self
+                    .knocking
+                    .iter()
+                    .any(|(p, &t)| now_us - t >= KNOCKING_US && n.others.get(p).is_some_and(|o| !o.said));
+                (self.host && stuck).then_some(Notice::Knocking)
+            }
+            Stage::Match(s) => {
+                if let Some(d) = s.dropped_within(DROPPED_TICKS) {
+                    return Some(Notice::Dropped(d));
+                }
+                if s.stalled >= WAITING_TICKS {
+                    return s.behind().map(Notice::WaitingFor);
+                }
+                None
+            }
         }
     }
 
@@ -194,7 +258,8 @@ impl Versus {
         self.links().seat
     }
 
-    pub fn connected(&mut self, peer: Peer) {
+    pub fn connected(&mut self, peer: Peer, now_us: i64) {
+        self.knocking.entry(peer).or_insert(now_us);
         match &mut self.stage {
             Stage::Lobby(n) => n.connected(peer),
             Stage::Match(s) => s.links.connected(peer),
@@ -266,6 +331,7 @@ impl Versus {
 
     /// A guest that has not heard the host for `TIMEOUT_US` has lost it.
     pub fn check_time(&mut self, now_us: i64) {
+        self.opened_us.get_or_insert(now_us);
         if self.host || self.ended() {
             return;
         }
@@ -328,8 +394,8 @@ mod tests {
     fn a_guest_that_hears_nothing_from_the_host_for_ten_seconds_has_lost_it() {
         let mut host = Versus::new(true, "KQXRT", "b", 0);
         let mut guest = Versus::new(false, "KQXRT", "b", 1);
-        host.connected(1);
-        guest.connected(2);
+        host.connected(1, 0);
+        guest.connected(2, 0);
         for (_, t) in guest.take_outbox() {
             host.message(1, &t, 0);
         }
@@ -347,8 +413,8 @@ mod tests {
     fn the_host_starting_starts_every_guest_on_the_same_seats() {
         let mut host = Versus::new(true, "KQXRT", "b", 0);
         let mut guest = Versus::new(false, "KQXRT", "b", 1);
-        host.connected(1);
-        guest.connected(2);
+        host.connected(1, 0);
+        guest.connected(2, 0);
         for _ in 0..3 {
             for (_, t) in guest.take_outbox() {
                 host.message(1, &t, 0);
@@ -364,5 +430,48 @@ mod tests {
         assert_eq!(guest.session().map(|s| s.seats), Some(0b11));
         assert_eq!(host.session().map(|s| s.seat), Some(0));
         assert!(!guest.start(), "only the host starts");
+    }
+
+    #[test]
+    fn a_guest_that_finds_nobody_is_told_at_twenty_seconds_and_counts_up_before() {
+        let mut guest = Versus::new(false, "KQXRT", "b", 0);
+        guest.opened_us = Some(0);
+        assert_eq!(guest.notice(5_000_000), Some(Notice::Looking { secs: 5 }));
+        assert_eq!(
+            guest.notice(STILL_LOOKING_US - 1),
+            Some(Notice::Looking { secs: 19 })
+        );
+        assert_eq!(
+            guest.notice(STILL_LOOKING_US),
+            Some(Notice::StillLooking { secs: 20 })
+        );
+        // once the host's hello is in, nothing to say
+        let mut host = Versus::new(true, "KQXRT", "b", 1);
+        host.connected(1, 0);
+        guest.connected(2, 0);
+        for _ in 0..2 {
+            for (_, t) in guest.take_outbox() {
+                host.message(1, &t, 0);
+            }
+            for (_, t) in host.take_outbox() {
+                guest.message(2, &t, 0);
+            }
+        }
+        assert_eq!(guest.notice(STILL_LOOKING_US * 2), None);
+    }
+
+    #[test]
+    fn the_host_hears_after_ten_seconds_of_someone_stuck_short_of_joining() {
+        let mut host = Versus::new(true, "KQXRT", "b", 0);
+        host.connected(7, 1_000_000);
+        assert_eq!(host.notice(1_000_000 + KNOCKING_US - 1), None);
+        assert_eq!(host.notice(1_000_000 + KNOCKING_US), Some(Notice::Knocking));
+        // their hello arrives: they are in, and the note goes
+        let mut guest = Versus::new(false, "KQXRT", "b", 1);
+        guest.connected(2, 0);
+        for (_, t) in guest.take_outbox() {
+            host.message(7, &t, 0);
+        }
+        assert_eq!(host.notice(1_000_000 + KNOCKING_US * 2), None);
     }
 }

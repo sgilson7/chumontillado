@@ -79,6 +79,8 @@ pub struct Rollback<W: Sim> {
     redo: Option<u32>,
     next_sum: u32,
     pub stats: Stats,
+    /// R10.12: ticks in a row the window has held this browser back
+    pub stalled: u32,
     /// this browser's checksums, newest last (the last `MADE_KEPT`)
     pub made: VecDeque<(u32, u64)>,
 }
@@ -110,6 +112,7 @@ impl<W: Sim> Rollback<W> {
             redo: None,
             next_sum: SUM_EVERY,
             stats: Stats::default(),
+            stalled: 0,
             made: VecDeque::new(),
         }
     }
@@ -326,6 +329,23 @@ impl<W: Sim> Rollback<W> {
         }
     }
 
+    /// R10.12: the seat whose records are furthest behind, the one this
+    /// browser waits on when it is held back.
+    pub fn behind(&self) -> Option<usize> {
+        (0..SEATS)
+            .filter(|&s| self.remote(s, self.frontiers[s]))
+            .min_by_key(|&s| self.frontiers[s])
+    }
+
+    /// The seat a bot took over most recently, if within the last `ticks`.
+    pub fn dropped_within(&self, ticks: u32) -> Option<usize> {
+        (0..SEATS)
+            .filter_map(|s| self.drops[s].map(|d| (s, d)))
+            .filter(|&(_, d)| self.tick >= d && self.tick - d < ticks)
+            .max_by_key(|&(_, d)| d)
+            .map(|(s, _)| s)
+    }
+
     /// Whether the next tick would run past the window.
     pub fn held_back(&self) -> bool {
         self.tick >= self.frontier().saturating_add(WINDOW)
@@ -348,8 +368,10 @@ impl<W: Sim> Rollback<W> {
         let t = self.tick;
         if self.held_back() {
             self.stats.stalls += 1;
+            self.stalled += 1;
             return false;
         }
+        self.stalled = 0;
         if !self.inputs[self.seat].contains_key(&t) {
             return false;
         }

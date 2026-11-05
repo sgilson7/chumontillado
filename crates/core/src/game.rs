@@ -106,6 +106,8 @@ pub struct Game {
     pub matched: bool,
     /// the map the static scene was built from
     scene_map: &'static str,
+    /// R10.12: the notice about the links last shown
+    notice_seen: Option<crate::versus::Notice>,
 }
 
 impl Game {
@@ -151,6 +153,7 @@ impl Game {
             skin: 0,
             matched: false,
             scene_map: "practice",
+            notice_seen: None,
         };
         g.draw();
         Ok(g)
@@ -200,6 +203,12 @@ impl Game {
     /// bits, and the mouse and wheel movement in hundredths of a CSS pixel.
     pub fn advance(&mut self, now_us: i64, bits: u32, dx: i32, dy: i32, wheel: i32) {
         self.now_us = now_us;
+        // R10.12: a new word about the links shows at once
+        let notice = self.versus.as_ref().and_then(|v| v.notice(now_us));
+        if notice != self.notice_seen {
+            self.notice_seen = notice;
+            self.ui_version += 1;
+        }
         let ticks = self.clock.frame(now_us, bits);
         if self.in_match() {
             self.advance_match(&ticks, dx, dy, wheel);
@@ -455,7 +464,9 @@ impl Game {
 
     /// M4: a room to host or join: the transport is told to open it.
     fn open_room(&mut self, host: bool, code: &str) {
-        self.versus = Some(Versus::new(host, code, &self.build, self.skin));
+        let mut v = Versus::new(host, code, &self.build, self.skin);
+        v.opened_us = Some(self.now_us);
+        self.versus = Some(v);
         self.invited = code.to_string();
         self.command("open", host, &crate::online::room_name(code));
         self.show(Screen::Online);
@@ -489,7 +500,7 @@ impl Game {
     /// The transport says a browser arrived.
     pub fn online_connected(&mut self, peer: u32) {
         if let Some(v) = self.versus.as_mut() {
-            v.connected(peer);
+            v.connected(peer, self.now_us);
             self.ui_version += 1;
         }
     }
@@ -594,6 +605,15 @@ impl Game {
                     return Err(self.strings.get("online.not_host"));
                 }
                 self.ui_version += 1;
+            }
+            // R10.12: a guest that cannot find the room looks again
+            "online.retry" => {
+                let code = self.versus.as_ref().map(|x| x.code.clone()).unwrap_or_default();
+                if code.is_empty() {
+                    return Err(self.strings.get("online.bad_room"));
+                }
+                self.leave_online();
+                self.open_room(false, &code);
             }
             "online.start" => {
                 let started = self.versus.as_mut().is_some_and(|x| x.start());
@@ -1075,8 +1095,8 @@ pub(crate) mod tests {
     fn a_guests_skin_reaches_the_host_and_the_match_on_both_browsers() {
         let mut host = crate::versus::Versus::new(true, "KQXRT", "b", 1);
         let mut guest = crate::versus::Versus::new(false, "KQXRT", "b", 3);
-        host.connected(1);
-        guest.connected(2);
+        host.connected(1, 0);
+        guest.connected(2, 0);
         let trade = |h: &mut crate::versus::Versus, gu: &mut crate::versus::Versus| {
             for _ in 0..3 {
                 for (_, t) in gu.take_outbox() {
@@ -1107,5 +1127,28 @@ pub(crate) mod tests {
         };
         assert_eq!(skins(&host), vec![1, 2, 0, 3]);
         assert_eq!(skins(&guest), skins(&host));
+    }
+
+    #[test]
+    fn a_guest_still_looking_is_told_why_and_can_try_again_on_the_same_room() {
+        let mut g = game();
+        g.act("online.link", "KQXRT").unwrap();
+        g.advance(25_000_000, 0, 0, 0, 0);
+        let ui = crate::api::ui(&g);
+        assert!(ui.panels[0]
+            .text
+            .starts_with("Still no answer from room KQXRT after 25 s."));
+        assert!(ui.panels[0].actions.iter().any(|a| a.name == "online.retry"));
+        let opens = g.cmds.iter().filter(|c| c.act == "open").count();
+        g.act("online.retry", "").unwrap();
+        let last: Vec<&str> = g.cmds.iter().rev().take(2).map(|c| c.act.as_str()).collect();
+        assert_eq!(last, vec!["open", "close"]);
+        assert_eq!(g.cmds.iter().filter(|c| c.act == "open").count(), opens + 1);
+        assert_eq!(g.cmds.last().unwrap().room, "chumontillado-p1-KQXRT");
+        // and the count starts again
+        assert_eq!(
+            g.versus.as_ref().unwrap().notice(g.now_us),
+            Some(crate::versus::Notice::Looking { secs: 0 })
+        );
     }
 }

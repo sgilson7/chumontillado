@@ -912,8 +912,8 @@
   {
     "name": "M4 a link joins at once",
     "file": "crates/core/src/game.rs",
-    "find": "                self.open_room(false, &code);",
-    "replace": "                let _ = code;",
+    "find": "self.strings.get(\"online.bad_room\"))?;\n                self.leave_online();\n                self.open_room(false, &code);",
+    "replace": "self.strings.get(\"online.bad_room\"))?;\n                self.leave_online();\n                let _ = code;",
     "test": "an_invite_link_joins_its_room_at_once_and_a_bad_code_is_refused_in_words"
   },
   {
@@ -1230,5 +1230,47 @@
     "find": "        line(\"count\", r.count_left().to_string(), r.phase == Phase::Count),",
     "replace": "        line(\"count\", r.count_left().to_string(), false),",
     "test": "play_against_bots_is_a_match_in_your_skin_the_bots_in_the_other_three"
+  },
+  {
+    "name": "R10.12 a guest is told at twenty seconds",
+    "file": "crates/core/src/versus.rs",
+    "find": "                    return Some(if now_us - opened >= STILL_LOOKING_US {",
+    "replace": "                    return Some(if now_us - opened > STILL_LOOKING_US + 1 {",
+    "test": "a_guest_that_finds_nobody_is_told_at_twenty_seconds_and_counts_up_before"
+  },
+  {
+    "name": "R10.12 the host's note goes once they are in",
+    "file": "crates/core/src/versus.rs",
+    "find": "now_us - t >= KNOCKING_US && n.others.get(p).is_some_and(|o| !o.said)",
+    "replace": "now_us - t >= KNOCKING_US",
+    "test": "the_host_hears_after_ten_seconds_of_someone_stuck_short_of_joining"
+  },
+  {
+    "name": "R10.12 the match counts its stalls",
+    "file": "crates/core/src/rollback.rs",
+    "find": "            self.stalled += 1;",
+    "replace": "            self.stalled += 0;",
+    "test": "a_browser_runs_no_more_than_the_window_past_a_silent_seat"
+  },
+  {
+    "name": "R10.12 a drop is told for four seconds",
+    "file": "crates/core/src/rollback.rs",
+    "find": "            .filter(|&(_, d)| self.tick >= d && self.tick - d < ticks)",
+    "replace": "            .filter(|&(_, d)| self.tick >= d && self.tick - d <= ticks)",
+    "test": "a_guest_who_leaves_is_played_by_its_bot_from_the_tick_the_host_chose_on_every_browser"
+  },
+  {
+    "name": "R10.12 try again reopens the room",
+    "file": "crates/core/src/game.rs",
+    "find": "                self.leave_online();\n                self.open_room(false, &code);\n            }\n            \"online.start\" => {",
+    "replace": "                self.leave_online();\n                let _ = code;\n            }\n            \"online.start\" => {",
+    "test": "a_guest_still_looking_is_told_why_and_can_try_again_on_the_same_room"
+  },
+  {
+    "name": "R10.12 a guest still looking gets Try again",
+    "file": "crates/core/src/api.rs",
+    "find": "    if matches!(notice, Some(Notice::StillLooking { .. })) {",
+    "replace": "    if false {",
+    "test": "a_guest_still_looking_is_told_why_and_can_try_again_on_the_same_room"
   }
 ]

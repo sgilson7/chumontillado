@@ -299,6 +299,11 @@ fn a_guest_who_leaves_is_played_by_its_bot_from_the_tick_the_host_chose_on_every
     room.vanish(2);
     room.play_to(500);
     let from = room.session(0).drops[2].expect("the host dropped seat 2");
+    // R10.12: told for four seconds after the drop, then not
+    let s = room.session(1);
+    let since = s.tick - from;
+    assert_eq!(s.dropped_within(since + 1), Some(2));
+    assert_eq!(s.dropped_within(since), None);
     for b in [0, 1, 3] {
         let s = room.session(b);
         assert_eq!(s.drops[2], Some(from), "browser {b}");
@@ -352,5 +357,9 @@ fn a_browser_runs_no_more_than_the_window_past_a_silent_seat() {
     let host = room.session(0);
     assert_eq!(host.tick, host.frontier() + WINDOW, "held at the window");
     assert!(host.stats.stalls > 0);
+    // R10.12: held for most of those 100 frames in a row, and waiting on
+    // seat 2 (index 1), the guest
+    assert!(host.stalled > 80, "{}", host.stalled);
+    assert_eq!(host.behind(), Some(1));
     let _ = LEFT_ROOM;
 }

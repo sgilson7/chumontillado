@@ -32,7 +32,7 @@ Chumontillado is a first-person movement shooter for up to four players online, 
 
 ## Commands
 
-- `cargo test`: the core's tests. `python3 scripts/break_tests.py`: 176 of 176 caught (a row whose broken code does not compile now fails, R7.8).
+- `cargo test`: the core's tests. `python3 scripts/break_tests.py`: 182 of 182 caught (a row whose broken code does not compile now fails, R7.8).
 - `./scripts/check.sh`: BUILDER CHECK PASSED (recorded below).
 - `./scripts/publish.sh`, with `GIT_AUTHOR_NAME`/`GIT_COMMITTER_NAME` set (this machine has no git identity), then `git push origin main`: the push runs `.github/workflows/pages.yml`, which deploys the gh-pages branch (R2.3). Pages' own branch builder hung, so it is not used.
 
@@ -52,7 +52,7 @@ Chumontillado is a first-person movement shooter for up to four players online, 
 
 M5 is built: matches of one-life rounds on the three maps, pickups, the markers through walls at 75 s, and the skin choice (T11). Next, in order:
 
-1. **A guest who cannot find the room** (R10.12): seen once in three live runs; tell the guest after about 20 s, and check the relays.
+1. **Why a linked guest once never found the room on the live site** (R10.12): players are now told (T12); the cause is not shown. Check the relays in `web/net/config.js`.
 2. **The hit taken back on a miss** (CS-Q5: B, R8.10), and the open M5 rows: the host's settings (R10.6) and a free camera for the dead (R10.10).
 3. **M6:** sound, the painted projectiles and bursts (R7.9), and the Kuwahara video (R1.13).
 4. **Final pass:** the rest of T7: bodies that recoil, land and fall.
@@ -71,4 +71,4 @@ Before trusting a test run, check it compiled: filter for `error` lines as well 
 
 ## Check
 
-`./scripts/check.sh` on 2026-11-04 after M5: BUILDER CHECK PASSED (format, lint, 270 tests, the WebAssembly build and import audit, the art check, the notebook, the journal, and the browser check in Chromium, Firefox and WebKit). Live at f3d27ec: the browser check passed there; `tests/browser/online.py` on the live site passed two runs of three (R10.12).
+`./scripts/check.sh` on 2026-11-04 after T12: BUILDER CHECK PASSED (format, lint, 273 tests, the WebAssembly build and import audit, the art check, the notebook, the journal, and the browser check in Chromium, Firefox and WebKit). Live at f3d27ec: the browser check passed there; `tests/browser/online.py` on the live site passed two runs of three (R10.12).

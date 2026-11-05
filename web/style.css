@@ -61,6 +61,7 @@ body[data-screen="title"] #overlay, body[data-screen="menu"] #overlay { align-it
 /* the copy buttons and seat switches sit side by side, smaller than a
    screen's choices */
 .panel .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; margin: 0 0 12px; }
+.panel button + .pair { margin-top: 10px; }
 .panel .pair button.small { margin: 0; padding: 8px 10px; font-size: 13px; letter-spacing: 0.06em; box-shadow: none; }
 .panel .pair button.small:disabled { opacity: 0.55; cursor: default; }
 #online h1 { margin-bottom: 8px; }
