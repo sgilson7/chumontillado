@@ -19,18 +19,21 @@ use crate::weapons::Weapon;
 
 /// The maps in the order a match plays them.
 pub fn all() -> [Map; COUNT] {
-    [plaza(), catedral(), galeria()]
+    [plaza(), catedral(), galeria(), mercado(), puerto(), acueducto()]
 }
 
 /// How many maps a match goes round.
-pub const COUNT: usize = 3;
+pub const COUNT: usize = 6;
 
 /// The map at place `k` in the order, built alone.
 pub fn map(k: usize) -> Map {
     match k % COUNT {
         0 => plaza(),
         1 => catedral(),
-        _ => galeria(),
+        2 => galeria(),
+        3 => mercado(),
+        4 => puerto(),
+        _ => acueducto(),
     }
 }
 
@@ -353,6 +356,244 @@ pub fn galeria() -> Map {
             (v3(int(30), 0, int(20)), Weapon::MachinePistol),
         ],
         bot_loop: vec![(-30, 0), (30, 0)],
+    }
+}
+
+/// A column `w` m square and `high` m tall, its middle at (x, z).
+fn pillar(x: Fx, z: Fx, w: Fx, high: Fx, s: Surface) -> crate::map::Brush {
+    block(v3(x - w / 2, 0, z - w / 2), v3(x + w / 2, high, z + w / 2), s)
+}
+
+/// The Mercado (T13): a market square ringed by arcades, its stalls'
+/// steep gable roofs short surf ramps to hop between, a fountain in the
+/// middle to circle.
+pub fn mercado() -> Map {
+    let mut bs = yard(30, 30, 14);
+    // the arcades: columns every 4 m 20 m out on each side, a roof over
+    // them to climb onto
+    for k in -5..=5 {
+        let t = int(k * 4);
+        for (x, z) in [(t, -int(20)), (t, int(20)), (-int(20), t), (int(20), t)] {
+            bs.push(pillar(x, z, ONE, int(6), Surface::Block));
+        }
+    }
+    for side in [-1, 1] {
+        bs.push(block(
+            v3(-int(30), int(6), int(20) * side - ONE),
+            v3(int(30), ONE * 66 / 10, int(20) * side + ONE),
+            Surface::Trim,
+        ));
+        bs.push(block(
+            v3(int(20) * side - ONE, int(6), -int(19)),
+            v3(int(20) * side + ONE, ONE * 66 / 10, int(19)),
+            Surface::Trim,
+        ));
+    }
+    // four stalls: posts and a gable roof 3 m high over 2 m (56°)
+    for (cx, cz) in [(-9, -9), (9, -9), (-9, 9), (9, 9)] {
+        let (cx, cz) = (int(cx), int(cz));
+        for (dx, dz) in [(-3, -1), (3, -1), (-3, 1), (3, 1)] {
+            bs.push(pillar(
+                cx + int(dx) + ONE / 4 * -dx.signum(),
+                cz + int(dz) * 3 / 2,
+                ONE * 3 / 10,
+                ONE * 24 / 10,
+                Surface::Block,
+            ));
+        }
+        bs.push(prism(
+            [
+                (cz - int(2), ONE * 24 / 10),
+                (cz + int(2), ONE * 24 / 10),
+                (cz, ONE * 54 / 10),
+            ],
+            false,
+            cx - int(4),
+            cx + int(4),
+            Surface::Ramp,
+        ));
+    }
+    // the fountain: a basin and its pillar
+    bs.push(pillar(0, 0, int(3), ONE * 8 / 10, Surface::Block));
+    bs.push(pillar(0, 0, ONE, int(3), Surface::Block));
+    Map {
+        brushes: bs,
+        spawns: vec![
+            spawn(0, -25, 0, 0),
+            spawn(25, 0, 0, 0),
+            spawn(0, 25, 0, 0),
+            spawn(-25, 0, 0, 0),
+        ],
+        name: "map_mercado",
+        pickups: vec![
+            (v3(0, 0, int(4)), Weapon::Pincel),
+            (v3(-int(9), 0, -int(14)), Weapon::Shotgun),
+            (v3(int(9), 0, int(14)), Weapon::Rifle),
+            (v3(int(14), 0, -int(9)), Weapon::Toro),
+            (v3(-int(14), 0, int(9)), Weapon::Drum),
+            (v3(int(25), 0, int(25)), Weapon::Katana),
+            (v3(-int(25), 0, -int(25)), Weapon::Guadana),
+            (v3(int(25), 0, -int(25)), Weapon::Campana),
+            (v3(-int(25), 0, int(25)), Weapon::Collage),
+            (v3(0, 0, -int(14)), Weapon::Trabuco),
+            (v3(0, 0, int(14)), Weapon::MachinePistol),
+        ],
+        bot_loop: vec![(14, 0), (0, 14), (-14, 0), (0, -14)],
+    }
+}
+
+/// The Puerto (T13): a harbour, a ship's hull in the middle a long ridge to
+/// surf down either side, crates stacked on the quays to wall jump
+/// between, a shed with a door.
+pub fn puerto() -> Map {
+    // 28 m each way: at 32 the probe test found the quays' far edges 9 m
+    // from anything
+    let mut bs = yard(28, 28, 14);
+    // the hull: 36 m long, 7 m high over 6 m each side (49°)
+    for side in [-1, 1] {
+        bs.push(prism(
+            [(int(6) * side, 0), (0, 0), (0, int(7))],
+            true,
+            -int(18),
+            int(18),
+            Surface::Ramp,
+        ));
+    }
+    // its mast and the bow and stern posts
+    bs.push(pillar(0, 0, ONE, int(16), Surface::Block));
+    bs.push(pillar(0, -int(19), ONE * 3 / 2, int(4), Surface::Block));
+    bs.push(pillar(0, int(19), ONE * 3 / 2, int(4), Surface::Block));
+    // crates: stacks one to three high on the quays
+    let crates = [
+        (-16, -10, 3),
+        (-14, 2, 1),
+        (-18, 14, 2),
+        (16, -14, 2),
+        (14, 0, 1),
+        (18, 12, 3),
+        (-10, -24, 1),
+        (10, 24, 2),
+        (-24, 0, 2),
+        (24, -2, 2),
+        (19, -23, 2),
+        (21, 21, 1),
+        (-21, 22, 2),
+        (21, 6, 1),
+    ];
+    for (x, z, high) in crates {
+        bs.push(pillar(int(x), int(z), int(2), int(2 * high), Surface::Block));
+    }
+    // the shed in the north-west corner, its door facing the ship
+    bs.push(b(-17, 0, -28, -16, 6, -24, Surface::Wall));
+    bs.push(b(-17, 0, -21, -16, 6, -16, Surface::Wall));
+    bs.push(b(-28, 0, -17, -16, 6, -16, Surface::Wall));
+    // bollards along the quays
+    for z in [-26, -8, 8, 26] {
+        bs.push(pillar(-int(9), int(z), ONE * 6 / 10, ONE * 8 / 10, Surface::Trim));
+        bs.push(pillar(int(9), int(z), ONE * 6 / 10, ONE * 8 / 10, Surface::Trim));
+    }
+    Map {
+        brushes: bs,
+        spawns: vec![
+            spawn(-22, 8, 0, 8),
+            spawn(22, -8, 0, -8),
+            spawn(0, 25, 0, 0),
+            spawn(0, -25, 0, 0),
+        ],
+        name: "map_puerto",
+        pickups: vec![
+            (v3(-int(22), 0, -int(22)), Weapon::Pincel),
+            (v3(int(12), 0, -int(22)), Weapon::Toro),
+            (v3(-int(12), 0, int(22)), Weapon::Campana),
+            (v3(-int(10), 0, 0), Weapon::Shotgun),
+            (v3(int(10), 0, 0), Weapon::Rifle),
+            (v3(int(24), 0, int(25)), Weapon::Drum),
+            (v3(-int(25), 0, int(25)), Weapon::Katana),
+            (v3(int(25), 0, -int(25)), Weapon::Guadana),
+            (v3(int(12), 0, int(12)), Weapon::Trabuco),
+            (v3(-int(12), 0, -int(12)), Weapon::Collage),
+            (v3(int(24), 0, int(10)), Weapon::MachinePistol),
+        ],
+        bot_loop: vec![(12, -22), (12, 22), (-12, 22), (-12, -22)],
+    }
+}
+
+/// The Acueducto (T13): a valley whose two banks are long surf ramps,
+/// crossed by an aqueduct whose top is a bridge between the banks' crests
+/// and whose piers stand 3 m apart, to climb between; boulders in the
+/// valley.
+pub fn acueducto() -> Map {
+    let mut bs = yard(32, 36, 16);
+    // the banks: 10 m high over 8 m (51°), the length of the valley
+    for side in [-1, 1] {
+        bs.push(prism(
+            [
+                (int(22) * side, 0),
+                (int(14) * side, 0),
+                (int(22) * side, int(10)),
+            ],
+            true,
+            -int(36),
+            int(36),
+            Surface::Ramp,
+        ));
+        // the ground behind each crest, level with it
+        bs.push(block(
+            v3(if side < 0 { -int(32) } else { int(22) }, 0, -int(36)),
+            v3(if side < 0 { -int(22) } else { int(32) }, int(10), int(36)),
+            Surface::Floor,
+        ));
+    }
+    // the aqueduct: piers 2 m square every 5 m, 3 m apart, and its deck
+    for k in -3..3 {
+        let x = int(k * 5) + ONE * 5 / 2;
+        bs.push(pillar(x, 0, int(2), ONE * 94 / 10, Surface::Wall));
+    }
+    bs.push(block(
+        v3(-int(22), ONE * 94 / 10, -ONE * 3 / 2),
+        v3(int(22), int(10), ONE * 3 / 2),
+        Surface::Trim,
+    ));
+    // boulders down the valley
+    for (x, z) in [
+        (-7, -9),
+        (7, 9),
+        (-7, 27),
+        (7, -27),
+        (-7, -27),
+        (7, 27),
+        (0, -18),
+        (0, 18),
+        (7, -9),
+        (-7, 9),
+        (0, 33),
+        (0, -33),
+    ] {
+        bs.push(pillar(int(x), int(z), int(2), ONE * 15 / 10, Surface::Block));
+    }
+    Map {
+        brushes: bs,
+        spawns: vec![
+            spawn(0, -26, 0, 0),
+            spawn(0, 26, 0, 0),
+            spawn(-9, -3, 0, 0),
+            spawn(9, 3, 0, 0),
+        ],
+        name: "map_acueducto",
+        pickups: vec![
+            (v3(0, int(10), 0), Weapon::Pincel),
+            (v3(-int(27), int(10), 0), Weapon::Rifle),
+            (v3(int(27), int(10), 0), Weapon::Toro),
+            (v3(0, 0, -int(12)), Weapon::Shotgun),
+            (v3(0, 0, int(12)), Weapon::Drum),
+            (v3(-int(10), 0, -int(20)), Weapon::Katana),
+            (v3(int(10), 0, int(20)), Weapon::Guadana),
+            (v3(-int(27), int(10), -int(25)), Weapon::Campana),
+            (v3(int(27), int(10), int(25)), Weapon::Trabuco),
+            (v3(int(10), 0, -int(20)), Weapon::Collage),
+            (v3(-int(10), 0, int(20)), Weapon::MachinePistol),
+        ],
+        bot_loop: vec![(0, -24), (0, 24)],
     }
 }
 

@@ -1272,5 +1272,19 @@
     "find": "    if matches!(notice, Some(Notice::StillLooking { .. })) {",
     "replace": "    if false {",
     "test": "a_guest_still_looking_is_told_why_and_can_try_again_on_the_same_room"
+  },
+  {
+    "name": "T13 the Puerto's yard is narrow enough",
+    "file": "crates/core/src/maps.rs",
+    "find": "    let mut bs = yard(28, 28, 14);",
+    "replace": "    let mut bs = yard(32, 32, 14);",
+    "test": "every_place_on_every_map_has_something_to_move_off_within_six_metres"
+  },
+  {
+    "name": "T13 the Acueducto's valley has its boulders",
+    "file": "crates/core/src/maps.rs",
+    "find": "        (-7, -27),\n        (7, 27),",
+    "replace": "",
+    "test": "every_place_on_every_map_has_something_to_move_off_within_six_metres"
   }
 ]

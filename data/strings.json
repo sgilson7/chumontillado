@@ -5,7 +5,7 @@
   "no_webgl": "This browser cannot draw the game: it needs WebGL 2.",
   "tagline": "A shooter in the cellars. Four players, one life a round. For now, the practice room: learn to move and to shoot, alone or online with friends.",
   "begin": "Begin",
-  "menu_text": "The practice room has a slope, two surf ramps, a shaft to climb, straw targets and a bot that hops round the floor. In a duel, the bot shoots back. Play against bots for a match of rounds on the three maps, or host one online for up to three friends.",
+  "menu_text": "The practice room has a slope, two surf ramps, a shaft to climb, straw targets and a bot that hops round the floor. In a duel, the bot shoots back. Play against bots for a match of rounds on the six maps, or host one online for up to three friends.",
   "practice": "Practice room",
   "settings": "Settings",
   "back": "Back",
@@ -148,5 +148,8 @@
   "online.knocking": "Someone has reached the room but cannot finish joining. Their network may block direct links: ask them to try again, or to try another network.",
   "online.waiting_for": "Waiting for {who}'s connection…",
   "online.dropped": "{who} left the match; a bot plays their seat.",
-  "retry": "Try again"
+  "retry": "Try again",
+  "map_mercado": "the Mercado",
+  "map_puerto": "the Puerto",
+  "map_acueducto": "the Acueducto"
 }

@@ -62,6 +62,12 @@ A jump off a wall while in the air: a push up and away from it, with the speed a
 
 Not: wall kick, double jump
 
+### Acueducto
+
+A valley whose banks are long surf ramps, crossed by an aqueduct to run along and climb.
+
+Not: aqueduct map, canyon
+
 ### Bot
 
 A seat played by the game. It moves and shoots only through the same keys and mouse a person's seat uses.
@@ -170,6 +176,12 @@ A small gun drawn true that fires while the button is held.
 
 Not: SMG, uzi
 
+### Mercado
+
+A market square ringed by arcades: the stalls' steep roofs are short surf ramps, a fountain stands in the middle.
+
+Not: marketplace map
+
 ### Navaja
 
 A folding knife drawn true, quick and short. From behind it fells anyone; held, it makes you a little faster.
@@ -199,6 +211,12 @@ Not: arena, bullring map
 A shot that flies, falls and bounces, so it arrives a moment after it is fired.
 
 Not: bullet, missile
+
+### Puerto
+
+A harbour: a ship's hull down the middle to surf either side, crates stacked on the quays, a shed.
+
+Not: port map, docks
 
 ### Pump shotgun
 
