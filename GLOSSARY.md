@@ -98,6 +98,10 @@ A painted gun of scraps stuck together. Its shots bounce once off a wall, so the
 
 Not: ricochet gun
 
+### Cut
+
+A melee swing's path, picked by how your view turns as you swing: across a level cut, down a chop, up a rising cut. Between them it cuts on the diagonal; turning too little, the katana and guadaña cut level each way in turn and a knife thrusts.
+
 ### Drum launcher
 
 A gun drawn true that throws bouncing grenades. Each bursts when it meets a body or its fuse runs out.

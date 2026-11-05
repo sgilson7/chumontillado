@@ -995,6 +995,112 @@ fn a_katana_swing_hits_a_straw_target_within_reach_once_and_misses_one_beyond() 
     assert_eq!(swing_from(-180), HEALTH);
 }
 
+/// T23 (CS-Q27: A): the view's turn as the button goes down picks the cut:
+/// 10 px a tick is 1.2°, so six ticks of it are past the 3° a flick needs.
+/// Held still, the katana cuts level, each the other way from the last; a
+/// knife held still thrusts.
+#[test]
+fn the_views_turn_as_you_swing_picks_the_cut_and_held_still_a_katana_cuts_each_way_in_turn() {
+    use crate::weapons::{CUT_CHOP, CUT_LEFT, CUT_RIGHT};
+    let cut_after = |g: Weapon, dx: i32, dy: i32| {
+        let mut w = settled(Bot::Moves);
+        holding(&mut w, g);
+        let turn = Input {
+            dx,
+            dy,
+            ..Input::default()
+        };
+        run(&mut w, turn, 5);
+        w.step(&[Input {
+            buttons: crate::input::FIRE,
+            ..turn
+        }]);
+        w.players[0].swing.and_then(|s| s.cut)
+    };
+    assert_eq!(
+        cut_after(Weapon::Katana, 1000, 0),
+        Some(CUT_RIGHT),
+        "turning right"
+    );
+    assert_eq!(cut_after(Weapon::Katana, -1000, 0), Some(CUT_LEFT));
+    assert_eq!(
+        cut_after(Weapon::Katana, 0, 1000),
+        Some(CUT_CHOP),
+        "the mouse down"
+    );
+    assert_eq!(
+        cut_after(Weapon::Navaja, 1000, 0),
+        Some(CUT_RIGHT),
+        "a knife cuts too"
+    );
+    assert_eq!(cut_after(Weapon::Navaja, 0, 0), None, "and still, thrusts");
+    let mut w = settled(Bot::Moves);
+    holding(&mut w, Weapon::Katana);
+    let mut cuts = Vec::new();
+    for _ in 0..3 {
+        w.step(&[fire()]);
+        cuts.push(w.players[0].swing.and_then(|s| s.cut));
+        run(&mut w, Input::default(), Weapon::Katana.stats().interval as usize);
+    }
+    assert_eq!(cuts, [Some(CUT_LEFT), Some(CUT_RIGHT), Some(CUT_LEFT)]);
+}
+
+/// T23 (CS-Q28: A): a cut meets what its arc passes. The straw target at
+/// (8, −4), 1.8 m off and 40° to the right of the aim: a level cut meets
+/// it; a chop, whose plane runs straight down the aim, passes it by.
+#[test]
+fn a_chop_passes_by_a_target_to_the_side_that_a_level_cut_meets() {
+    let cut_with = |dx: i32, dy: i32| {
+        let mut w = settled(Bot::Moves);
+        let (s, c) = (fx::sin(fx::deg(40)), fx::cos(fx::deg(40)));
+        let d = int(18) / 10;
+        // stand so the target lies 40° right of north (−z), 1.8 m off
+        w.players[0].body.origin = v3(int(8) - fx::mul(d, s), 0, -int(4) + fx::mul(d, c));
+        w.players[0].aim.yaw = 0;
+        holding(&mut w, Weapon::Katana);
+        // the flick is set as the last ticks' turn would leave it
+        w.players[0].flick = (dx, dy);
+        w.step(&[fire()]);
+        run(&mut w, Input::default(), 12);
+        w.dummies[0].health
+    };
+    assert_eq!(cut_with(fx::deg(6), 0), HEALTH - 50, "a level cut");
+    assert_eq!(cut_with(0, -fx::deg(6)), HEALTH, "a chop");
+}
+
+/// T23: a cut is drawn wound back before its strike, through it, carried
+/// past its end, and back at rest as the swing ends; nothing is hit after
+/// the strike.
+#[test]
+fn a_cut_is_drawn_wound_struck_followed_through_and_back_at_rest() {
+    let mut w = settled(Bot::Moves);
+    holding(&mut w, Weapon::Katana);
+    w.step(&[fire()]);
+    let sw = Weapon::Katana.swing().unwrap();
+    let mut seen = Vec::new();
+    while let Some(s) = w.players[0].swing {
+        let p = crate::hands::pose(&w.players[0].arms, Some(s), 0, true, 0);
+        seen.push((s.age, p.cut.expect("a cut").1));
+        w.step(&[Input::default()]);
+    }
+    let at = |age: i32| seen.iter().find(|x| x.0 == age).map(|x| x.1).unwrap();
+    assert!(at(sw.from) < -sw.half_arc, "wound back past the start");
+    assert!(
+        at(sw.until) >= sw.half_arc.min(crate::hands::DRAWN_ARC) - fx::deg(1),
+        "through to the end"
+    );
+    assert!(
+        at(sw.until + crate::weapons::FOLLOW_TICKS) > at(sw.until),
+        "and past it"
+    );
+    let last = seen.last().unwrap();
+    assert_eq!(
+        last.0,
+        sw.until + crate::weapons::FOLLOW_TICKS + crate::weapons::RECOVER_TICKS - 1
+    );
+    assert!(last.1.abs() < fx::deg(5), "near rest: {}", last.1);
+}
+
 #[test]
 fn a_navaja_from_behind_fells_a_straw_target_and_from_the_front_takes_thirty_five() {
     // the target at (8, −4) faces the spawn, +z

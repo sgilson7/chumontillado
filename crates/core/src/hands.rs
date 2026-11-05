@@ -19,7 +19,7 @@ use crate::look::{rgb, Palette};
 use crate::movement::TUNING;
 use crate::prim::Mesh;
 use crate::render::Shapes;
-use crate::weapons::{Weapon, COUNT};
+use crate::weapons::{self, Weapon, COUNT};
 use crate::world::{Player, Swinging};
 
 /// What a part does as the weapon is used.
@@ -97,6 +97,21 @@ fn along(t: i32, from: i32, until: i32) -> Fx {
 }
 
 /// Up and back down: 0 at the ends, `ONE` in the middle.
+/// T23: a cut turns the weapon about a point this far back from the grip
+/// toward the eye (cm), so the blade sweeps and the hands with it.
+const CUT_PIVOT: i32 = 35;
+/// A cut is drawn no wider than this each side, so the blade stays on the
+/// screen; it hits across its weapon's whole arc.
+pub const DRAWN_ARC: i32 = fx::deg(45);
+/// The blade leans this far out of its cut's plane, which passes close to
+/// the eye, so the cut and its trail are seen across and not edge-on.
+const CUT_LIFT: i32 = fx::deg(20);
+
+/// Slow at each end, fast in the middle: 0 to `ONE` over `t` 0 to `ONE`.
+fn ease(t: Fx) -> Fx {
+    fx::mul(fx::mul(t, t), 3 * ONE - 2 * t)
+}
+
 fn hump(t: Fx) -> Fx {
     fx::sin(fx::mul(t, fx::HALF_TURN))
 }
@@ -118,6 +133,9 @@ pub struct Pose {
     pub charge: Fx,
     /// the muzzle flash shows
     pub flash: bool,
+    /// T23: a cut under way: its way on the screen, and the blade's angle in
+    /// its plane from straight ahead, toward the way it travels
+    pub cut: Option<(i32, i32)>,
 }
 
 /// The pose of `a`'s weapon, with `swing` under way, the body at `speed`
@@ -174,28 +192,130 @@ pub fn pose(a: &Arms, swing: Option<Swinging>, speed: Fx, on_ground: bool, momen
         let sw = s.weapon.swing().expect("a swing is a melee weapon's");
         if s.lunge {
             p.shift = p.shift.add(v3(-cm(10), cm(4), -cm(20)));
-        } else if matches!(s.weapon, Weapon::Navaja | Weapon::Punal) {
+        } else if let Some(c) = s.cut {
+            // T23: wound back past the start, driven through the strike,
+            // carried on past the end, and back to rest
+            let half = sw.half_arc.min(DRAWN_ARC);
+            let wound = -half - weapons::WIND;
+            let (follow, rest) = (
+                sw.until + weapons::FOLLOW_TICKS,
+                sw.until + weapons::FOLLOW_TICKS + weapons::RECOVER_TICKS,
+            );
+            let at = if s.age < sw.from {
+                fx::mul(wound, ease(along(s.age, 0, sw.from)))
+            } else if s.age <= sw.until {
+                wound + fx::mul(half - wound, ease(along(s.age, sw.from, sw.until)))
+            } else if s.age <= follow {
+                half + fx::mul(weapons::FOLLOW, ease(along(s.age, sw.until, follow)))
+            } else {
+                fx::mul(half + weapons::FOLLOW, ONE - ease(along(s.age, follow, rest)))
+            };
+            p.cut = Some((c, at));
+            // the hands come in before the body for the cut and go back to
+            // the side after it; they go with the blade across, and reach
+            // out through the strike
+            let into = if s.age <= follow {
+                ease(along(s.age, 0, sw.from.max(2)))
+            } else {
+                ONE - ease(along(s.age, follow, rest))
+            };
+            let across = fx::mul(cm(20), fx::sin(at));
+            let reach = fx::mul(cm(8), hump(along(s.age, sw.from, sw.until + 1)));
+            p.shift = p.shift.add(v3(
+                fx::mul(across, fx::cos(c)) - fx::mul(cm(6), into),
+                fx::mul(across, fx::sin(c)) + fx::mul(cm(6), into),
+                -reach,
+            ));
+        } else {
+            // a knife's thrust
             let t = hump(along(s.age, 0, sw.until + 2));
             p.shift = p.shift.add(v3(-cm(6), cm(2), -fx::mul(cm(22), t)));
-        } else {
-            // from 60° right to 60° left over the swing's ticks
-            let t = along(s.age, 0, sw.until);
-            p.yaw = fx::deg(60) - fx::mul(fx::deg(120), t);
-            p.roll -= fx::mul(fx::deg(25), hump(t));
         }
     }
     p
+}
+
+/// The weapon's own frame in `hold` (the hands' frame), posed.
+pub fn weapon_frame(hold: &Affine, pose: &Pose) -> Affine {
+    let cm = |c: i32| c * ONE / 100;
+    let mut frame = hold.then(&Affine::translate(pose.shift));
+    if let Some((cut, at)) = pose.cut {
+        // turned about the axis square to the cut's way on the screen,
+        // through a point back along the forearm
+        let elbow = v3(0, 0, cm(CUT_PIVOT));
+        frame = frame
+            .then(&Affine::translate(elbow))
+            .then(&Affine::rot_z(cut))
+            .then(&Affine::rot_y(-at))
+            .then(&Affine::rot_x(CUT_LIFT))
+            .then(&Affine::rot_z(-cut))
+            .then(&Affine::translate(elbow.scale(-ONE)));
+    }
+    frame
+        .then(&Affine::rot_y(pose.yaw))
+        .then(&Affine::rot_x(pose.pitch))
+        .then(&Affine::rot_z(pose.roll))
+}
+
+/// T23: a melee weapon's blade in its own frame (cm): where its trail
+/// starts, and its point.
+fn blade(g: Weapon) -> Option<([i32; 3], [i32; 3])> {
+    match g {
+        Weapon::Katana => Some(([0, 2, -12], [0, 2, -90])),
+        Weapon::Navaja => Some(([0, 2, -10], [0, 2, -25])),
+        Weapon::Guadana => Some(([0, 0, -79], [-33, 6, -78])),
+        Weapon::Punal => Some(([0, 2, -8], [0, 2, -38])),
+        _ => None,
+    }
+}
+
+/// T23: a cut's trail, as Chumworld Arena draws one (its R9.175): the
+/// blade where it was each of the last `TRAIL` ticks of the strike and the
+/// follow-through, joined by thin glowing quads, brightest at the newest.
+/// The pose is the swing's age alone, so the ticks gone are posed again.
+pub const TRAIL: i32 = 6;
+pub const TRAIL_GLOW: Fx = ONE * 8 / 10;
+pub const TRAIL_THICK: Fx = ONE * 4 / 1000;
+
+pub fn draw_trail(out: &mut Shapes, hold: &Affine, a: &Arms, swing: Option<Swinging>, pal: &Palette) {
+    let cm = |c: i32| c * ONE / 100;
+    let Some(s) = swing.filter(|s| s.cut.is_some()) else {
+        return;
+    };
+    let (Some(sw), Some((root, point))) = (s.weapon.swing(), blade(s.weapon)) else {
+        return;
+    };
+    let newest = s.age.min(sw.until + weapons::FOLLOW_TICKS);
+    let oldest = (s.age - TRAIL + 1).max(sw.from);
+    let ends = |age: i32| {
+        let f = weapon_frame(hold, &pose(a, Some(Swinging { age, ..s }), 0, false, 0));
+        let at = |c: [i32; 3]| f.apply(v3(cm(c[0]), cm(c[1]), cm(c[2])));
+        (at(root), at(point))
+    };
+    let n = newest - oldest;
+    for k in 0..n {
+        let ((p, q), (r, t)) = (ends(newest - k), ends(newest - k - 1));
+        let along = q.sub(p).add(t.sub(r)).scale(ONE / 2);
+        let sweep = r.sub(p).add(t.sub(q)).scale(ONE / 2);
+        if sweep.len() < ONE / 200 {
+            continue;
+        }
+        let thin = along.cross(sweep).norm().scale(TRAIL_THICK);
+        let at = Affine {
+            c0: along,
+            c1: sweep,
+            c2: thin,
+            t: p.add(q).add(r).add(t).scale(ONE / 4),
+        };
+        out.glow(Mesh::Cube, at, rgb(pal.flash), TRAIL_GLOW * (TRAIL - k) / TRAIL);
+    }
 }
 
 /// A weapon's parts posed in `hold` (the hands' frame), each moving part
 /// moved by the pose; and the muzzle flash.
 pub fn draw_weapon(out: &mut Shapes, hold: &Affine, g: Weapon, pose: &Pose, pal: &Palette) {
     let cm = |c: i32| c * ONE / 100;
-    let frame = hold
-        .then(&Affine::translate(pose.shift))
-        .then(&Affine::rot_y(pose.yaw))
-        .then(&Affine::rot_x(pose.pitch))
-        .then(&Affine::rot_z(pose.roll));
+    let frame = weapon_frame(hold, pose);
     let mut tip = v3(0, cm(2), -cm(30));
     for pt in gun_parts(g, pal) {
         let at = v3(cm(pt.at[0]), cm(pt.at[1]), cm(pt.at[2]));
@@ -254,6 +374,7 @@ pub fn draw_hands(out: &mut Shapes, eye: V3, yaw: i32, pitch: i32, p: &Player, m
         .then(&Affine::translate(v3(cm(18), -cm(16), -cm(42))));
     let pose = pose(&p.arms, p.swing, p.body.speed(), p.body.on_ground, moment);
     draw_weapon(out, &hold, p.arms.weapon, &pose, pal);
+    draw_trail(out, &hold, &p.arms, p.swing, pal);
 }
 
 pub fn gun_parts(g: Weapon, pal: &Palette) -> Vec<GunPart> {
@@ -367,6 +488,37 @@ mod tests {
         let mut a = Arms::default();
         a.weapon = g;
         a
+    }
+
+    /// T23: a cut leaves a trail through its strike and follow-through,
+    /// at most `TRAIL` ticks long, and none in its wind-up, once it is
+    /// over, or for a thrust.
+    #[test]
+    fn a_cut_leaves_a_trail_through_its_strike_and_none_before_or_after() {
+        let a = armed(Weapon::Katana);
+        let sw = Weapon::Katana.swing().unwrap();
+        let pal = crate::look::Look::parse(include_str!("../../../data/look.json"))
+            .unwrap()
+            .palette;
+        let quads = |age: i32, cut: Option<i32>| {
+            let mut out = Shapes::default();
+            let s = Swinging {
+                weapon: Weapon::Katana,
+                age,
+                lunge: false,
+                cut,
+                struck: 0,
+            };
+            draw_trail(&mut out, &Affine::translate(V3::ZERO), &a, Some(s), &pal);
+            out.len()
+        };
+        let level = Some(weapons::CUT_RIGHT);
+        assert_eq!(quads(sw.from, level), 0, "in the wind-up");
+        assert!(quads(sw.until, level) > 0);
+        assert!(quads(sw.until, level) < TRAIL as usize);
+        assert_eq!(quads(sw.until, None), 0, "a thrust");
+        let over = sw.until + weapons::FOLLOW_TICKS + TRAIL;
+        assert_eq!(quads(over, level), 0, "gone once the cut is over");
     }
 
     #[test]

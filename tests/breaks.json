@@ -1769,5 +1769,68 @@
     "find": "pub const MEMORY: i32 = 30;",
     "replace": "pub const MEMORY: i32 = 0;",
     "test": "it_waits_its_reaction_then_fires_only_with_its_aim_close"
+  },
+  {
+    "name": "T23 the view's turn picks the cut",
+    "file": "crates/core/src/world.rs",
+    "find": "weapons::cut_of(p.flick)",
+    "replace": "weapons::cut_of((0, 0))",
+    "test": "the_views_turn_as_you_swing_picks_the_cut_and_held_still_a_katana_cuts_each_way_in_turn"
+  },
+  {
+    "name": "T23 the flick holds the last few ticks' turn",
+    "file": "crates/core/src/world.rs",
+    "find": "p.flick = (p.flick.0 * 5 / 6 + turn.0, p.flick.1 * 5 / 6 + turn.1);",
+    "replace": "p.flick = turn;",
+    "test": "the_views_turn_as_you_swing_picks_the_cut_and_held_still_a_katana_cuts_each_way_in_turn"
+  },
+  {
+    "name": "T23 held still the katana cuts each way in turn",
+    "file": "crates/core/src/world.rs",
+    "find": "Some(fx::wrap(p.last_cut.wrapping_add(fx::HALF_TURN)))",
+    "replace": "Some(p.last_cut)",
+    "test": "the_views_turn_as_you_swing_picks_the_cut_and_held_still_a_katana_cuts_each_way_in_turn"
+  },
+  {
+    "name": "T23 a flick near an axis snaps to it",
+    "file": "crates/core/src/weapons.rs",
+    "find": "if fx::wrap(a.wrapping_sub(axis)).abs() <= CUT_SNAP {",
+    "replace": "if false {",
+    "test": "a_flick_picks_its_cut_snapped_to_an_axis_or_a_diagonal"
+  },
+  {
+    "name": "T23 a cut meets only what lies near its plane",
+    "file": "crates/core/src/weapons.rs",
+    "find": "out <= spans + BLADE &&",
+    "replace": "true &&",
+    "test": "a_cut_meets_what_its_arc_passes_and_not_what_lies_off_its_plane"
+  },
+  {
+    "name": "T23 a cut meets a body where its blade is",
+    "file": "crates/core/src/weapons.rs",
+    "find": "at >= was.min(now) - spans && at <= was.max(now) + spans",
+    "replace": "at.abs() <= s.half_arc + spans",
+    "test": "a_cut_meets_a_body_where_its_blade_is_at_that_tick"
+  },
+  {
+    "name": "T23 a swing hits along its cut",
+    "file": "crates/core/src/world.rs",
+    "find": "Some((frame, was, now)) => weapons::in_cut(&sw, eye, frame, was, now, t),",
+    "replace": "Some(_) => weapons::in_arc(&sw, eye, aim, t),",
+    "test": "a_chop_passes_by_a_target_to_the_side_that_a_level_cut_meets"
+  },
+  {
+    "name": "T23 a cut is drawn through its follow-through and back",
+    "file": "crates/core/src/world.rs",
+    "find": "let drawn = until + weapons::FOLLOW_TICKS + weapons::RECOVER_TICKS;",
+    "replace": "let drawn = until;",
+    "test": "a_cut_is_drawn_wound_struck_followed_through_and_back_at_rest"
+  },
+  {
+    "name": "T23 no trail in the wind-up",
+    "file": "crates/core/src/hands.rs",
+    "find": "let oldest = (s.age - TRAIL + 1).max(sw.from);",
+    "replace": "let oldest = (s.age - TRAIL + 1).max(0);",
+    "test": "a_cut_leaves_a_trail_through_its_strike_and_none_before_or_after"
   }
 ]

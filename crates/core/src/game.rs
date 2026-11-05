@@ -828,6 +828,31 @@ impl Game {
                 p.aim.pitch = 0;
                 self.draw();
             }
+            // T23: for pictures, every seat holding weapon k in a swing
+            // `age` ticks old, a cut of way `cut` degrees, or a thrust if
+            // `cut` is not a number
+            "place.swing" => {
+                let n: Vec<&str> = v.split_whitespace().collect();
+                let [k, cut, age] = n[..] else {
+                    return Err(format!("\"{value}\" is not a weapon, a cut and an age."));
+                };
+                let k: usize = k.parse().map_err(|_| format!("\"{value}\" is not a weapon."))?;
+                let age: i32 = age.parse().map_err(|_| format!("\"{value}\" is not an age."))?;
+                let g = crate::weapons::Weapon::from_index(k % crate::weapons::COUNT);
+                let cut = cut.parse::<i32>().ok().map(|c| fx::wrap(fx::deg(c)));
+                for p in &mut self.world.players {
+                    p.arms.weapon = g;
+                    p.arms.raise = 0;
+                    p.swing = Some(crate::world::Swinging {
+                        weapon: g,
+                        age,
+                        lunge: false,
+                        cut,
+                        struck: 0,
+                    });
+                }
+                self.draw();
+            }
             // T18: for pictures, a hit of `dmg` on the first seat from (x, z)
             // cm at eye height
             "place.hurt" => {

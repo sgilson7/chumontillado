@@ -139,6 +139,9 @@ pub struct Swing {
     pub wall_jumps: i32,
     /// a jump's speed while held, percent (the puñal's higher jump)
     pub jump_pct: i32,
+    /// T23: with no flick it thrusts straight ahead, in `half_arc` of the
+    /// aim (the knives), rather than cut level
+    pub thrusts: bool,
 }
 
 /// A weapon's numbers. Rates are in ticks (60 a second).
@@ -214,6 +217,7 @@ const SWING: Swing = Swing {
     run_pct: 100,
     wall_jumps: 3,
     jump_pct: 100,
+    thrusts: false,
 };
 
 /// The beat every semi-automatic gun's and melee weapon's interval, and
@@ -434,6 +438,7 @@ pub const WEAPONS: [Stats; COUNT] = [
             until: 5,
             behind: 150,
             run_pct: 110,
+            thrusts: true,
             ..SWING
         }),
         damage: 35,
@@ -465,6 +470,7 @@ pub const WEAPONS: [Stats; COUNT] = [
             from: 1,
             until: 5,
             jump_pct: 150,
+            thrusts: true,
             ..SWING
         }),
         damage: 30,
@@ -632,6 +638,103 @@ pub fn blast_push(b: &Blast, gap: Fx) -> Fx {
         return 0;
     }
     b.push - fx::mul(b.push, fx::div(gap, b.outer))
+}
+
+/// T23 (CS-Q27: A, CS-Q28: A): a melee swing is a cut, as a Chumworld
+/// Arena blade's is. The way the view was turning as the button went down
+/// picks it: `Player::flick` holds the turn of the last few ticks, across
+/// and up, each tick's added to five sixths of the last. Within `CUT_SNAP`
+/// of an axis it snaps to that axis (turning right a level cut from left to
+/// right, down a chop, up a rising cut); between, a diagonal at 45°. A
+/// flick under `FLICK` picks no cut: the katana and the guadaña then cut
+/// level, the other way from their last; a knife thrusts.
+pub const FLICK: i32 = fx::deg(3);
+pub const CUT_SNAP: i32 = fx::deg(30);
+/// The cuts' ways on the screen: the way the blade travels, 0 to the right,
+/// a quarter turn up.
+pub const CUT_RIGHT: i32 = 0;
+pub const CUT_LEFT: i32 = -fx::HALF_TURN;
+pub const CUT_CHOP: i32 = -fx::QUARTER_TURN;
+/// A cut meets a body within this of its plane, beyond the angle the body
+/// spans: the blade's width and the arm's give.
+pub const BLADE: i32 = fx::deg(10);
+/// After the strike a cut follows through `FOLLOW` past its end for
+/// `FOLLOW_TICKS`, and comes back to rest over `RECOVER_TICKS` (drawn only:
+/// it hits nothing then); before it, a wind-up pulls `WIND` back past the
+/// start.
+pub const FOLLOW: i32 = fx::deg(20);
+pub const FOLLOW_TICKS: i32 = 4;
+pub const RECOVER_TICKS: i32 = 8;
+pub const WIND: i32 = fx::deg(20);
+
+/// Whether a cut runs level, either way.
+pub fn is_level(cut: i32) -> bool {
+    cut == CUT_RIGHT || cut == CUT_LEFT
+}
+
+/// The cut a flick picks, if it is long enough: its way on the screen.
+pub fn cut_of(flick: (i32, i32)) -> Option<i32> {
+    let (across, up) = flick;
+    if fx::length(across, up) < FLICK {
+        return None;
+    }
+    let a = fx::wrap(fx::atan2(up, across));
+    let axis = fx::wrap((a + fx::QUARTER_TURN / 2).div_euclid(fx::QUARTER_TURN) * fx::QUARTER_TURN);
+    Some(if fx::wrap(a.wrapping_sub(axis)).abs() <= CUT_SNAP {
+        axis
+    } else {
+        // between two axes: the diagonal between them
+        let lower = fx::wrap(a.div_euclid(fx::QUARTER_TURN) * fx::QUARTER_TURN);
+        fx::wrap(lower + fx::QUARTER_TURN / 2)
+    })
+}
+
+/// Where a cut's blade is through its strike, from `-half_arc` at `from` to
+/// `half_arc` at `until`: the angle in the cut's plane from the aim, toward
+/// the way it travels.
+pub fn sweep(s: &Swing, age: i32) -> i32 {
+    let span = (s.until - s.from).max(1);
+    let t = (age - s.from).clamp(0, span);
+    -s.half_arc + 2 * s.half_arc / span * t
+}
+
+/// The aim's frame for a cut of way `cut`: the aim, the way the blade
+/// travels, and the plane's normal.
+pub fn cut_frame(yaw: i32, pitch: i32, cut: i32) -> (V3, V3, V3) {
+    let f = facing(yaw, pitch);
+    let right = crate::geom::right_of(yaw);
+    let up = facing(yaw, pitch + fx::QUARTER_TURN);
+    let s = right.scale(fx::cos(cut)).add(up.scale(fx::sin(cut)));
+    (f, s, f.cross(s))
+}
+
+/// Points down a body's upright line a cut is tested at, each a ball of
+/// the body's radius.
+pub const CUT_SAMPLES: i32 = 5;
+
+/// Whether a cut of way `cut` from `eye`, its blade swept this tick from
+/// `was` to `now` in its plane, meets a body: some point down its line
+/// within `reach` of the blade's length, within `BLADE` and the angle the
+/// body spans of the plane, and between `was` and `now` give or take that
+/// angle (or the body touching the eye).
+pub fn in_cut(s: &Swing, eye: V3, frame: (V3, V3, V3), was: i32, now: i32, t: &Target) -> bool {
+    let (f, along, n) = frame;
+    (0..CUT_SAMPLES).any(|k| {
+        let y = t.feet.y + fx::mul(t.head.y - t.feet.y, ONE * k / (CUT_SAMPLES - 1));
+        let q = v3(t.feet.x, y, t.feet.z).sub(eye);
+        let d = q.len();
+        if d <= BODY_R {
+            return true;
+        }
+        if d - BODY_R > s.reach {
+            return false;
+        }
+        let spans = fx::atan2(BODY_R, d);
+        let (a, b, c) = (q.dot(f), q.dot(along), q.dot(n));
+        let out = fx::atan2(c.abs(), fx::length(a, b));
+        let at = fx::wrap(fx::atan2(b, a));
+        out <= spans + BLADE && at >= was.min(now) - spans && at <= was.max(now) + spans
+    })
 }
 
 /// Whether a body is in a swing's arc from the eye along `aim`: its
@@ -988,5 +1091,73 @@ mod tests {
             assert_eq!(st.reload % 30, 0, "{:?} reloads in {} ticks", g, st.reload);
         }
         assert_eq!(BEAT, 30);
+    }
+
+    /// T23 (CS-Q27: A): the view's turn picks the cut, snapped to an axis
+    /// within 30° of one, else the diagonal between; too small a turn, none.
+    #[test]
+    fn a_flick_picks_its_cut_snapped_to_an_axis_or_a_diagonal() {
+        let d = fx::deg(6);
+        assert_eq!(cut_of((d, 0)), Some(CUT_RIGHT));
+        assert_eq!(cut_of((-d, 0)), Some(CUT_LEFT));
+        assert_eq!(cut_of((0, -d)), Some(CUT_CHOP));
+        assert_eq!(cut_of((0, d)), Some(fx::QUARTER_TURN), "a rising cut");
+        // 22° up from level: a level cut; 45°: the diagonal
+        assert_eq!(cut_of((d, d * 4 / 10)), Some(CUT_RIGHT));
+        assert_eq!(cut_of((d, d)), Some(fx::QUARTER_TURN / 2));
+        // 63° below level, 27° from straight down: a chop
+        assert_eq!(cut_of((d / 2, -d)), Some(CUT_CHOP));
+        assert_eq!(cut_of((FLICK / 2, 0)), None);
+    }
+
+    fn katana() -> Swing {
+        match crate::weapons::Weapon::Katana.stats().kind {
+            Kind::Melee(s) => s,
+            _ => unreachable!(),
+        }
+    }
+
+    /// T23 (CS-Q28: A): a cut meets what its arc passes, not what lies off
+    /// its plane. From an eye 1.65 m up looking along −z, the katana's arc
+    /// is 50° each side and reaches 1.6 m past a body's edge.
+    #[test]
+    fn a_cut_meets_what_its_arc_passes_and_not_what_lies_off_its_plane() {
+        let s = katana();
+        let eye = v3(0, ONE * 165 / 100, 0);
+        let (yaw, pitch) = (0, 0);
+        let sweep_all =
+            |cut: i32, t: &Target| in_cut(&s, eye, cut_frame(yaw, pitch, cut), -s.half_arc, s.half_arc, t);
+        // 1.8 m off, 40° to the right, standing level: the level cut meets
+        // it; a chop's plane is 40° from it, past the 15° it spans and the
+        // blade's 10°
+        let (sn, cs) = (fx::sin(fx::deg(40)), fx::cos(fx::deg(40)));
+        let side = Target::of(
+            v3(fx::mul(int(18) / 10, sn), 0, -fx::mul(int(18) / 10, cs)),
+            ONE * 165 / 100,
+        );
+        assert!(sweep_all(CUT_RIGHT, &side));
+        assert!(!sweep_all(CUT_CHOP, &side));
+        // 1.3 m ahead and 1.3 m below the floor, its head 45° down: the
+        // chop meets it; the level cut's plane passes 45° over it
+        let low = Target::of(v3(0, -int(13) / 10, -int(13) / 10), ONE * 165 / 100);
+        assert!(sweep_all(CUT_CHOP, &low));
+        assert!(!sweep_all(CUT_RIGHT, &low));
+    }
+
+    /// T23: a level cut to the right meets a body on its left early in the
+    /// strike and one on its right late.
+    #[test]
+    fn a_cut_meets_a_body_where_its_blade_is_at_that_tick() {
+        let s = katana();
+        let eye = v3(0, ONE * 165 / 100, 0);
+        let frame = cut_frame(0, 0, CUT_RIGHT);
+        let first = |x: Fx| {
+            let t = Target::of(v3(x, 0, -int(15) / 10), ONE * 165 / 100);
+            (s.from..=s.until).find(|&age| in_cut(&s, eye, frame, sweep(&s, age - 1), sweep(&s, age), &t))
+        };
+        let (left, right) = (first(-int(1)).expect("met"), first(int(1)).expect("met"));
+        assert!(left < right, "left at {left}, right at {right}");
+        assert_eq!(sweep(&s, s.from), -s.half_arc);
+        assert_eq!(sweep(&s, s.until), s.half_arc);
     }
 }

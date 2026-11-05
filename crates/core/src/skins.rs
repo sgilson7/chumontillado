@@ -394,18 +394,38 @@ pub fn draw(out: &mut Shapes, f: &Figure, look: &Look) {
     let hold = Affine::translate(place(f, SHOULDER)).then(&Affine::looking(aim));
     let grip = hold.apply(v3(cm(GRIP[0]), cm(GRIP[1]), cm(GRIP[2])));
     let fore = hold.apply(v3(cm(FORE[0]), cm(FORE[1]), cm(FORE[2])));
+    let held = f.arms.map(|(arms, swinging)| {
+        let pose = hands::pose(arms, swinging, f.speed, f.on_ground, f.moment);
+        (
+            arms,
+            swinging,
+            pose,
+            Affine::translate(grip).then(&Affine::looking(aim)),
+        )
+    });
+    // T23: through a cut both hands go with the weapon, on its grip
+    let (grip_at, fore_at) = match &held {
+        Some((_, _, pose, at)) if pose.cut.is_some() => {
+            let w = hands::weapon_frame(at, pose);
+            (w.apply(V3::ZERO), w.apply(v3(0, 0, cm(9))))
+        }
+        _ => (grip, fore),
+    };
     for (shoulder, hand, sleeve) in [
-        (place(f, SHOULDER), grip, "arm_r"),
-        (place(f, [-SHOULDER[0], SHOULDER[1], SHOULDER[2]]), fore, "arm_l"),
+        (place(f, SHOULDER), grip_at, "arm_r"),
+        (
+            place(f, [-SHOULDER[0], SHOULDER[1], SHOULDER[2]]),
+            fore_at,
+            "arm_l",
+        ),
     ] {
         out.inked(Mesh::Round, bar(shoulder, hand, cm(ARM)), paint(sleeve), ink);
         let h = Affine::translate(hand).then(&Affine::scale(v3(cm(10), cm(10), cm(10))));
         out.inked(Mesh::Sphere, h, paint("hand"), ink);
     }
-    if let Some((arms, swinging)) = f.arms {
-        let pose = hands::pose(arms, swinging, f.speed, f.on_ground, f.moment);
-        let at = Affine::translate(grip).then(&Affine::looking(aim));
+    if let Some((arms, swinging, pose, at)) = held {
         hands::draw_weapon(out, &at, arms.weapon, &pose, &look.palette);
+        hands::draw_trail(out, &at, arms, swinging, &look.palette);
     }
 }
 

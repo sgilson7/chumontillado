@@ -46,7 +46,7 @@
   "hint_play": "Esc pauses and lists the controls. 1 to 0 take a gun, E a melee weapon.",
   "duel": "Duel the bot",
   "key_fire": "Left button",
-  "control_fire": "Fire, or swing a melee weapon. The Pincel charges while held and fires when let go. A katana swing parries.",
+  "control_fire": "Fire, or swing a melee weapon. Turn as you swing to pick the cut: across a level cut, down a chop, up a rising cut. The Pincel charges while held and fires when let go. A katana swing parries.",
   "key_reload": "R",
   "control_reload": "Reload",
   "key_guns": "1 to 0, the wheel, Q",

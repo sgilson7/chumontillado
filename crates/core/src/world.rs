@@ -89,6 +89,10 @@ pub struct Player {
     pub pilot: Option<Pilot>,
     /// the melee swing under way
     pub swing: Option<Swinging>,
+    /// T23: the view's turn of the last few ticks, across (right) and up,
+    /// which picks a cut (`weapons::cut_of`); and the way of its last cut
+    pub flick: (i32, i32),
+    pub last_cut: i32,
     /// the guadaña's line to a wall
     pub hook: Option<Hook>,
     /// ticks a nail still holds it to a wall
@@ -138,13 +142,15 @@ impl Player {
 }
 
 /// A melee swing under way: its weapon, its age in ticks, whether it is the
-/// katana's lunge, and which bodies it has hit (one bit each, seats then
-/// straw targets), so a swing hits each once.
+/// katana's lunge, its cut's way on the screen (T23; none for a thrust),
+/// and which bodies it has hit (one bit each, seats then straw targets), so
+/// a swing hits each once.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Swinging {
     pub weapon: Weapon,
     pub age: i32,
     pub lunge: bool,
+    pub cut: Option<i32>,
     pub struck: u64,
 }
 
@@ -212,6 +218,8 @@ impl Player {
             hurt: crate::hurt::Hurt::default(),
             pilot: None,
             swing: None,
+            flick: (0, 0),
+            last_cut: weapons::CUT_RIGHT,
             hook: None,
             pinned: 0,
             out: false,
@@ -527,7 +535,11 @@ impl World {
             if let Some(sw) = p.swing {
                 mix(sw.age as i64);
                 mix(sw.struck as i64);
+                mix(sw.cut.unwrap_or(i32::MIN) as i64);
             }
+            mix(p.flick.0 as i64);
+            mix(p.flick.1 as i64);
+            mix(p.last_cut as i64);
             if let Some(hk) = p.hook {
                 v3s(&mut mix, hk.at);
             }
@@ -700,12 +712,15 @@ impl World {
                     p.respawn();
                     continue;
                 }
-                let from = p.aim.yaw;
+                let (from, from_pitch) = (p.aim.yaw, p.aim.pitch);
                 p.aim = p.aim.turned(Mouse {
                     dx: input.dx,
                     dy: input.dy,
                     wheel: input.wheel,
                 });
+                // T23: a yaw grows to the left; the flick's across, right
+                let turn = (-fx::wrap(p.aim.yaw.wrapping_sub(from)), p.aim.pitch - from_pitch);
+                p.flick = (p.flick.0 * 5 / 6 + turn.0, p.flick.1 * 5 / 6 + turn.1);
                 pull(p, input);
                 if p.pinned > 0 {
                     // held to the wall by a nail: it aims and fires, but stays
@@ -1175,10 +1190,25 @@ impl World {
         } else {
             p.body.velocity = p.body.velocity.add(facing(yaw, 0).scale(sw.carry));
         }
+        // T23: the cut the flick picks; none, a level cut the other way
+        // from the last, or a knife's thrust
+        let cut = match (lunge, weapons::cut_of(p.flick)) {
+            (true, _) => None,
+            (false, Some(c)) => Some(c),
+            (false, None) if sw.thrusts => None,
+            (false, None) if weapons::is_level(p.last_cut) => {
+                Some(fx::wrap(p.last_cut.wrapping_add(fx::HALF_TURN)))
+            }
+            (false, None) => Some(weapons::CUT_LEFT),
+        };
+        if let Some(c) = cut {
+            p.last_cut = c;
+        }
         p.swing = Some(Swinging {
             weapon: s.weapon,
             age: 0,
             lunge,
+            cut,
             struck: 0,
         });
     }
@@ -1199,6 +1229,13 @@ impl World {
             let p = &self.players[id];
             let (eye, yaw, pitch) = (p.eye_now(), p.aim.yaw, p.aim.pitch);
             let aim = facing(yaw, pitch);
+            let cut = s.cut.map(|c| {
+                (
+                    weapons::cut_frame(yaw, pitch, c),
+                    weapons::sweep(&sw, s.age - 1),
+                    weapons::sweep(&sw, s.age),
+                )
+            });
             if s.weapon == Weapon::Katana && !s.lunge && s.age <= weapons::PARRY {
                 self.parry(id, eye, aim);
             }
@@ -1212,7 +1249,11 @@ impl World {
                 let seats = self.players.len();
                 for (k, t) in targets.iter().enumerate() {
                     let Some(t) = t else { continue };
-                    if s.struck & (1 << k) != 0 || !weapons::in_arc(&sw, eye, aim, t) {
+                    let meets = match cut {
+                        Some((frame, was, now)) => weapons::in_cut(&sw, eye, frame, was, now, t),
+                        None => weapons::in_arc(&sw, eye, aim, t),
+                    };
+                    if s.struck & (1 << k) != 0 || !meets {
                         continue;
                     }
                     s.struck |= 1 << k;
@@ -1232,7 +1273,10 @@ impl World {
                     self.hurt(id, k, dmg);
                 }
             }
-            self.players[id].swing = (s.age < until.max(weapons::PARRY)).then_some(s);
+            // T23: it stays to be drawn through its follow-through and back
+            // to rest, hitting nothing
+            let drawn = until + weapons::FOLLOW_TICKS + weapons::RECOVER_TICKS;
+            self.players[id].swing = (s.age < drawn.max(weapons::PARRY)).then_some(s);
         }
     }
 
