@@ -379,6 +379,12 @@ pub fn settings(g: &Game) -> Vec<Setting> {
             actions: step("volume.step", "quieter", "louder"),
         },
         Setting {
+            id: "filter".into(),
+            label: g.strings.get("setting_filter"),
+            value: g.strings.get(if g.filter { "filter_on" } else { "filter_off" }),
+            actions: step("filter.set", "filter_off", "filter_on"),
+        },
+        Setting {
             id: "look".into(),
             label: g.strings.get("setting_look"),
             value: g.strings.get("percent").replace("{n}", &g.look_pct.to_string()),
@@ -738,9 +744,28 @@ pub fn numbers() -> String {
         "passes": render::pass_states(),
         "uniforms": look::UNIFORMS.iter().chain(crate::sky::UNIFORMS).map(|(n, call, len)| serde_json::json!([n, call, len, call.contains("Matrix")])).collect::<Vec<_>>(),
         "view": { "layers": [[0, 16], [16, 32], [32, 48]], "eye": [48, 51], "origin": [51, 54] },
+        // T15: the painted filter, drawn over the whole screen from the scene
+        // as a picture: two triangles' corners, and the filter's uniforms
+        "post": {
+            "attribute": ["aCorner", 2],
+            "corners": [-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1],
+            "vertices": 6,
+            "uniforms": [
+                ["uFilter", "uniform4fv", [FILTER_HEIGHT_PER_RADIUS, FILTER_MOST_RADIUS, 0, 0]],
+                ["uLuma", "uniform3fv", LUMA],
+            ],
+        },
     })
     .to_string()
 }
+
+/// T15: the painted filter's reach, a pixel for every this many of the
+/// screen's height (5 at 540, 8 at 1080 and above), and its most.
+pub const FILTER_HEIGHT_PER_RADIUS: i32 = 108;
+pub const FILTER_MOST_RADIUS: i32 = 8;
+/// T15: how much red, green and blue count toward brightness, the filter's
+/// measure of how much a patch varies (Rec. 601, in thousandths).
+pub const LUMA: [i32; 3] = [299, 587, 114];
 
 /// Every mesh to upload, by number, with its vertex count.
 pub fn meshes(g: &Game) -> String {

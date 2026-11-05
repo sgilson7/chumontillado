@@ -116,6 +116,11 @@ impl Game {
         api::act(&mut self.inner, name, value)
     }
 
+    /// T15: whether the painted filter is drawn over the scene.
+    pub fn filter(&self) -> bool {
+        self.inner.filter
+    }
+
     /// M6: white noise for the page's sounds, `len` samples from −1 to 1.
     pub fn noise(&self, len: u32) -> Vec<f32> {
         floats(tool_core::sound::noise(len as usize))

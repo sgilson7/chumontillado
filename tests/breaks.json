@@ -1398,5 +1398,26 @@
     "find": "                out.outline(Mesh::Facet, &dab, ink, ONE - ONE * k / 4);\n",
     "replace": "",
     "test": "every_thrown_weapon_flies_drawn_in_ink"
+  },
+  {
+    "name": "T15 the painted filter starts off",
+    "file": "crates/core/src/game.rs",
+    "find": "            filter: false,",
+    "replace": "            filter: true,",
+    "test": "the_painted_filter_starts_off_and_its_setting_turns_it_on_and_off"
+  },
+  {
+    "name": "T15 the filter's setting turns it off again",
+    "file": "crates/core/src/game.rs",
+    "find": "                self.filter = step > 0;",
+    "replace": "                self.filter = step != 0;",
+    "test": "the_painted_filter_starts_off_and_its_setting_turns_it_on_and_off"
+  },
+  {
+    "name": "T15 the settings show the filter's state",
+    "file": "crates/core/src/api.rs",
+    "find": "value: g.strings.get(if g.filter { \"filter_on\" } else { \"filter_off\" }),",
+    "replace": "value: g.strings.get(\"filter_off\"),",
+    "test": "the_painted_filter_starts_off_and_its_setting_turns_it_on_and_off"
   }
 ]

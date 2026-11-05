@@ -112,6 +112,9 @@ pub struct Game {
     /// R10.12: the notice about the links last shown
     notice_seen: Option<crate::versus::Notice>,
     /// M6: the sounds to play, gathered since the page last took them, and
+    /// T15: the painted (Kuwahara) filter over the scene, a setting, off
+    /// to start
+    pub filter: bool,
     /// the volume, percent (a setting)
     pub sounds: Vec<crate::sound::Play>,
     pub volume_pct: i32,
@@ -163,6 +166,7 @@ impl Game {
             notice_seen: None,
             sounds: Vec::new(),
             volume_pct: VOLUME_START,
+            filter: false,
         };
         g.draw();
         Ok(g)
@@ -716,6 +720,12 @@ impl Game {
                 let pct = (self.look_pct + step * 10).clamp(camera::LOOK_PCT_MIN, camera::LOOK_PCT_MAX);
                 return self.act("look.speed", &pct.to_string());
             }
+            // T15: −1 turns the filter off, 1 on
+            "filter.set" => {
+                let step: i32 = v.parse().map_err(|_| format!("\"{value}\" is not a step."))?;
+                self.filter = step > 0;
+                self.ui_version += 1;
+            }
             "volume.step" => {
                 let step: i32 = v.parse().map_err(|_| format!("\"{value}\" is not a step."))?;
                 self.volume_pct = (self.volume_pct + step * VOLUME_STEP).clamp(0, 100);
@@ -879,6 +889,25 @@ pub(crate) mod tests {
         assert_eq!(jumps[0]["gain"], VOLUME_START * 10);
         assert_eq!(jumps[0]["pan"], 0);
         assert_eq!(g.take_sounds(), "[]", "taken once");
+    }
+
+    #[test]
+    fn the_painted_filter_starts_off_and_its_setting_turns_it_on_and_off() {
+        let mut g = game();
+        assert!(!g.filter, "off until the player turns it on");
+        let row = |g: &Game| {
+            crate::api::settings(g)
+                .into_iter()
+                .find(|s| s.id == "filter")
+                .expect("a filter row")
+                .value
+        };
+        assert_eq!(row(&g), "Off");
+        g.act("filter.set", "1").unwrap();
+        assert!(g.filter);
+        assert_eq!(row(&g), "On");
+        g.act("filter.set", "-1").unwrap();
+        assert!(!g.filter);
     }
 
     #[test]

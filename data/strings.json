@@ -156,5 +156,8 @@
   "context_lost": "The graphics card stopped drawing the game. Waiting for it to come back; if it does not, reload the page.",
   "setting_volume": "Volume",
   "quieter": "Quieter",
-  "louder": "Louder"
+  "louder": "Louder",
+  "setting_filter": "Painted filter",
+  "filter_on": "On",
+  "filter_off": "Off"
 }

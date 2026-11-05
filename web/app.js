@@ -65,7 +65,7 @@ async function main() {
   };
   window.addEventListener("error", (e) => fail(e.error || e.message));
   window.addEventListener("unhandledrejection", (e) => fail(e.reason));
-  const [glossary, look, controls, display, vertex, fragment, recipes] = await Promise.all([
+  const [glossary, look, controls, display, vertex, fragment, recipes, postVertex, postFragment] = await Promise.all([
     fetch("data/glossary.md").then((r) => r.text()),
     fetch("data/look.json").then((r) => r.text()),
     fetch("data/controls.json").then((r) => r.json()),
@@ -73,6 +73,8 @@ async function main() {
     fetch("data/shaders/scene.vert").then((r) => r.text()),
     fetch("data/shaders/scene.frag").then((r) => r.text()),
     fetch("data/sounds.json").then((r) => r.json()),
+    fetch("data/shaders/post.vert").then((r) => r.text()),
+    fetch("data/shaders/post.frag").then((r) => r.text()),
   ]);
   await init();
   const N = JSON.parse(numbers());
@@ -96,7 +98,7 @@ async function main() {
 
   const canvas = el("view");
   const meshes = JSON.parse(game.meshes());
-  const draw = () => makeRenderer(canvas, N, { vertex, fragment, software: display.software }, meshes, (id) => game.mesh(id));
+  const draw = () => makeRenderer(canvas, N, { vertex, fragment, postVertex, postFragment, software: display.software }, meshes, (id) => game.mesh(id));
   let renderer = draw();
   if (!renderer) {
     body.dataset.webgl = "none";
@@ -358,7 +360,7 @@ async function main() {
       staticVersion = game.static_version();
       renderer.setStatic(game.static_values());
     }
-    if (!lost) renderer.frame(game.view(), game.instances(), game.draws());
+    if (!lost) renderer.frame(game.view(), game.instances(), game.draws(), game.filter());
     // M6: this frame's sounds
     sound.play(JSON.parse(game.sounds()));
     // M4: what this frame's ticks left for the other browsers

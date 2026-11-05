@@ -65,6 +65,24 @@ def run(page, check, engine):
     page.wait_for_selector('body[data-screen="settings"]', timeout=10000)
     page.click('#setting-fov button[data-value="1"]')
     check(until(page, lambda: page.inner_text("#setting-fov output"), "110°"), "Wider takes the field of view from 105° to 110°")
+    # T15: the painted filter starts off, and turning it on changes the drawing
+    check(page.inner_text("#setting-filter output") == STRINGS["filter_off"], "the painted filter starts off")
+    shot = lambda: page.evaluate("() => document.getElementById('view').toDataURL()")
+    plain = shot()
+    page.wait_for_timeout(300)
+    # WebKit's canvas reads differently frame to frame with nothing moving,
+    # so there the comparison would prove nothing and is left out (R14.2)
+    steady = shot() == plain
+    check(steady or engine == "webkit", f"in the pause the scene holds still, WebKit excepted ({engine}: {'steady' if steady else 'not steady'})")
+    page.click('#setting-filter button[data-value="1"]')
+    check(until(page, lambda: page.inner_text("#setting-filter output"), STRINGS["filter_on"]), "the painted filter turns on")
+    page.wait_for_timeout(300)
+    if steady:
+        check(shot() != plain, "with the filter on, the scene is drawn differently")
+    else:
+        print(f"  NOTE {engine}: the canvas is not steady, so the filter's drawing is not compared")
+    page.click('#setting-filter button[data-value="-1"]')
+    check(until(page, lambda: page.inner_text("#setting-filter output"), STRINGS["filter_off"]), "and off again")
     page.click('#settings button[data-action="settings.back"]')
     page.wait_for_selector('body[data-screen="paused"]', timeout=10000)
     check(page.inner_text("#message") == "", "no error message is shown")
