@@ -21,6 +21,13 @@ fn floats(v: Vec<i32>) -> Vec<f32> {
 }
 
 #[wasm_bindgen]
+extern "C" {
+    /// The browser's console, for a panic's message (the page shows it).
+    #[wasm_bindgen(js_namespace = console, js_name = error)]
+    fn console_error(text: &str);
+}
+
+#[wasm_bindgen]
 pub struct Game {
     inner: game::Game,
 }
@@ -30,6 +37,8 @@ impl Game {
     /// The strings, the glossary, the look and a seed the page drew.
     #[wasm_bindgen(constructor)]
     pub fn new(strings: &str, glossary: &str, look: &str, seed: u32) -> Result<Game, JsValue> {
+        // a panic's own words reach the console, where the page reads them
+        std::panic::set_hook(Box::new(|info| console_error(&info.to_string())));
         game::Game::new(strings, glossary, look, seed)
             .map(|inner| Game { inner })
             .map_err(|e| JsValue::from_str(&e))

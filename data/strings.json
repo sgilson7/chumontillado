@@ -151,5 +151,7 @@
   "retry": "Try again",
   "map_mercado": "the Mercado",
   "map_puerto": "the Puerto",
-  "map_acueducto": "the Acueducto"
+  "map_acueducto": "the Acueducto",
+  "page_error": "Something went wrong, so the game stopped: {what}. Reload the page; if it happens again, send whoever gave you the link what this says.",
+  "context_lost": "The graphics card stopped drawing the game. Waiting for it to come back; if it does not, reload the page."
 }

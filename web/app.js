@@ -38,9 +38,32 @@ function ready() {
   body.dataset.ready = "true";
 }
 
+// What went wrong last, as the console was told (a panic in the core says
+// its own words there): shown on the page if the game stops.
+let lastError = "";
+const consoleError = console.error.bind(console);
+console.error = (...parts) => {
+  lastError = parts.map(String).join(" ");
+  consoleError(...parts);
+};
+
 async function main() {
   const strings = await (await fetch("data/strings.json")).text();
-  el("loading-text").textContent = JSON.parse(strings).loading;
+  const S = JSON.parse(strings);
+  el("loading-text").textContent = S.loading;
+  // anything that stops the game says so on the page, in words a player
+  // can pass on, instead of leaving it black or frozen
+  let stopped = false;
+  const fail = (e) => {
+    if (stopped) return;
+    stopped = true;
+    const what = lastError || String((e && (e.message || e.reason)) || e);
+    el("message").textContent = S.page_error.replace("{what}", what);
+    el("message").classList.add("error");
+    ready();
+  };
+  window.addEventListener("error", (e) => fail(e.error || e.message));
+  window.addEventListener("unhandledrejection", (e) => fail(e.reason));
   const [glossary, look, controls, display, vertex, fragment] = await Promise.all([
     fetch("data/glossary.md").then((r) => r.text()),
     fetch("data/look.json").then((r) => r.text()),
@@ -66,10 +89,12 @@ async function main() {
 
   const canvas = el("view");
   const meshes = JSON.parse(game.meshes());
-  const renderer = makeRenderer(canvas, N, { vertex, fragment, software: display.software }, meshes, (id) => game.mesh(id));
+  const draw = () => makeRenderer(canvas, N, { vertex, fragment, software: display.software }, meshes, (id) => game.mesh(id));
+  let renderer = draw();
   if (!renderer) {
     body.dataset.webgl = "none";
     el("message").textContent = JSON.parse(game.ui()).ok.no_webgl;
+    el("message").classList.add("error");
     ready();
     return;
   }
@@ -77,6 +102,25 @@ async function main() {
   body.dataset.software = String(renderer.software);
   if (renderer.software) game.act("display.software", "true");
   renderer.setUniforms(game.uniforms(), game.clear_color());
+  // the graphics card can drop the drawing (a reset, a busy or blocklisted
+  // GPU): say so, and when it comes back build the renderer again
+  let lost = false;
+  canvas.addEventListener("webglcontextlost", (e) => {
+    e.preventDefault();
+    lost = true;
+    el("message").textContent = S.context_lost;
+    el("message").classList.add("error");
+  });
+  canvas.addEventListener("webglcontextrestored", () => {
+    renderer = draw();
+    if (!renderer) return;
+    renderer.setUniforms(game.uniforms(), game.clear_color());
+    staticVersion = 0;
+    resize();
+    lost = false;
+    el("message").textContent = "";
+    el("message").classList.remove("error");
+  });
 
   let ui = null;
   const input = makeInput(canvas, controls, N.actions, () => {});
@@ -91,7 +135,8 @@ async function main() {
       el("message").textContent = result.error;
       return;
     }
-    el("message").textContent = "";
+    // (an error that stopped the game, or a lost drawing, stays on screen)
+    if (!el("message").classList.contains("error")) el("message").textContent = "";
     show(result.ok);
     if (gesture && result.ok.capture && !input.engaged()) input.engage();
   }
@@ -290,13 +335,23 @@ async function main() {
   let staticVersion = 0;
   let uiVersion = 0;
   function frame(now) {
+    if (stopped) return;
+    try {
+      step(now);
+    } catch (e) {
+      fail(e);
+      return;
+    }
+    requestAnimationFrame(frame);
+  }
+  function step(now) {
     const { bits, dx, dy, wheel } = input.read();
     game.advance(now, bits, dx, dy, wheel);
-    if (game.static_version() !== staticVersion) {
+    if (!lost && game.static_version() !== staticVersion) {
       staticVersion = game.static_version();
       renderer.setStatic(game.static_values());
     }
-    renderer.frame(game.view(), game.instances(), game.draws());
+    if (!lost) renderer.frame(game.view(), game.instances(), game.draws());
     // M4: what this frame's ticks left for the other browsers
     if (online) online.pump();
     if (game.ui_version() !== uiVersion) {
@@ -304,7 +359,6 @@ async function main() {
       show(JSON.parse(game.ui()).ok);
     }
     if (body.dataset.ready !== "true") ready();
-    requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
 }

@@ -133,6 +133,8 @@ pub const REQUIRED: &[&str] = &[
     "online.waiting_for",
     "online.dropped",
     "retry",
+    "page_error",
+    "context_lost",
     "shooting",
     "band_walk",
     "band_run",

@@ -75,6 +75,8 @@ table.controls td { padding: 4px 0; vertical-align: top; font-size: 14px; }
 table.controls td:first-child { width: 34%; padding-right: 10px; }
 kbd { display: inline-block; padding: 2px 8px; border-radius: 3px; background: var(--umber); border: 1px solid var(--umber-edge); font: inherit; font-size: 13px; font-weight: 700; }
 #message { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); margin: 0; max-width: 80vw; color: #f4b39f; }
+/* a message that the game has stopped, or cannot draw: plain to read */
+#message.error { top: 50%; bottom: auto; transform: translate(-50%, -50%); padding: 18px 24px; border-radius: 6px; background: rgba(20, 14, 10, 0.92); border: 1px solid #f4b39f; font-size: 17px; line-height: 1.5; z-index: 20; }
 
 /* the lines over play: speed under the crosshair's lower left, as the
    journal's HUD mockup places it */

@@ -52,10 +52,11 @@ Chumontillado is a first-person movement shooter for up to four players online, 
 
 M5 is built: matches of one-life rounds on the three maps, pickups, the markers through walls at 75 s, and the skin choice (T11). Next, in order:
 
-1. **Why a linked guest once never found the room on the live site** (R10.12): players are now told (T12); the cause is not shown. Check the relays in `web/net/config.js`.
-2. **The hit taken back on a miss** (CS-Q5: B, R8.10), and the open M5 rows: the host's settings (R10.6) and a free camera for the dead (R10.10).
-3. **M6:** sound, the painted projectiles and bursts (R7.9), and the Kuwahara video (R1.13).
-4. **Final pass:** the rest of T7: bodies that recoil, land and fall.
+1. **A friend's permanent black screen** (T14, R12.1): not reproduced; the page now names what stopped it. Ask what it says now, and their browser and device.
+2. **Why a linked guest once never found the room on the live site** (R10.12): players are now told (T12); the cause is not shown. Check the relays in `web/net/config.js`.
+3. **The hit taken back on a miss** (CS-Q5: B, R8.10), and the open M5 rows: the host's settings (R10.6) and a free camera for the dead (R10.10).
+4. **M6:** sound, the painted projectiles and bursts (R7.9), and the Kuwahara video (R1.13).
+5. **Final pass:** the rest of T7: bodies that recoil, land and fall.
 
 Before trusting a test run, check it compiled: filter for `error` lines as well as failures (R6.5).
 
@@ -65,6 +66,7 @@ Before trusting a test run, check it compiled: filter for `error` lines as well 
 - R1.14 (person): how the movement feels, from play.
 - R5.10 (person): how each gun feels, from play (`weapons::WEAPONS`).
 - R8.11 (person): online play between real networks and four people at once, from the live page's invite link.
+- R12.1 (person): the friend's black screen: what the page says now, and their browser and device.
 - R10.11 (person): how the rounds, the three maps and the bots play: Play against bots, or host a match.
 - R9.7 (person): how the animations, the kick, the skins and the fire rates on the beat feel, from play.
 - R7.10 (person): how the projectile guns, melee weapons and weapon jumps feel, from play (`weapons::WEAPONS` and the constants beside it).
