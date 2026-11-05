@@ -110,6 +110,15 @@ def run_engine(p, engine, base, interactions):
         "document.addEventListener('securitypolicyviolation',"
         " e => window.__builderCsp.push(e.violatedDirective + ' ' + e.blockedURI));"
     )
+    # M6: every sound the page starts is counted, so a check can see the
+    # core's sounds reach Web Audio.
+    context.add_init_script(
+        "window.__builderSounds = 0;"
+        "if (window.AudioScheduledSourceNode) {"
+        " const start = AudioScheduledSourceNode.prototype.start;"
+        " AudioScheduledSourceNode.prototype.start = function (...a) {"
+        "  window.__builderSounds += 1; return start.apply(this, a); }; }"
+    )
     page = context.new_page()
     page.on("console", lambda m: seen["console"].append(m.text) if m.type == "error" else None)
     page.on("pageerror", lambda e: seen["errors"].append(str(e)))

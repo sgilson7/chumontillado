@@ -25,6 +25,9 @@ use crate::world::{Bot, World};
 const SOFTWARE_SCALE_PCT: i32 = 50;
 /// The most pixels a frame draws (a 4K screen is drawn at about 1440p).
 const MAX_PIXELS: i64 = 2560 * 1440;
+/// M6: the volume a player starts at, and the step the setting moves by.
+pub const VOLUME_START: i32 = 70;
+pub const VOLUME_STEP: i32 = 10;
 /// The title's slow turn round the room, angle units a tick.
 const TITLE_DRIFT: i32 = 24;
 
@@ -108,6 +111,10 @@ pub struct Game {
     scene_map: &'static str,
     /// R10.12: the notice about the links last shown
     notice_seen: Option<crate::versus::Notice>,
+    /// M6: the sounds to play, gathered since the page last took them, and
+    /// the volume, percent (a setting)
+    pub sounds: Vec<crate::sound::Play>,
+    pub volume_pct: i32,
 }
 
 impl Game {
@@ -154,6 +161,8 @@ impl Game {
             matched: false,
             scene_map: "practice",
             notice_seen: None,
+            sounds: Vec::new(),
+            volume_pct: VOLUME_START,
         };
         g.draw();
         Ok(g)
@@ -224,6 +233,7 @@ impl Game {
                     Mouse::default()
                 };
                 self.world.step(&[Input::from_page(*b, m)]);
+                self.hear();
             }
             self.alpha = self.clock.alpha();
             self.follow_hud();
@@ -266,6 +276,13 @@ impl Game {
             if let Some(s) = v.session_mut() {
                 s.local(Input::from_page(bits, m));
                 s.step();
+                // each sound once, a tick run again giving only what it
+                // did not make before (`Rollback::take_heard`)
+                let heard = s.take_heard();
+                let (eyes, world) = (s.seat, &s.world);
+                let p = &world.players[world.watching_or(eyes)];
+                let plays = crate::sound::for_listener(&heard, eyes, p.eye_now(), p.aim.yaw, self.volume_pct);
+                self.sounds.extend(plays);
             }
         }
         self.alpha = self.clock.alpha();
@@ -273,6 +290,21 @@ impl Game {
             self.show(Screen::Online);
         }
         self.follow_hud();
+    }
+
+    /// M6: the last tick's sounds in the room or match against bots, as the
+    /// seat whose eyes the view is from hears them.
+    fn hear(&mut self) {
+        let eyes = self.eyes();
+        let w = &self.world;
+        let Some(p) = w.players.get(eyes) else { return };
+        let plays = crate::sound::for_listener(&w.heard, self.me(), p.eye_now(), p.aim.yaw, self.volume_pct);
+        self.sounds.extend(plays);
+    }
+
+    /// M6: the sounds gathered since the page last took them, as JSON.
+    pub fn take_sounds(&mut self) -> String {
+        serde_json::to_string(&std::mem::take(&mut self.sounds)).unwrap_or_else(|_| "[]".into())
     }
 
     /// An online match is under way (not its lobby, and not ended).
@@ -684,6 +716,11 @@ impl Game {
                 let pct = (self.look_pct + step * 10).clamp(camera::LOOK_PCT_MIN, camera::LOOK_PCT_MAX);
                 return self.act("look.speed", &pct.to_string());
             }
+            "volume.step" => {
+                let step: i32 = v.parse().map_err(|_| format!("\"{value}\" is not a step."))?;
+                self.volume_pct = (self.volume_pct + step * VOLUME_STEP).clamp(0, 100);
+                self.ui_version += 1;
+            }
             "fov.step" => {
                 let step: i32 = v.parse().map_err(|_| format!("\"{value}\" is not a step."))?;
                 self.fov = (self.fov + step * 5).clamp(camera::FOV_MIN, camera::FOV_MAX);
@@ -824,6 +861,43 @@ pub(crate) mod tests {
             g.act("fov.step", "-1").unwrap();
         }
         assert_eq!(g.fov, 90);
+    }
+
+    #[test]
+    fn a_jump_in_the_room_reaches_the_page_as_a_sound_once() {
+        let mut g = game();
+        g.act("menu.practice", "").unwrap();
+        for k in 0..30 {
+            g.advance(k * 16_667, 0, 0, 0, 0);
+        }
+        g.take_sounds();
+        g.advance(30 * 16_667, crate::input::JUMP, 0, 0, 0);
+        let plays: Vec<serde_json::Value> = serde_json::from_str(&g.take_sounds()).unwrap();
+        let jumps: Vec<_> = plays.iter().filter(|p| p["voice"] == "jump").collect();
+        assert_eq!(jumps.len(), 1, "{plays:?}");
+        // the player's own jump, at the starting volume, from the middle
+        assert_eq!(jumps[0]["gain"], VOLUME_START * 10);
+        assert_eq!(jumps[0]["pan"], 0);
+        assert_eq!(g.take_sounds(), "[]", "taken once");
+    }
+
+    #[test]
+    fn the_volume_steps_by_ten_from_none_to_full_and_none_is_silent() {
+        let mut g = game();
+        assert_eq!(g.volume_pct, 70);
+        for _ in 0..5 {
+            g.act("volume.step", "1").unwrap();
+        }
+        assert_eq!(g.volume_pct, 100);
+        for _ in 0..12 {
+            g.act("volume.step", "-1").unwrap();
+        }
+        assert_eq!(g.volume_pct, 0);
+        g.act("menu.practice", "").unwrap();
+        for k in 0..30 {
+            g.advance(k * 16_667, crate::input::JUMP, 0, 0, 0);
+        }
+        assert_eq!(g.take_sounds(), "[]");
     }
 
     #[test]

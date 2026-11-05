@@ -1357,3 +1357,75 @@ fn in_a_match_the_bots_fight_each_other_too() {
     }
     assert!(hurt);
 }
+
+#[test]
+fn a_burst_is_painted_out_to_the_reach_it_hurts_and_no_further() {
+    // R7.9: what a blast is seen to reach is what it reaches: its paint
+    // ends at its radius (its ink a hair past) and is thrown out to most of
+    // it
+    use crate::render::Pass;
+    let look = crate::look::Look::parse(include_str!("../../../../data/look.json")).unwrap();
+    let table = crate::prim::MeshTable::default();
+    let b = Burst {
+        at: v3(fx::int(3), fx::int(2), fx::int(-4)),
+        radius: fx::int(4),
+        ticks: BURST,
+    };
+    let mut furthest = 0;
+    for ticks in (1..=BURST).rev() {
+        let mut shapes = crate::render::Shapes::default();
+        draw_burst(&mut shapes, &Burst { ticks, ..b }, &look.palette, look.ink());
+        let painted: Vec<_> = shapes.list.iter().filter(|s| s.pass != Pass::Glow).collect();
+        assert_eq!(painted.len(), 2 * SPLATS.len(), "each splat filled and inked");
+        for sh in painted {
+            for p in table.vertices(sh.mesh).chunks(crate::prim::VERTEX_VALUES) {
+                let d = sh.at.apply(v3(p[0], p[1], p[2])).sub(b.at).len();
+                let margin = if sh.pass == Pass::Ink { ONE * 3 / 100 } else { 0 };
+                assert!(
+                    d <= b.radius + margin,
+                    "at {ticks} ticks a splat reaches {}",
+                    fx::decimal(d, 3)
+                );
+                if sh.pass == Pass::Dither {
+                    furthest = furthest.max(d);
+                }
+            }
+        }
+    }
+    assert!(
+        furthest >= b.radius * 9 / 10,
+        "thrown only {}",
+        fx::decimal(furthest, 3)
+    );
+}
+
+#[test]
+fn every_thrown_weapon_flies_drawn_in_ink() {
+    use crate::render::Pass;
+    let look = crate::look::Look::parse(include_str!("../../../../data/look.json")).unwrap();
+    for weapon in [
+        Weapon::Drum,
+        Weapon::Trabuco,
+        Weapon::Toro,
+        Weapon::Campana,
+        Weapon::Collage,
+    ] {
+        let q = Projectile {
+            weapon,
+            owner: 0,
+            at: v3(0, ONE, 0),
+            prev: v3(0, ONE, ONE / 10),
+            velocity: v3(0, 0, -fx::int(20)),
+            age: 0,
+            bounces: 0,
+            band: 0,
+            scored: false,
+        };
+        let mut shapes = crate::render::Shapes::default();
+        draw_projectile(&mut shapes, &q, ONE, &look.palette, look.ink());
+        assert!(
+            shapes.list.iter().filter(|s| s.pass == Pass::Ink).count() >= 2,
+            "{weapon:?} is not inked"
+        );
+    }
+}

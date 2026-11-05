@@ -34,6 +34,7 @@ use crate::movement::{Body, Events, Mover, Tuning, TUNING};
 use crate::pilot::{self, Pilot};
 use crate::prim::Mesh;
 use crate::render::{Camera, Shapes};
+use crate::sound::{Heard, Voice};
 use crate::trace::trace_box;
 use crate::trace::Scratch;
 use crate::weapons::{self, Alt, Blast, Kind, Target, Weapon};
@@ -317,6 +318,8 @@ pub struct World {
     pub rounds: Option<crate::rounds::Rounds>,
     /// M5: the weapons lying on the map this round
     pub pickups: Vec<Pickup>,
+    /// M6: the sounds of the last tick run (`sound.rs`)
+    pub heard: Vec<crate::sound::Heard>,
 }
 
 /// A weapon lying on the map (CS-Q10: A), until someone walks over it.
@@ -366,6 +369,9 @@ impl crate::rollback::Sim for World {
             }
         }
     }
+    fn heard(&self) -> &[Heard] {
+        &self.heard
+    }
 }
 
 impl World {
@@ -407,6 +413,7 @@ impl World {
             online: false,
             rounds: None,
             pickups: Vec::new(),
+            heard: Vec::new(),
         }
     }
 
@@ -572,6 +579,7 @@ impl World {
     /// a bot's is made by its pilot. Every seat turns and moves, then the
     /// shots fired are resolved in seat order.
     pub fn step(&mut self, inputs: &[Input]) {
+        self.heard.clear();
         let mut scratch = Scratch::default();
         let mut records = Vec::with_capacity(self.players.len());
         let mut given = inputs.iter();
@@ -603,6 +611,7 @@ impl World {
         }
 
         let mut shots: Vec<(usize, Shot)> = Vec::new();
+        let mut moved: Vec<Heard> = Vec::new();
         // online (M4), Backspace does not stand you back at your spawn whole
         let online = self.online;
         {
@@ -662,6 +671,23 @@ impl World {
                     }
                     shots.push((id, s));
                 }
+                // M6: what the body did, heard where it is
+                let e = p.events;
+                for (did, voice) in [
+                    (e.wall_jumped, Voice::WallJump),
+                    (e.jumped && !e.wall_jumped, Voice::Jump),
+                    (e.landed, Voice::Land),
+                    (e.slid, Voice::Slide),
+                    (e.slammed, Voice::Slam),
+                ] {
+                    if did {
+                        moved.push(Heard {
+                            voice,
+                            at: p.body.origin,
+                            by: id,
+                        });
+                    }
+                }
             }
         }
         // the targets count down before this tick's shots, so a felled one
@@ -675,7 +701,17 @@ impl World {
                 }
             }
         }
+        self.heard.extend(moved);
         self.take_pickups();
+        for &(id, s) in &shots {
+            let voice = if s.weapon.swing().is_some() {
+                Voice::Swing
+            } else {
+                Voice::Shot(s.weapon)
+            };
+            let at = self.players[id].eye_now();
+            self.heard.push(Heard { voice, at, by: id });
+        }
         for (id, s) in shots {
             match s.weapon.stats().kind {
                 Kind::Hitscan => self.shoot(id, s, &mut scratch),
@@ -706,12 +742,17 @@ impl World {
     /// its hands; each is taken once a round, by the first seat to reach it.
     fn take_pickups(&mut self) {
         for k in self.pickups.iter_mut().filter(|k| !k.taken) {
-            if let Some(p) = self.players.iter_mut().find(|p| {
+            if let Some((by, p)) = self.players.iter_mut().enumerate().find(|(_, p)| {
                 let d = p.body.origin.sub(k.at);
                 p.alive() && d.len_xz() <= PICKUP_REACH && d.y.abs() <= PICKUP_UP
             }) {
                 p.arms.pick_up(k.weapon);
                 k.taken = true;
+                self.heard.push(Heard {
+                    voice: Voice::Pickup,
+                    at: k.at,
+                    by,
+                });
             }
         }
     }
@@ -725,10 +766,36 @@ impl World {
             .filter(|&k| self.players[k].alive())
             .collect();
         let alone = (alive.len() == 1).then(|| alive[0]);
+        let before = r;
         let next = crate::rounds::tick(&mut r, alive.len(), alone, present, crate::maps::COUNT);
         self.rounds = Some(r);
+        // M6: the count's three beats, its go, and a round's end, heard by all
+        use crate::rounds::Phase;
+        let beat = match (before.phase, r.phase) {
+            (Phase::Count, Phase::Count) if r.ticks % 60 == 1 => Some(Voice::Count),
+            (Phase::Count, Phase::Live) => Some(Voice::Go),
+            (Phase::Live, Phase::Over) => Some(Voice::RoundEnd),
+            _ => None,
+        };
+        if let Some(voice) = beat {
+            self.heard.push(Heard {
+                voice,
+                at: V3::ZERO,
+                by: 0,
+            });
+        }
         if let crate::rounds::Next::Round(map) = next {
             self.start_round(map);
+        }
+    }
+
+    /// M6: the seat whose ears a seat hears with: its own, or while it is
+    /// down in a match, the one it watches.
+    pub fn watching_or(&self, me: usize) -> usize {
+        if self.rounds.is_some() && !self.players[me].alive() {
+            self.watching(me)
+        } else {
+            me
         }
     }
 
@@ -766,8 +833,20 @@ impl World {
         let seats = self.players.len();
         if k != by {
             self.players[by].hit_mark = MARK;
+            let at = self.players[by].eye_now();
+            self.heard.push(Heard {
+                voice: Voice::Hit,
+                at,
+                by,
+            });
         }
         if k < seats {
+            let at = self.players[k].body.origin;
+            self.heard.push(Heard {
+                voice: Voice::Hurt,
+                at,
+                by: k,
+            });
             let victim = &mut self.players[k];
             victim.health -= dmg;
             victim.flash = FLASH;
@@ -783,6 +862,12 @@ impl World {
                 victim.pinned = 0;
                 if k != by {
                     self.players[by].kill_mark = MARK;
+                    let at = self.players[by].eye_now();
+                    self.heard.push(Heard {
+                        voice: Voice::Kill,
+                        at,
+                        by,
+                    });
                 }
                 return true;
             }
@@ -889,6 +974,14 @@ impl World {
                         q.velocity = v.sub(back).scale(ONE * f.keep_pct / 100);
                         q.at = wall.end.add(n.scale(ONE / 100));
                         q.bounces -= 1;
+                        // a hard bounce is heard; a grenade settling is not
+                        if q.velocity.len() > int(3) {
+                            self.heard.push(Heard {
+                                voice: Voice::Bounce,
+                                at: q.at,
+                                by: q.owner,
+                            });
+                        }
                     } else if let Some(b) = f.blast {
                         if self.burst(q.owner, wall.end.add(n.scale(ONE / 50)), &b, None, scratch)
                             && !q.scored
@@ -932,6 +1025,11 @@ impl World {
             at,
             radius: b.outer,
             ticks: BURST,
+        });
+        self.heard.push(Heard {
+            voice: Voice::Burst,
+            at,
+            by,
         });
         let targets = self.targets(by, true);
         let seats = self.players.len();
@@ -1111,6 +1209,11 @@ impl World {
             landed |= !hits.is_empty();
             for h in &hits {
                 if h.head {
+                    self.heard.push(Heard {
+                        voice: Voice::Headshot,
+                        at: eye,
+                        by: id,
+                    });
                     if let Some(t) = targets[h.who] {
                         self.head_marks.push(HeadMark {
                             at: t.head,
@@ -1215,11 +1318,7 @@ impl World {
             out.glow(Mesh::Sphere, glow, rgb(pal.brass), ONE / 2);
         }
         for b in &self.bursts {
-            // grows from a third of its reach to its whole reach as it fades
-            let grown = ONE - ONE * b.ticks / BURST;
-            let r = fx::mul(b.radius, ONE / 3 + fx::mul(ONE * 2 / 3, grown));
-            let at = Affine::translate(b.at).then(&Affine::scale(v3(r, r, r)));
-            out.glow(Mesh::Sphere, at, rgb(pal.flash), ONE * b.ticks / BURST);
+            draw_burst(out, b, pal, ink);
         }
         for (k, p) in self.players.iter().enumerate() {
             if let Some(h) = p.hook {
@@ -1326,38 +1425,127 @@ pub(crate) fn draw_dummy(out: &mut Shapes, d: &Dummy, pal: &Palette, ink: Rgb) {
 }
 
 /// A projectile where it is drawn, `alpha` of the way from last tick.
+/// Where a burst's splats are thrown: six about its middle, three above
+/// and three below, turned between the rings (unit length, in tenths).
+const SPLATS: [(i32, i32, i32); 12] = [
+    (10, 0, 0),
+    (5, 0, 9),
+    (-5, 0, 9),
+    (-10, 0, 0),
+    (-5, 0, -9),
+    (5, 0, -9),
+    (5, 7, 5),
+    (-7, 7, 0),
+    (2, 7, -7),
+    (-5, -7, 5),
+    (7, -7, 0),
+    (-2, -7, -7),
+];
+
+/// R7.9: a burst painted as it is felt. Splats of paint in the light's,
+/// the ochre's and the red's colours are thrown out to the blast's reach
+/// and thin away as it fades (the ordered dither, so they stay flat paint),
+/// each inked; a flash at the middle goes out in its first third.
+fn draw_burst(out: &mut Shapes, b: &Burst, pal: &Palette, ink: Rgb) {
+    let left = ONE * b.ticks / BURST;
+    let grown = ONE - left;
+    // thrown fast, slowing: a third of the way at once, all of it by the end
+    let out_to = ONE / 3 + fx::mul(ONE * 2 / 3, ONE - fx::mul(left, left));
+    let size = fx::mul(b.radius, ONE / 5 + fx::mul(ONE / 10, left));
+    let colours = [pal.flash, pal.ochre, pal.stroke];
+    for (k, &(x, y, z)) in SPLATS.iter().enumerate() {
+        let dir = v3(x * ONE / 10, y * ONE / 10, z * ONE / 10).norm();
+        // a splat is `size` across and three fifths of it deep (the facet
+        // ball is a unit across), so its middle stays 0.3 of `size` inside
+        // the reach
+        let reach = fx::mul(b.radius - size * 3 / 10, out_to);
+        let at = Affine::translate(b.at.add(dir.scale(reach)))
+            .then(&Affine::looking(dir))
+            .then(&Affine::scale(v3(size, size, size * 3 / 5)));
+        out.dithered(Mesh::Facet, at, rgb(colours[k % colours.len()]), left);
+        out.outline(Mesh::Facet, &at, ink, left);
+    }
+    let flash = (left * 3 - ONE * 2).max(0);
+    if flash > 0 {
+        let r = fx::mul(b.radius, ONE / 3 + grown);
+        out.glow(
+            Mesh::Sphere,
+            Affine::translate(b.at).then(&Affine::scale(v3(r, r, r))),
+            rgb(pal.flash),
+            flash,
+        );
+    }
+}
+
 fn draw_projectile(out: &mut Shapes, q: &Projectile, alpha: Fx, pal: &Palette, ink: Rgb) {
     let at = q.prev.lerp(q.at, alpha);
     let cm = |c: i32| c * ONE / 100;
     let ball = |d: i32| Affine::translate(at).then(&Affine::scale(v3(cm(d), cm(d), cm(d))));
+    let back = q.velocity.norm();
     match q.weapon {
-        Weapon::Drum => out.inked(Mesh::Facet, ball(24), rgb(pal.dark_steel), ink),
+        Weapon::Drum => {
+            // R7.9: a dark grenade with a brass band and its fuse's spark,
+            // which beats faster as the fuse burns
+            out.inked(Mesh::Facet, ball(24), rgb(pal.dark_steel), ink);
+            let band = Affine::translate(at).then(&Affine::scale(v3(cm(26), cm(6), cm(26))));
+            out.inked(Mesh::Tube, band, rgb(pal.brass), ink);
+            if (q.age / (1 + 8 - (q.age / 15).min(7))) % 2 == 0 {
+                let spark =
+                    Affine::translate(at.add(v3(0, cm(14), 0))).then(&Affine::scale(v3(cm(8), cm(8), cm(8))));
+                out.glow(Mesh::Sphere, spark, rgb(pal.flash), ONE);
+            }
+        }
         Weapon::Trabuco => {
-            let back = q.velocity.norm().scale(cm(20));
-            out.solid(Mesh::Cube, bar(at.sub(back), at, cm(2)), rgb(pal.steel), 0);
+            // R7.9: a nail, its head behind it
+            let tail = at.sub(back.scale(cm(20)));
+            out.inked(Mesh::Cube, bar(tail, at, cm(2)), rgb(pal.steel), ink);
+            let head = Affine::translate(tail)
+                .then(&Affine::looking(back))
+                .then(&Affine::scale(v3(cm(6), cm(6), cm(1))));
+            out.inked(Mesh::Cyl, head, rgb(pal.steel), ink);
         }
         Weapon::Toro => {
+            // R7.9: a red ball dragging a stroke of paint, its dabs thinning
             out.inked(Mesh::Facet, ball(30), rgb(pal.stroke), ink);
-            let tail = at.sub(q.velocity.norm().scale(cm(40)));
+            for k in 1..=3 {
+                let d = cm(14 - 3 * k);
+                let dab = Affine::translate(at.sub(back.scale(cm(18 * k))))
+                    .then(&Affine::looking(back))
+                    .then(&Affine::scale(v3(d, d, d * 2)));
+                out.dithered(Mesh::Facet, dab, rgb(pal.stroke), ONE - ONE * k / 4);
+                out.outline(Mesh::Facet, &dab, ink, ONE - ONE * k / 4);
+            }
             out.glow(
                 Mesh::Sphere,
-                Affine::translate(tail).then(&Affine::scale(v3(cm(18), cm(18), cm(18)))),
+                Affine::translate(at).then(&Affine::scale(v3(cm(26), cm(26), cm(26)))),
                 rgb(pal.flash),
-                ONE,
+                ONE / 2,
             );
         }
-        Weapon::Campana => out.inked(
-            Mesh::Cone,
-            Affine::translate(at).then(&Affine::scale(v3(cm(50), cm(45), cm(50)))),
-            rgb(pal.brass),
-            ink,
-        ),
+        Weapon::Campana => {
+            // R7.9: the bell and its clapper beneath
+            out.inked(
+                Mesh::Cone,
+                Affine::translate(at).then(&Affine::scale(v3(cm(50), cm(45), cm(50)))),
+                rgb(pal.brass),
+                ink,
+            );
+            let clapper =
+                Affine::translate(at.sub(v3(0, cm(20), 0))).then(&Affine::scale(v3(cm(9), cm(9), cm(9))));
+            out.inked(Mesh::Facet, clapper, rgb(pal.dark_steel), ink);
+        }
         _ => {
-            // the Collage's scrap turns as it flies
+            // the Collage's scrap turns as it flies; R7.9: two scraps
+            // pasted together, the smaller turning the other way
             let a = Affine::translate(at)
                 .then(&Affine::rot_y(fx::deg(23) * q.age))
                 .then(&Affine::scale(v3(cm(18), cm(18), cm(4))));
             out.inked(Mesh::Cube, a, rgb(pal.ochre), ink);
+            let b = Affine::translate(at)
+                .then(&Affine::rot_y(-fx::deg(31) * q.age))
+                .then(&Affine::translate(v3(0, 0, cm(3))))
+                .then(&Affine::scale(v3(cm(11), cm(13), cm(3))));
+            out.inked(Mesh::Cube, b, rgb(pal.blue), ink);
         }
     }
 }

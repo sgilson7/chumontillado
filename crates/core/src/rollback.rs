@@ -25,6 +25,7 @@
 
 use crate::input::Input;
 use crate::online::{holds, Event, Msg, Net, Peer, Seats, DELAY, DESYNC, GARBLED, SEATS, SUM_EVERY};
+use crate::sound::Heard;
 use std::collections::{BTreeMap, VecDeque};
 
 /// The most ticks run past the last confirmed one: 8, 133 ms.
@@ -46,7 +47,13 @@ pub trait Sim: Clone {
     fn sum(&self) -> u64;
     /// From now on the seat is played by its bot.
     fn hand_to_bot(&mut self, seat: usize);
+    /// M6: the sounds the last tick made.
+    fn heard(&self) -> &[Heard];
 }
+
+/// M6: a sound from a tick run again is played if it came this many ticks
+/// late at most (133 ms); later than that it is left unplayed.
+pub const HEARD_LATE: u32 = WINDOW;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Stats {
@@ -83,6 +90,11 @@ pub struct Rollback<W: Sim> {
     pub stalled: u32,
     /// this browser's checksums, newest last (the last `MADE_KEPT`)
     pub made: VecDeque<(u32, u64)>,
+    /// M6: the sounds already given out for each tick, so a tick run again
+    /// gives only what it did not make before
+    told: BTreeMap<u32, Vec<Heard>>,
+    /// M6: sounds made and not yet taken by `take_heard`
+    fresh: Vec<Heard>,
 }
 
 /// How many of its own checksums a session keeps for tests and the page.
@@ -114,6 +126,8 @@ impl<W: Sim> Rollback<W> {
             stats: Stats::default(),
             stalled: 0,
             made: VecDeque::new(),
+            told: BTreeMap::new(),
+            fresh: Vec::new(),
         }
     }
 
@@ -264,6 +278,35 @@ impl<W: Sim> Rollback<W> {
         let records = self.records(t);
         self.used.insert(t, records);
         self.world.tick(&records);
+        self.tell(t);
+    }
+
+    /// M6: keeps the sounds tick `t` made that were not given out for it
+    /// before. A guess put right can add a sound (a shot the guess missed)
+    /// but cannot take one back, since it has been played; the same sound
+    /// made again (its place moved a little) is not played twice.
+    fn tell(&mut self, t: u32) {
+        if t + HEARD_LATE < self.tick {
+            return;
+        }
+        let told = self.told.entry(t).or_default();
+        let mut before = told.clone();
+        for h in self.world.heard() {
+            match before.iter().position(|b| b.voice == h.voice && b.by == h.by) {
+                Some(k) => {
+                    before.swap_remove(k);
+                }
+                None => {
+                    told.push(*h);
+                    self.fresh.push(*h);
+                }
+            }
+        }
+    }
+
+    /// M6: the sounds made since the last call, each once.
+    pub fn take_heard(&mut self) -> Vec<Heard> {
+        std::mem::take(&mut self.fresh)
     }
 
     /// A wrong guess or a drop found: back to the copy before its tick, and
@@ -323,6 +366,7 @@ impl<W: Sim> Rollback<W> {
             self.snaps.pop_front();
         }
         self.used = self.used.split_off(&keep);
+        self.told = self.told.split_off(&self.tick.saturating_sub(HEARD_LATE));
         let below = keep.saturating_sub(1);
         for seat_inputs in self.inputs.iter_mut() {
             *seat_inputs = seat_inputs.split_off(&below);

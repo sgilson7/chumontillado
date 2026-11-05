@@ -47,6 +47,11 @@ def run(page, check, engine):
     check(until(page, lambda: hud(page, "speed"), "9.0 m/s"), "holding W reaches the run speed, 9.0 m/s (T3)")
     page.keyboard.down("Space")
     check(until(page, lambda: hud(page, "doing"), STRINGS["hud_air"]), "Space leaves the ground")
+    # M6: the jump (and the landing) is heard: the page started sounds
+    check(
+        until(page, lambda: page.evaluate("() => window.__builderSounds > 0"), True),
+        "the jump is heard: Web Audio plays the core's sounds",
+    )
     page.keyboard.up("Space")
     page.keyboard.up("KeyW")
 

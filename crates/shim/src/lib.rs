@@ -116,6 +116,17 @@ impl Game {
         api::act(&mut self.inner, name, value)
     }
 
+    /// M6: white noise for the page's sounds, `len` samples from −1 to 1.
+    pub fn noise(&self, len: u32) -> Vec<f32> {
+        floats(tool_core::sound::noise(len as usize))
+    }
+
+    /// M6: the sounds to play since the last call, as JSON
+    /// `[{voice, gain, pan}, ...]` (gain and pan in thousandths).
+    pub fn sounds(&mut self) -> String {
+        self.inner.take_sounds()
+    }
+
     /// M4: the transport says a browser arrived.
     pub fn online_connected(&mut self, peer: u32) {
         self.inner.online_connected(peer)

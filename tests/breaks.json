@@ -352,8 +352,8 @@
   {
     "name": "M2 the shooter's hit mark",
     "file": "crates/core/src/world.rs",
-    "find": "        if k != by {\n            self.players[by].hit_mark = MARK;\n        }",
-    "replace": "        if k != by {\n            self.players[by].hit_mark = 0;\n        }",
+    "find": "        if k != by {\n            self.players[by].hit_mark = MARK;",
+    "replace": "        if k != by {\n            self.players[by].hit_mark = 0;",
     "test": "a_pistol_shot_takes_fifty_from_a_straw_head_and_twenty_five_from_its_body"
   },
   {
@@ -1286,5 +1286,117 @@
     "find": "        (-7, -27),\n        (7, 27),",
     "replace": "",
     "test": "every_place_on_every_map_has_something_to_move_off_within_six_metres"
+  },
+  {
+    "name": "M6 a tick run again gives only the sounds it did not make before",
+    "file": "crates/core/src/rollback.rs",
+    "find": "            match before.iter().position(|b| b.voice == h.voice && b.by == h.by) {",
+    "replace": "            match None::<usize> {",
+    "test": "a_late_record_is_heard_once_and_a_tick_run_again_repeats_no_sound"
+  },
+  {
+    "name": "M6 every tick run keeps its sounds",
+    "file": "crates/core/src/rollback.rs",
+    "find": "        self.tell(t);\n",
+    "replace": "",
+    "test": "a_late_record_is_heard_once_and_a_tick_run_again_repeats_no_sound"
+  },
+  {
+    "name": "M6 a tick run again by rollback is heard, not only a new one",
+    "file": "crates/core/src/rollback.rs",
+    "find": "        if t + HEARD_LATE < self.tick {",
+    "replace": "        if t < self.tick {",
+    "test": "a_late_record_is_heard_once_and_a_tick_run_again_repeats_no_sound"
+  },
+  {
+    "name": "M6 with wrong guesses no sound is lost",
+    "file": "crates/core/src/rollback.rs",
+    "find": "        if t + HEARD_LATE < self.tick {",
+    "replace": "        if t + 1 < self.tick {",
+    "test": "with_guesses_going_wrong_every_tick_no_sound_is_lost"
+  },
+  {
+    "name": "M6 a hit's confirmation is heard only by its shooter",
+    "file": "crates/core/src/sound.rs",
+    "find": "                Reach::Own if h.by != me => return None,",
+    "replace": "                Reach::Own if false => return None,",
+    "test": "a_shot_to_your_right_sounds_on_the_right_and_a_hit_is_heard_only_by_its_shooter"
+  },
+  {
+    "name": "M6 a sound on the right is panned right",
+    "file": "crates/core/src/sound.rs",
+    "find": "fx::div(to.dot(right), d)",
+    "replace": "fx::div(-to.dot(right), d)",
+    "test": "a_shot_to_your_right_sounds_on_the_right_and_a_hit_is_heard_only_by_its_shooter"
+  },
+  {
+    "name": "M6 a sound falls to a quarter at 24 m",
+    "file": "crates/core/src/sound.rs",
+    "find": "    let k = (QUARTER - NEAR) / 3;",
+    "replace": "    let k = (QUARTER - NEAR) / 2;",
+    "test": "a_sound_is_full_close_by_a_quarter_at_twenty_four_metres_and_silent_far_off"
+  },
+  {
+    "name": "M6 the volume scales the gain exactly",
+    "file": "crates/core/src/sound.rs",
+    "find": "volume_pct.clamp(0, 100) as i64 * 10",
+    "replace": "volume_pct.clamp(0, 100) as i64 * 9",
+    "test": "a_jump_in_the_room_reaches_the_page_as_a_sound_once"
+  },
+  {
+    "name": "M6 a jump is heard",
+    "file": "crates/core/src/world.rs",
+    "find": "(e.jumped && !e.wall_jumped, Voice::Jump),",
+    "replace": "(false, Voice::Jump),",
+    "test": "a_jump_in_the_room_reaches_the_page_as_a_sound_once"
+  },
+  {
+    "name": "M6 the room's sounds reach the page",
+    "file": "crates/core/src/game.rs",
+    "find": "                self.hear();\n",
+    "replace": "",
+    "test": "a_jump_in_the_room_reaches_the_page_as_a_sound_once"
+  },
+  {
+    "name": "M6 the volume stops at full",
+    "file": "crates/core/src/game.rs",
+    "find": "(self.volume_pct + step * VOLUME_STEP).clamp(0, 100)",
+    "replace": "(self.volume_pct + step * VOLUME_STEP).clamp(0, 110)",
+    "test": "the_volume_steps_by_ten_from_none_to_full_and_none_is_silent"
+  },
+  {
+    "name": "M6 every sound has a recipe",
+    "file": "data/sounds.json",
+    "find": "    \"jump\": {",
+    "replace": "    \"hop\": {",
+    "test": "every_sound_has_a_recipe_and_every_recipe_a_sound"
+  },
+  {
+    "name": "R7.9 a burst's paint ends at its reach",
+    "file": "crates/core/src/world.rs",
+    "find": "let reach = fx::mul(b.radius - size * 3 / 10, out_to);",
+    "replace": "let reach = fx::mul(b.radius, out_to);",
+    "test": "a_burst_is_painted_out_to_the_reach_it_hurts_and_no_further"
+  },
+  {
+    "name": "R7.9 a burst's paint is thrown to its reach",
+    "file": "crates/core/src/world.rs",
+    "find": "let out_to = ONE / 3 + fx::mul(ONE * 2 / 3, ONE - fx::mul(left, left));",
+    "replace": "let out_to = ONE / 2;",
+    "test": "a_burst_is_painted_out_to_the_reach_it_hurts_and_no_further"
+  },
+  {
+    "name": "R7.9 a burst's splats are inked",
+    "file": "crates/core/src/world.rs",
+    "find": "        out.outline(Mesh::Facet, &at, ink, left);\n",
+    "replace": "",
+    "test": "a_burst_is_painted_out_to_the_reach_it_hurts_and_no_further"
+  },
+  {
+    "name": "R7.9 the Toro's stroke is inked",
+    "file": "crates/core/src/world.rs",
+    "find": "                out.outline(Mesh::Facet, &dab, ink, ONE - ONE * k / 4);\n",
+    "replace": "",
+    "test": "every_thrown_weapon_flies_drawn_in_ink"
   }
 ]

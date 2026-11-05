@@ -25,6 +25,7 @@ Chumontillado is a first-person movement shooter for up to four players online, 
 | `crates/core/src/online.rs`, `rollback.rs`, `versus.rs` | M4: the wire and the seats; rollback for four; hosting, joining, the lobby and the invite link |
 | `crates/core/src/rounds.rs`, `maps.rs` | M5: a match's rounds; the six maps, held to the 6 m rule |
 | `crates/core/src/hands.rs`, `skins.rs` | the weapon in the hands and how it moves; the four skins, each holding its weapon |
+| `crates/core/src/sound.rs`, `data/sounds.json`, `web/sound.js` | M6: which sounds are made and how loud and where each is for the listener; each sound's recipe; the page's synthesis with Web Audio |
 | `web/online.js`, `web/net/` | the transport: the one page file that imports it, and the relays (`config.js`), held by `online_fence.rs` |
 | `crates/core/src/game.rs`, `api.rs` | screens, settings, clock and frame; the view model and `act` |
 | the arena's modules | `fx`, `geom`, `rng`, `ticks`, `mesh`, `prim`, `render`, `look`, `sky`, `camera`, `input`, `flicker`, `page`, `glossary` |
@@ -32,7 +33,7 @@ Chumontillado is a first-person movement shooter for up to four players online, 
 
 ## Commands
 
-- `cargo test`: the core's tests. `python3 scripts/break_tests.py`: 184 of 184 caught (a row whose broken code does not compile now fails, R7.8).
+- `cargo test`: the core's tests. `python3 scripts/break_tests.py`: 200 of 200 caught (a row whose broken code does not compile now fails, R7.8).
 - `./scripts/check.sh`: BUILDER CHECK PASSED (recorded below).
 - `./scripts/publish.sh`, with `GIT_AUTHOR_NAME`/`GIT_COMMITTER_NAME` set (this machine has no git identity), then `git push origin main`: the push runs `.github/workflows/pages.yml`, which deploys the gh-pages branch (R2.3). Pages' own branch builder hung, so it is not used.
 
@@ -48,15 +49,14 @@ Chumontillado is a first-person movement shooter for up to four players online, 
 
 ../chumontillado-journal/, published at https://claude.ai/artifact/5F9AxuvUdChSWFCDBaygSJ. Newest entry: M1, the practice room.
 
-## Where work stopped (2026-11-04, M5)
+## Where work stopped (2026-11-04, M6)
 
-M5 is built: matches of one-life rounds on the three maps, pickups, the markers through walls at 75 s, and the skin choice (T11). Next, in order:
+M6 is built: sound made in the core and synthesized by the page (R13.1), heard once online even when a record comes late (R13.2), with a volume setting; the painted projectiles and bursts (R7.9); and the Kuwahara video on the journal's Build page (R1.13, R13.4). Next, in order:
 
 1. **A friend's permanent black screen** (T14, R12.1): not reproduced; the page now names what stopped it. Ask what it says now, and their browser and device.
 2. **Why a linked guest once never found the room on the live site** (R10.12): players are now told (T12); the cause is not shown. Check the relays in `web/net/config.js`.
 3. **The hit taken back on a miss** (CS-Q5: B, R8.10), and the open M5 rows: the host's settings (R10.6) and a free camera for the dead (R10.10).
-4. **M6:** sound, the painted projectiles and bursts (R7.9), and the Kuwahara video (R1.13).
-5. **Final pass:** the rest of T7: bodies that recoil, land and fall.
+4. **Final pass:** the rest of T7: bodies that recoil, land and fall.
 
 Before trusting a test run, check it compiled: filter for `error` lines as well as failures (R6.5).
 
@@ -69,8 +69,9 @@ Before trusting a test run, check it compiled: filter for `error` lines as well 
 - R12.1 (person): the friend's black screen: what the page says now, and their browser and device.
 - R10.11 (person): how the rounds, the three maps and the bots play: Play against bots, or host a match.
 - R9.7 (person): how the animations, the kick, the skins and the fire rates on the beat feel, from play.
+- R13.3 (person): how the sounds sound, from play (`data/sounds.json`).
 - R7.10 (person): how the projectile guns, melee weapons and weapon jumps feel, from play (`weapons::WEAPONS` and the constants beside it).
 
 ## Check
 
-`./scripts/check.sh` on 2026-11-04 after T13: BUILDER CHECK PASSED (format, lint, 273 tests, the WebAssembly build and import audit, the art check, the notebook, the journal, and the browser check in Chromium, Firefox and WebKit). Live at f3d27ec: the browser check passed there; `tests/browser/online.py` on the live site passed two runs of three (R10.12).
+`./scripts/check.sh` on 2026-11-04 after M6: BUILDER CHECK PASSED (format, lint, 283 tests, the WebAssembly build and import audit, the art check, the notebook, the journal, and the browser check in Chromium, Firefox and WebKit, which now counts the sounds Web Audio starts after a jump). `python3 scripts/break_tests.py`: 200 of 200 caught.

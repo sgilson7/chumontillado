@@ -39,6 +39,7 @@ pub mod rollback;
 pub mod rounds;
 pub mod skins;
 pub mod sky;
+pub mod sound;
 pub mod ticks;
 pub mod trace;
 pub mod versus;

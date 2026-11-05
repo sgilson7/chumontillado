@@ -373,6 +373,12 @@ pub fn settings(g: &Game) -> Vec<Setting> {
             actions: step("skin.step", "skin_prev", "skin_next"),
         },
         Setting {
+            id: "volume".into(),
+            label: g.strings.get("setting_volume"),
+            value: g.strings.get("percent").replace("{n}", &g.volume_pct.to_string()),
+            actions: step("volume.step", "quieter", "louder"),
+        },
+        Setting {
             id: "look".into(),
             label: g.strings.get("setting_look"),
             value: g.strings.get("percent").replace("{n}", &g.look_pct.to_string()),

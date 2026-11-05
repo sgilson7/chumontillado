@@ -12,6 +12,7 @@
 import init, { Game, numbers } from "./pkg/tool_shim.js";
 import { makeRenderer } from "./gl.js";
 import { makeInput } from "./input.js";
+import { makeSound } from "./sound.js";
 
 const el = (id) => document.getElementById(id);
 const make = (tag, text, className) => {
@@ -64,13 +65,14 @@ async function main() {
   };
   window.addEventListener("error", (e) => fail(e.error || e.message));
   window.addEventListener("unhandledrejection", (e) => fail(e.reason));
-  const [glossary, look, controls, display, vertex, fragment] = await Promise.all([
+  const [glossary, look, controls, display, vertex, fragment, recipes] = await Promise.all([
     fetch("data/glossary.md").then((r) => r.text()),
     fetch("data/look.json").then((r) => r.text()),
     fetch("data/controls.json").then((r) => r.json()),
     fetch("data/display.json").then((r) => r.json()),
     fetch("data/shaders/scene.vert").then((r) => r.text()),
     fetch("data/shaders/scene.frag").then((r) => r.text()),
+    fetch("data/sounds.json").then((r) => r.json()),
   ]);
   await init();
   const N = JSON.parse(numbers());
@@ -86,6 +88,11 @@ async function main() {
     ready();
     return;
   }
+
+  // M6: sound, which a browser allows only after a click or a key
+  const sound = makeSound(recipes, game.noise(recipes.constants.sample_rate * recipes.constants.noise_ms / recipes.constants.thousand));
+  window.addEventListener("pointerdown", sound.unlock);
+  window.addEventListener("keydown", sound.unlock);
 
   const canvas = el("view");
   const meshes = JSON.parse(game.meshes());
@@ -352,6 +359,8 @@ async function main() {
       renderer.setStatic(game.static_values());
     }
     if (!lost) renderer.frame(game.view(), game.instances(), game.draws());
+    // M6: this frame's sounds
+    sound.play(JSON.parse(game.sounds()));
     // M4: what this frame's ticks left for the other browsers
     if (online) online.pump();
     if (game.ui_version() !== uiVersion) {

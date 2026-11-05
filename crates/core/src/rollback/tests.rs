@@ -177,12 +177,17 @@ impl Room {
 
     /// One frame: every browser in the match makes its record and steps once.
     fn frame(&mut self) {
+        self.frame_by(script);
+    }
+
+    /// One frame, each seat's records made by `make`.
+    fn frame_by(&mut self, make: impl Fn(usize, u32) -> Input) {
         for (b, s) in self.sessions.iter_mut().enumerate() {
             if self.gone.contains(&b) {
                 continue;
             }
             if let Some(s) = s {
-                s.local(script(s.seat, s.tick + DELAY));
+                s.local(make(s.seat, s.tick + DELAY));
                 s.step();
             }
         }
@@ -362,4 +367,72 @@ fn a_browser_runs_no_more_than_the_window_past_a_silent_seat() {
     assert!(host.stalled > 80, "{}", host.stalled);
     assert_eq!(host.behind(), Some(1));
     let _ = LEFT_ROOM;
+}
+
+#[test]
+fn a_late_record_is_heard_once_and_a_tick_run_again_repeats_no_sound() {
+    use crate::sound::Voice;
+    // 4 frames each way: the guest's records reach the host after the host
+    // has run their ticks on a guess. The guest jumps once and fires once,
+    // after the round's count, and the host jumps two ticks after the guest,
+    // so the guest's late records run the host's jump again; nothing else
+    // changes.
+    let (jump_at, fire_at) = (250, 300);
+    let tap = |seat: usize, t: u32| Input {
+        keys: if (seat == 1 && t == jump_at) || (seat == 0 && t == jump_at + 2) {
+            JUMP
+        } else {
+            0
+        },
+        buttons: if seat == 1 && t == fire_at { FIRE } else { 0 },
+        ..Input::default()
+    };
+    let mut room = Room::new(2, |_, _| 4, &[]);
+    room.start();
+    let mut heard = Vec::new();
+    while room.sessions[0].as_ref().is_none_or(|s| s.tick < 400) {
+        room.frame_by(tap);
+        if let Some(s) = room.sessions[0].as_mut() {
+            heard.extend(s.take_heard());
+        }
+    }
+    let count = |by: usize, v: Voice| heard.iter().filter(|h| h.by == by && h.voice == v).count();
+    assert!(room.session(0).stats.rollbacks >= 2, "both came late");
+    assert_eq!(count(1, Voice::Jump), 1, "{heard:?}");
+    assert_eq!(
+        count(1, Voice::Shot(crate::weapons::Weapon::Pistol)),
+        1,
+        "{heard:?}"
+    );
+    // the host's own jump, run again by the guest's late records
+    assert_eq!(count(0, Voice::Jump), 1, "{heard:?}");
+}
+
+#[test]
+fn with_guesses_going_wrong_every_tick_no_sound_is_lost() {
+    use crate::sound::Voice;
+    let mut room = Room::new(2, |_, _| 4, &[]);
+    room.start();
+    // the host hears the guest, whose records reach it late
+    let made = |h: &&Heard| h.by == 1 && matches!(h.voice, Voice::Shot(_) | Voice::Jump);
+    let mut taken = 0;
+    while room.sessions[0].as_ref().is_none_or(|s| s.tick < 400) {
+        room.frame();
+        if let Some(s) = room.sessions[0].as_mut() {
+            taken += s.take_heard().iter().filter(made).count();
+        }
+    }
+    let ran = room.session(0).tick;
+    // the shots and jumps the guest truly made, tick by tick
+    let mut w = World::online(0b11, 0, [0, 1, 2, 3]);
+    let mut truly = 0;
+    for t in 0..ran {
+        let rec: [Input; SEATS] = std::array::from_fn(|s| script(s, t));
+        Sim::tick(&mut w, &rec);
+        truly += w.heard.iter().filter(made).count();
+    }
+    assert!(room.session(0).stats.rollbacks > 100);
+    // a wrong guess's jump has been played and stays played, so more may
+    // be heard than were made, but none made is missed
+    assert!(taken >= truly, "{taken} of {truly}");
 }
