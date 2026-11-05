@@ -1629,5 +1629,110 @@
     "find": "p(Bell, [0, 50, 0], [94, 96, 64], \"silver\")",
     "replace": "p(Bell, [0, 50, 0], [100, 96, 64], \"silver\")",
     "test": "every_skin_and_the_straw_target_stay_inside_the_hit_envelope"
+  },
+  {
+    "name": "T20 a hit bot dodges",
+    "file": "crates/core/src/pilot.rs",
+    "find": "        if t.dodges {",
+    "replace": "        if false {",
+    "test": "hit_it_dodges_across_the_shooters_line_and_slides_when_fast"
+  },
+  {
+    "name": "T20 a dodging bot slides on the ground",
+    "file": "crates/core/src/pilot.rs",
+    "find": "            keys = (keys & !JUMP) | CROUCH;",
+    "replace": "            keys |= 0;",
+    "test": "hit_it_dodges_across_the_shooters_line_and_slides_when_fast"
+  },
+  {
+    "name": "T20 a dodging bot kicks off walls in the air",
+    "file": "crates/core/src/pilot.rs",
+    "find": "            keys &= !JUMP;",
+    "replace": "            keys |= JUMP;",
+    "test": "hit_it_dodges_across_the_shooters_line_and_slides_when_fast"
+  },
+  {
+    "name": "T20 a low bot falls back",
+    "file": "crates/core/src/pilot.rs",
+    "find": "        if v.health <= t.fall_back_at {",
+    "replace": "        if false {",
+    "test": "hit_when_low_it_falls_back_to_cover_and_not_when_whole"
+  },
+  {
+    "name": "T20 the aim leads a moving target",
+    "file": "crates/core/src/pilot.rs",
+    "find": "fx::mul(flight, ONE * t.lead_pct / 100)",
+    "replace": "fx::mul(flight, ONE * 70 / 100)",
+    "test": "it_aims_ahead_of_a_moving_target_by_its_skill"
+  },
+  {
+    "name": "T20 a bot takes the weapon that suits the distance",
+    "file": "crates/core/src/pilot.rs",
+    "find": "            keys |= key_for(best);",
+    "replace": "            keys |= 0;",
+    "test": "up_close_it_takes_the_shotgun_it_owns_and_waits_before_switching_again"
+  },
+  {
+    "name": "T20 a bot rests between switches",
+    "file": "crates/core/src/pilot.rs",
+    "find": "            p.switched = SWITCH_REST;",
+    "replace": "            p.switched = 0;",
+    "test": "up_close_it_takes_the_shotgun_it_owns_and_waits_before_switching_again"
+  },
+  {
+    "name": "T20 a bot goes only for weapons it lacks",
+    "file": "crates/core/src/pilot.rs",
+    "find": "                && v.owned & (1 << k.weapon as u16) == 0\n",
+    "replace": "",
+    "test": "out_of_a_fight_it_goes_for_a_weapon_it_lacks"
+  },
+  {
+    "name": "T20 a spread gun suits only near",
+    "file": "crates/core/src/pilot.rs",
+    "find": "fx::div(fx::mul(HALF_BODY, fx::cos(s.spread)), fx::sin(s.spread))",
+    "replace": "fx::int(200)",
+    "test": "each_weapon_suits_its_distance"
+  },
+  {
+    "name": "T20 a harder bot reacts sooner",
+    "file": "crates/core/src/pilot.rs",
+    "find": "                reaction: 12,",
+    "replace": "                reaction: 90,",
+    "test": "a_harder_bot_fells_a_person_sooner"
+  },
+  {
+    "name": "T20 the host's skill goes with the start",
+    "file": "crates/core/src/online.rs",
+    "find": "                self.skill = skill;\n",
+    "replace": "",
+    "test": "the_hosts_bot_skill_reaches_the_guest_and_a_guests_own_does_not"
+  },
+  {
+    "name": "T20 the match is built at the start's skill",
+    "file": "crates/core/src/versus.rs",
+    "find": "world.skill = crate::pilot::Skill::of(links.skill);",
+    "replace": "world.skill = crate::pilot::Skill::Normal;",
+    "test": "the_hosts_bot_skill_reaches_the_guest_and_a_guests_own_does_not"
+  },
+  {
+    "name": "T20 the skill setting reaches the bots' match",
+    "file": "crates/core/src/game.rs",
+    "find": "        self.world = World::online(0b1, 0, skins);\n        self.world.skill = self.skill;",
+    "replace": "        self.world = World::online(0b1, 0, skins);",
+    "test": "the_bot_skill_is_a_setting_from_easy_to_hard_and_the_bots_play_at_it"
+  },
+  {
+    "name": "T20 the cover is out of the target's sight",
+    "file": "crates/core/src/world.rs",
+    "find": ".filter(|&at| !self.clear(scratch, c, at.add(",
+    "replace": ".filter(|&at| self.clear(scratch, c, at.add(",
+    "test": "a_bot_hit_sees_its_shooter_and_low_a_spawn_out_of_its_sight"
+  },
+  {
+    "name": "T20 a bot sees the shot that hit it",
+    "file": "crates/core/src/world.rs",
+    "find": ".filter(|_| me.hurt.ticks >= crate::hurt::HURT - 1);",
+    "replace": ".filter(|_| false);",
+    "test": "a_bot_hit_sees_its_shooter_and_low_a_spawn_out_of_its_sight"
   }
 ]

@@ -117,6 +117,8 @@ pub struct Game {
     pub filter: bool,
     /// T18: the view shakes when hit, a setting, on to start
     pub shake: bool,
+    /// T20: how good the bots are, a setting, Normal to start (CS-Q26: A)
+    pub skill: crate::pilot::Skill,
     /// the volume, percent (a setting)
     pub sounds: Vec<crate::sound::Play>,
     pub volume_pct: i32,
@@ -170,6 +172,7 @@ impl Game {
             volume_pct: VOLUME_START,
             filter: false,
             shake: true,
+            skill: crate::pilot::Skill::Normal,
         };
         g.draw();
         Ok(g)
@@ -485,6 +488,7 @@ impl Game {
             *s = free.next().unwrap_or(0);
         }
         self.world = World::online(0b1, 0, skins);
+        self.world.skill = self.skill;
         self.matched = true;
         self.clock.rest();
         self.show(Screen::Play);
@@ -495,6 +499,7 @@ impl Game {
         self.matched = false;
         self.bot = bot;
         self.world = World::room(bot);
+        self.world.skill = self.skill;
         self.world.players[0].skin = self.skin;
         if let Some(b) = self.world.players.get_mut(1) {
             b.skin = (self.skin + 1) % crate::skins::COUNT as u8;
@@ -509,6 +514,7 @@ impl Game {
     /// M4: a room to host or join: the transport is told to open it.
     fn open_room(&mut self, host: bool, code: &str) {
         let mut v = Versus::new(host, code, &self.build, self.skin);
+        v.set_skill(self.skill);
         v.opened_us = Some(self.now_us);
         self.versus = Some(v);
         self.invited = code.to_string();
@@ -734,6 +740,17 @@ impl Game {
                 self.filter = step > 0;
                 self.ui_version += 1;
             }
+            // T20: −1 an easier skill for the bots, 1 a harder; a host's
+            // goes to its guests with the start
+            "skill.step" => {
+                let step: i32 = v.parse().map_err(|_| format!("\"{value}\" is not a step."))?;
+                let n = crate::pilot::SKILLS.len() as i32;
+                self.skill = crate::pilot::Skill::of((self.skill as i32 + step).clamp(0, n - 1) as u8);
+                if let Some(x) = self.versus.as_mut() {
+                    x.set_skill(self.skill);
+                }
+                self.ui_version += 1;
+            }
             // T18: −1 stills the view when hit, 1 lets it shake
             "shake.set" => {
                 let step: i32 = v.parse().map_err(|_| format!("\"{value}\" is not a step."))?;
@@ -925,6 +942,33 @@ pub(crate) mod tests {
         assert_eq!(jumps[0]["gain"], VOLUME_START * 10);
         assert_eq!(jumps[0]["pan"], 0);
         assert_eq!(g.take_sounds(), "[]", "taken once");
+    }
+
+    #[test]
+    fn the_bot_skill_is_a_setting_from_easy_to_hard_and_the_bots_play_at_it() {
+        use crate::pilot::Skill;
+        let mut g = game();
+        assert_eq!(g.skill, Skill::Normal);
+        let row = |g: &Game| {
+            let r = crate::api::settings(g)
+                .into_iter()
+                .find(|s| s.id == "skill")
+                .unwrap();
+            (r.label, r.value)
+        };
+        assert_eq!(row(&g), ("Bot skill".to_string(), "Normal".to_string()));
+        g.act("skill.step", "1").unwrap();
+        g.act("skill.step", "1").unwrap();
+        assert_eq!(g.skill, Skill::Hard, "Hard is the last");
+        assert_eq!(row(&g).1, "Hard");
+        g.act("menu.bots", "").unwrap();
+        assert_eq!(g.world.skill, Skill::Hard);
+        g.act("skill.step", "-1").unwrap();
+        g.act("skill.step", "-1").unwrap();
+        g.act("skill.step", "-1").unwrap();
+        assert_eq!(g.skill, Skill::Easy, "Easy is the first");
+        g.act("menu.duel", "").unwrap();
+        assert_eq!(g.world.skill, Skill::Easy);
     }
 
     #[test]

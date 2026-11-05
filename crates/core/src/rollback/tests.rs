@@ -153,7 +153,10 @@ impl Room {
                     }
                     None => self.nets[*b].message(id(*a), &text),
                 };
-                if let Some(crate::online::Event::Start { seats, empty, skins }) = start {
+                if let Some(crate::online::Event::Start {
+                    seats, empty, skins, ..
+                }) = start
+                {
                     let links = std::mem::replace(&mut self.nets[*b], Net::new(false, "b"));
                     let seat = links.seat.expect("a started guest has a seat");
                     self.sessions[*b] = Some(Rollback::new(

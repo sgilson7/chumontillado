@@ -1520,10 +1520,12 @@ fn a_hit_from_the_bot_shakes_the_view_points_to_it_and_leaves_the_aim_alone() {
 /// circling differently.
 #[test]
 fn on_every_map_a_round_with_bots_is_decided_inside_a_minute() {
+    // T20: at every skill; a bot that falls back must still come again
     let mut slow = Vec::new();
-    for map in 0..crate::maps::COUNT {
+    for (map, skill) in (0..crate::maps::COUNT).flat_map(|m| crate::pilot::SKILLS.map(|s| (m, s))) {
         for (person, from) in [(0, 0), (0, 37), (0, 101), (1, 0), (1, 37), (1, 101)] {
             let mut w = World::online(person, 0, [0, 1, 2, 3]);
+            w.skill = skill;
             w.tick = from;
             w.start_round(map);
             let mut ended = None;
@@ -1535,7 +1537,7 @@ fn on_every_map_a_round_with_bots_is_decided_inside_a_minute() {
                 }
             }
             if ended.is_none() {
-                slow.push((w.map.name, person, from));
+                slow.push((w.map.name, skill, person, from));
             }
         }
     }
@@ -1563,6 +1565,62 @@ fn a_lone_bot_finds_and_fells_a_person_standing_still_on_every_map() {
         }
     }
     assert!(missed.is_empty(), "the person still stands on {missed:?}");
+}
+
+/// T20: the harder the skill, the sooner a lone bot fells a person
+/// standing still, over every map.
+#[test]
+fn a_harder_bot_fells_a_person_sooner() {
+    let took = |skill: crate::pilot::Skill| -> i64 {
+        let mut ticks = 0;
+        for (map, from) in (0..crate::maps::COUNT).flat_map(|m| [(m, 0), (m, 53), (m, 140)]) {
+            let mut w = World::online(0b0001, 0b1100, [0, 1, 2, 3]);
+            w.skill = skill;
+            w.tick = from;
+            w.start_round(map);
+            for _ in 0..crate::rounds::COUNT_TICKS + 60 * 60 {
+                w.step(&[Input::default()]);
+                ticks += 1;
+                if !w.players[0].alive() {
+                    break;
+                }
+            }
+        }
+        ticks
+    };
+    use crate::pilot::Skill::*;
+    let (easy, normal, hard) = (took(Easy), took(Normal), took(Hard));
+    assert!(easy > normal && normal > hard, "{easy} {normal} {hard}");
+}
+
+/// T20: a bot sees the shot that hit it, and low, the nearest spawn out
+/// of its target's sight; whole, it has no cover to go to.
+#[test]
+fn a_bot_hit_sees_its_shooter_and_low_a_spawn_out_of_its_sight() {
+    let mut sc = Scratch::default();
+    let mut covered = 0;
+    for map in 0..crate::maps::COUNT {
+        let mut w = World::online(0, 0, [0, 1, 2, 3]);
+        w.start_round(map);
+        for k in [2, 3] {
+            w.players[k].dead = DOWN_FOR_ROUND;
+        }
+        // the shooter 2 m from the bot, in sight
+        let at = w.players[0].body.origin.add(v3(int(2), 0, 0));
+        w.players[1].body = crate::movement::Body::at(at);
+        w.hurt(1, 0, 40);
+        let v = w.view(0, &mut sc);
+        assert_eq!(v.hit_from, Some(w.players[1].eye_now()), "{map}");
+        assert_eq!(v.cover, None, "{map}: whole, it stands and fights");
+        w.hurt(1, 0, 40);
+        let v = w.view(0, &mut sc);
+        let (chest, cover) = (v.chest.expect("in sight"), v.cover);
+        if let Some(c) = cover {
+            covered += 1;
+            assert!(!w.clear(&mut sc, chest, c.add(v3(0, ONE * 14 / 10, 0))), "{map}");
+        }
+    }
+    assert!(covered >= crate::maps::COUNT / 2, "cover on only {covered} maps");
 }
 
 /// T19: in a match a bot hunts the nearest other seat standing, seen or

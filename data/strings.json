@@ -165,5 +165,11 @@
   "setting_filter": "Painted filter",
   "filter_on": "On",
   "filter_off": "Off",
-  "setting_shake": "Screen shake"
+  "setting_shake": "Screen shake",
+  "setting_skill": "Bot skill",
+  "skill_easy": "Easy",
+  "skill_normal": "Normal",
+  "skill_hard": "Hard",
+  "easier": "Easier",
+  "harder": "Harder"
 }

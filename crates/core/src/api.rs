@@ -405,6 +405,12 @@ pub fn settings(g: &Game) -> Vec<Setting> {
             actions: step("shake.set", "filter_off", "filter_on"),
         },
         Setting {
+            id: "skill".into(),
+            label: g.strings.get("setting_skill"),
+            value: g.strings.get(g.skill.key()),
+            actions: step("skill.step", "easier", "harder"),
+        },
+        Setting {
             id: "look".into(),
             label: g.strings.get("setting_look"),
             value: g.strings.get("percent").replace("{n}", &g.look_pct.to_string()),

@@ -241,6 +241,14 @@ impl Versus {
         }
     }
 
+    /// T20: the bots' skill the host will start the match with; a
+    /// guest's is replaced by the host's when the match starts.
+    pub fn set_skill(&mut self, skill: crate::pilot::Skill) {
+        if let Stage::Lobby(n) = &mut self.stage {
+            n.skill = skill as u8;
+        }
+    }
+
     /// The seats left empty, as this browser knows.
     pub fn empty(&self) -> Seats {
         self.links().empty
@@ -283,7 +291,9 @@ impl Versus {
         }
         let started = match &mut self.stage {
             Stage::Lobby(n) => match n.message(peer, text) {
-                Some(Event::Start { seats, empty, skins }) => Some((seats, empty, skins)),
+                Some(Event::Start {
+                    seats, empty, skins, ..
+                }) => Some((seats, empty, skins)),
                 _ => None,
             },
             Stage::Match(s) => {
@@ -321,12 +331,10 @@ impl Versus {
             Stage::Match(_) => return,
         };
         let Some(seat) = links.seat else { return };
-        self.stage = Stage::Match(Box::new(Rollback::new(
-            links,
-            seat,
-            seats,
-            World::online(seats, empty, skins),
-        )));
+        // T20: the host's skill for the bots, as it sent it
+        let mut world = World::online(seats, empty, skins);
+        world.skill = crate::pilot::Skill::of(links.skill);
+        self.stage = Stage::Match(Box::new(Rollback::new(links, seat, seats, world)));
     }
 
     /// A guest that has not heard the host for `TIMEOUT_US` has lost it.
@@ -430,6 +438,32 @@ mod tests {
         assert_eq!(guest.session().map(|s| s.seats), Some(0b11));
         assert_eq!(host.session().map(|s| s.seat), Some(0));
         assert!(!guest.start(), "only the host starts");
+    }
+
+    #[test]
+    fn the_hosts_bot_skill_reaches_the_guest_and_a_guests_own_does_not() {
+        use crate::pilot::Skill;
+        let mut host = Versus::new(true, "KQXRT", "b", 0);
+        let mut guest = Versus::new(false, "KQXRT", "b", 1);
+        host.set_skill(Skill::Hard);
+        guest.set_skill(Skill::Easy);
+        host.connected(1, 0);
+        guest.connected(2, 0);
+        for _ in 0..3 {
+            for (_, t) in guest.take_outbox() {
+                host.message(1, &t, 0);
+            }
+            for (_, t) in host.take_outbox() {
+                guest.message(2, &t, 0);
+            }
+        }
+        assert!(host.start());
+        for (_, t) in host.take_outbox() {
+            guest.message(2, &t, 0);
+        }
+        for v in [&host, &guest] {
+            assert_eq!(v.session().map(|s| s.world.skill), Some(Skill::Hard));
+        }
     }
 
     #[test]

@@ -110,6 +110,9 @@ pub enum Msg {
         /// M5: each seat's skin, bots' too
         #[serde(default)]
         skins: [u8; SEATS],
+        /// T20: the bots' skill (`pilot::SKILLS` by number)
+        #[serde(default = "normal_skill")]
+        skill: u8,
     },
     /// one seat's record for one tick
     Input {
@@ -132,6 +135,10 @@ pub enum Msg {
     Bye {
         why: String,
     },
+}
+
+fn normal_skill() -> u8 {
+    crate::pilot::Skill::Normal as u8
 }
 
 pub fn encode(m: &Msg) -> String {
@@ -178,6 +185,8 @@ pub struct Net {
     pub skins: [u8; SEATS],
     /// this browser's player's own choice of skin
     pub chosen: u8,
+    /// T20: the bots' skill: the host's setting, sent with the start
+    pub skill: u8,
     /// the match has begun
     pub started: bool,
     /// this browser's checksums and the others', by tick, kept until each
@@ -205,6 +214,7 @@ pub enum Event {
         seats: Seats,
         empty: Seats,
         skins: [u8; SEATS],
+        skill: u8,
     },
     /// a guest left during the match (the host only): drop its seat
     Gone {
@@ -224,6 +234,7 @@ impl Net {
             empty: 0,
             skins: [0, 1, 2, 3],
             chosen: 0,
+            skill: normal_skill(),
             started: false,
             mine: BTreeMap::new(),
             theirs: BTreeMap::new(),
@@ -415,7 +426,16 @@ impl Net {
         let (seats, empty) = (self.seats, self.empty & !self.seats);
         let skins = self.starting_skins();
         self.skins = skins;
-        self.broadcast(&Msg::Start { seats, empty, skins }, None);
+        let skill = self.skill;
+        self.broadcast(
+            &Msg::Start {
+                seats,
+                empty,
+                skins,
+                skill,
+            },
+            None,
+        );
         (seats, empty, skins)
     }
 
@@ -520,16 +540,27 @@ impl Net {
                 }
                 None
             }
-            Msg::Start { seats, empty, skins } if o.host && !self.host => {
+            Msg::Start {
+                seats,
+                empty,
+                skins,
+                skill,
+            } if o.host && !self.host => {
                 if self.started || self.seat.is_none_or(|s| !holds(seats, s)) {
                     return None;
                 }
                 self.seats = seats;
                 self.empty = empty;
                 self.skins = skins;
+                self.skill = skill;
                 self.started = true;
                 self.status = PLAYING;
-                Some(Event::Start { seats, empty, skins })
+                Some(Event::Start {
+                    seats,
+                    empty,
+                    skins,
+                    skill,
+                })
             }
             Msg::Drop { seat, from: at } if o.host && !self.host => Some(Event::Drop { seat, from: at }),
             Msg::Input { seat, tick, input } => {
@@ -644,6 +675,7 @@ pub(crate) mod tests {
                 seats: 0b11,
                 empty: 0b1000,
                 skins: [0, 1, 2, 3],
+                skill: 2,
             },
             Msg::Input {
                 seat: 3,

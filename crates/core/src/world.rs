@@ -328,6 +328,9 @@ pub struct World {
     /// T19: in a match, where the bots can walk on the map and the way
     /// round its walls; shared like the map
     pub nav: Option<Rc<crate::nav::Nav>>,
+    /// T20: how good the bots are, the same for every bot; a match's is
+    /// the host's setting, sent with its start
+    pub skill: pilot::Skill,
 }
 
 /// A weapon lying on the map (CS-Q10: A), until someone walks over it.
@@ -423,6 +426,7 @@ impl World {
             pickups: Vec::new(),
             heard: Vec::new(),
             nav: None,
+            skill: pilot::Skill::Normal,
         }
     }
 
@@ -560,19 +564,36 @@ impl World {
         let me = &self.players[id];
         let eye = me.body.origin.add(v3(0, me.body.eye(), 0));
         let in_match = self.rounds.is_some();
-        let chest = self
+        let seen = self
             .players
             .iter()
             .enumerate()
             .filter(|(k, p)| *k != id && p.alive() && (in_match || p.pilot.is_none()))
-            .map(|(_, p)| p.body.origin.add(v3(0, p.body.eye() - ONE / 4, 0)))
-            .filter(|&c| {
+            .map(|(_, p)| {
+                (
+                    p.body.origin.add(v3(0, p.body.eye() - ONE / 4, 0)),
+                    p.body.velocity,
+                )
+            })
+            .filter(|&(c, _)| {
                 let to = c.sub(eye);
                 let d = to.len();
-                d <= pilot::SIGHT
-                    && weapons::wall_distance(&self.map, scratch, eye, to.norm(), d) >= d - ONE / 50
+                d <= pilot::SIGHT && self.clear(scratch, eye, c)
             })
-            .min_by_key(|c| c.sub(eye).len());
+            .min_by_key(|(c, _)| c.sub(eye).len());
+        let chest = seen.map(|(c, _)| c);
+        // T20: hit this tick, from whom; and low, the nearest spawn out of
+        // the target's sight to fall back to
+        let hit_from = me.hurt.from.filter(|_| me.hurt.ticks >= crate::hurt::HURT - 1);
+        let low = me.health <= self.skill.traits().fall_back_at;
+        let cover = chest.filter(|_| low && in_match).and_then(|c| {
+            self.map
+                .spawns
+                .iter()
+                .map(|&(at, _)| at)
+                .filter(|&at| !self.clear(scratch, c, at.add(v3(0, me.body.eye() - ONE / 4, 0))))
+                .min_by_key(|at| at.sub(me.body.origin).len_xz())
+        });
         // T19: in a match, a bot hunts the nearest other seat standing,
         // seen or not, so a round of bots ends
         let hunt = self
@@ -596,7 +617,22 @@ impl World {
             pitch: me.aim.pitch,
             on_ground: me.body.on_ground,
             chest,
+            skill: self.skill,
+            chest_velocity: seen.map_or(V3::ZERO, |(_, vel)| vel),
+            hit_from,
+            health: me.health,
+            cover,
+            weapon: me.arms.weapon,
+            owned: me.arms.owned,
+            pickups: &self.pickups,
         }
+    }
+
+    /// T20: whether nothing on the map stands between `a` and `b`.
+    fn clear(&self, scratch: &mut Scratch, a: V3, b: V3) -> bool {
+        let to = b.sub(a);
+        let d = to.len();
+        weapons::wall_distance(&self.map, scratch, a, to.norm(), d) >= d - ONE / 50
     }
 
     /// One tick. `inputs` holds a record for each person's seat in order;

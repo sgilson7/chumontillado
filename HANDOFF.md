@@ -21,11 +21,11 @@ Chumontillado is a first-person movement shooter for up to four players online, 
 | `crates/core/src/trace.rs`, `map.rs` | the box sweep; brushes as planes; the practice room |
 | `crates/core/src/world.rs` | the players, targets, shots, projectiles, bursts, swings, the hook and pins, and one tick; tests in `world/tests.rs` |
 | `crates/core/src/weapons.rs`, `arms.rs` | every weapon's numbers (`WEAPONS`), rays, bursts and arcs; what a player holds, fires and swings |
-| `crates/core/src/pilot.rs`, `nav.rs` | the bot: a record made from the world; T19: where it can walk on a map and the way round the walls |
+| `crates/core/src/pilot.rs`, `nav.rs` | the bot: a record made from the world; T19: where it can walk on a map and the way round the walls; T20: dodging, falling back, leading, weapons by distance, and the skills (`Skill::traits`) |
 | `crates/core/src/hurt.rs` | T18: a hit as the one hit feels it: the shake, the red edge, the arc, the bar's lost part |
 | `crates/core/src/online.rs`, `rollback.rs`, `versus.rs` | M4: the wire and the seats; rollback for four; hosting, joining, the lobby and the invite link |
 | `crates/core/src/rounds.rs`, `maps.rs` | M5: a match's rounds; the eight maps, held to the 6 m rule |
-| `crates/core/src/hands.rs`, `skins.rs` | the weapon in the hands and how it moves; the six skins, each holding its weapon |
+| `crates/core/src/hands.rs`, `skins.rs` | the weapon in the hands and how it moves; the six skins, each holding its weapon, each after its painter on the smooth shapes (T21: `Round`, `Rod`, `Bell` in `mesh.rs`) |
 | `data/shaders/post.frag`, `web/gl.js` | T15: the painted (Kuwahara) filter, a setting off to start, drawn over the scene |
 | `crates/core/src/sound.rs`, `data/sounds.json`, `web/sound.js` | M6: which sounds are made and how loud and where each is for the listener; each sound's recipe; the page's synthesis with Web Audio |
 | `web/online.js`, `web/net/` | the transport: the one page file that imports it, and the relays (`config.js`), held by `online_fence.rs` |
@@ -35,7 +35,7 @@ Chumontillado is a first-person movement shooter for up to four players online, 
 
 ## Commands
 
-- `cargo test`: the core's tests. `python3 scripts/break_tests.py`: 229 rows; run a commit's own rows by name (`break_tests.py T19`), the whole list before a milestone (a row whose broken code does not compile now fails, R7.8).
+- `cargo test`: the core's tests. `python3 scripts/break_tests.py`: 248 rows; run a commit's own rows by name (`break_tests.py T19`), the whole list before a milestone (a row whose broken code does not compile now fails, R7.8).
 - `./scripts/check.sh`: BUILDER CHECK PASSED (recorded below).
 - `./scripts/publish.sh`, with `GIT_AUTHOR_NAME`/`GIT_COMMITTER_NAME` set (this machine has no git identity), then `git push origin main`: the push runs `.github/workflows/pages.yml`, which deploys the gh-pages branch (R2.3). Pages' own branch builder hung, so it is not used.
 
@@ -57,8 +57,9 @@ M6 is built: sound made in the core and synthesized by the page (R13.1), heard o
 
 1. **A friend's permanent black screen** (T14, R12.1): not reproduced; the page now names what stopped it. Ask what it says now, and their browser and device.
 2. **Why a linked guest once never found the room on the live site** (R10.12): players are now told (T12); the cause is not shown. Check the relays in `web/net/config.js`.
-3. **The hit taken back on a miss** (CS-Q5: B, R8.10), and the open M5 rows: the host's settings (R10.6) and a free camera for the dead (R10.10).
-4. **Final pass:** the rest of T7: bodies that recoil, land and fall.
+3. **Bots on the surf ramps** (R18.3): ramps as a second kind of cell in `nav.rs`, and an air-strafe pilot along them.
+4. **The hit taken back on a miss** (CS-Q5: B, R8.10), and the open M5 rows: the host's settings (R10.6) and a free camera for the dead (R10.10).
+5. **Final pass:** the rest of T7: bodies that recoil, land and fall.
 
 Before trusting a test run, check it compiled: filter for `error` lines as well as failures (R6.5).
 
@@ -73,10 +74,10 @@ Before trusting a test run, check it compiled: filter for `error` lines as well 
 - R9.7 (person): how the animations, the kick, the skins and the fire rates on the beat feel, from play.
 - R13.3 (person): how the sounds sound, from play (`data/sounds.json`).
 - R15.4 (person): how the Friar, the Torero, the Puñal, the Molino and the Alcázar look and play (T16).
-- R17.1 (person): answer CS-Q25 (how the costumes are smoothed; prototype on the branch try/smooth-skins) and CS-Q26 (what the bot overhaul is) (T20, T21).
+- R18.4 (person): how the smoothed costumes look and the bots fight at Easy, Normal and Hard (T20, T21).
 - R16.4 (person): how the health bar, the shake, the red edge and the arc feel, and how the bots hunt (T18, T19).
 - R7.10 (person): how the projectile guns, melee weapons and weapon jumps feel, from play (`weapons::WEAPONS` and the constants beside it).
 
 ## Check
 
-`./scripts/check.sh` on 2026-11-05 after T18 and T19: BUILDER CHECK PASSED (format, lint, 298 tests, the WebAssembly build and import audit, the art check, the notebook, the journal, and the browser check in Chromium, Firefox and WebKit). `python3 scripts/break_tests.py T18 T19`: the 15 new rows caught. The full run (229 rows) was last complete after T17 (214 of 214); Sam asked on 2026-11-05 for quick tests per commit, so it is not rerun every commit.
+`./scripts/check.sh` on 2026-11-05 after T20 and T21: see the commit's check line in the journal entry `2026-11-05-t20-t21`. `python3 scripts/break_tests.py T20 T21`: the 19 new rows caught (the T16 hood row repointed after the merge, and caught). The full run (248 rows) was last complete after T17 (214 of 214); Sam asked on 2026-11-05 for quick tests per commit, so it is not rerun every commit.
