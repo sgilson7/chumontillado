@@ -73,6 +73,7 @@ Before trusting a test run, check it compiled: filter for `error` lines as well 
 - R9.7 (person): how the animations, the kick, the skins and the fire rates on the beat feel, from play.
 - R13.3 (person): how the sounds sound, from play (`data/sounds.json`).
 - R15.4 (person): how the Friar, the Torero, the Puñal, the Molino and the Alcázar look and play (T16).
+- R17.1 (person): answer CS-Q25 (how the costumes are smoothed; prototype on the branch try/smooth-skins) and CS-Q26 (what the bot overhaul is) (T20, T21).
 - R16.4 (person): how the health bar, the shake, the red edge and the arc feel, and how the bots hunt (T18, T19).
 - R7.10 (person): how the projectile guns, melee weapons and weapon jumps feel, from play (`weapons::WEAPONS` and the constants beside it).
 
