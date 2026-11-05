@@ -439,7 +439,7 @@ impl Game {
         if self.previewing() {
             let turn = (self.title_ticks as i64 * fx::deg(1) as i64 / 2) as i32;
             let figure = crate::skins::Figure {
-                skin: crate::skins::SKINS[self.skin as usize % 4],
+                skin: crate::skins::SKINS[self.skin as usize % crate::skins::COUNT],
                 feet: v3(fx::ONE * 55 / 10, 0, fx::ONE * 95 / 10),
                 yaw: fx::wrap(fx::HALF_TURN.wrapping_add(turn)),
                 pitch: 0,
@@ -472,7 +472,7 @@ impl Game {
         self.leave_online();
         let mut skins = [self.skin, 0, 0, 0];
         // the bots wear the skins you do not
-        let mut free = (0..4u8).filter(|k| *k != self.skin);
+        let mut free = (0..crate::skins::COUNT as u8).filter(|k| *k != self.skin);
         for s in skins.iter_mut().skip(1) {
             *s = free.next().unwrap_or(0);
         }
@@ -489,7 +489,7 @@ impl Game {
         self.world = World::room(bot);
         self.world.players[0].skin = self.skin;
         if let Some(b) = self.world.players.get_mut(1) {
-            b.skin = (self.skin + 1) % 4;
+            b.skin = (self.skin + 1) % crate::skins::COUNT as u8;
         }
         for p in &mut self.world.players {
             p.aim.pct = self.look_pct;
@@ -597,11 +597,11 @@ impl Game {
                     }
                 }
             }
-            // M5: your skin, a setting: the four in turn; in a lobby the
+            // M5: your skin, a setting: the six in turn (T16); in a lobby the
             // others are told
             "skin.step" => {
                 let step: i32 = v.parse().map_err(|_| format!("\"{value}\" is not a step."))?;
-                self.skin = (self.skin as i32 + step).rem_euclid(4) as u8;
+                self.skin = (self.skin as i32 + step).rem_euclid(crate::skins::COUNT as i32) as u8;
                 if let Some(x) = self.versus.as_mut() {
                     x.choose_skin(self.skin);
                 }
@@ -751,9 +751,9 @@ impl Game {
                 }
                 self.draw();
             }
-            // for tests and the journal's shots: the four skins standing in
-            // a row 5 m in front of the spawn, each holding a different
-            // weapon (seat 4 wears seat 1's skin, the Hidalgo's)
+            // for tests and the journal's shots: the six skins standing in
+            // a row 5 m in front of the spawn, each in its own skin holding a
+            // different weapon (T16)
             "place.lineup" => {
                 let w = &mut self.world;
                 let spawn = w.players[0].spawn;
@@ -763,11 +763,17 @@ impl Game {
                     crate::weapons::Weapon::Toro,
                     crate::weapons::Weapon::Katana,
                     crate::weapons::Weapon::Shotgun,
+                    crate::weapons::Weapon::Punal,
+                    crate::weapons::Weapon::Pincel,
                 ];
                 for (k, g) in held.iter().enumerate() {
-                    let at = spawn.0.add(v3(fx::int(k as i32 * 2 - 3), 0, -fx::int(5)));
+                    // 1.6 m apart, so the six fit between the room's slope and wall
+                    let at = spawn
+                        .0
+                        .add(v3(fx::ONE * (k as i32 * 16 - 28) / 10, 0, -fx::int(5)));
                     let mut p = crate::world::Player::at((at, fx::HALF_TURN));
                     p.arms.weapon = *g;
+                    p.skin = k as u8;
                     w.players.push(p);
                 }
                 self.draw();
@@ -1143,16 +1149,24 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn the_skin_setting_steps_round_the_four_and_shows_its_name() {
+    fn the_skin_setting_steps_round_the_six_and_shows_its_name() {
         let mut g = game();
+        let name = |g: &Game| {
+            crate::api::settings(g)
+                .into_iter()
+                .find(|r| r.id == "skin")
+                .unwrap()
+                .value
+        };
+        // back from the Hidalgo is the last of the six (T16)
         g.act("skin.step", "-1").unwrap();
-        assert_eq!(g.skin, 3);
-        let row = crate::api::settings(&g)
-            .into_iter()
-            .find(|r| r.id == "skin")
-            .unwrap();
-        assert_eq!(row.value, "El Sordo");
-        g.act("skin.step", "1").unwrap();
+        assert_eq!(g.skin, 5);
+        assert_eq!(name(&g), "The Torero");
+        g.act("skin.step", "-1").unwrap();
+        assert_eq!(name(&g), "The Friar");
+        g.act("skin.step", "-1").unwrap();
+        assert_eq!(name(&g), "El Sordo");
+        g.act("skin.step", "3").unwrap();
         assert_eq!(g.skin, 0);
     }
 
@@ -1212,13 +1226,14 @@ pub(crate) mod tests {
         };
         trade(&mut host, &mut guest);
         assert_eq!(host.links().skins[..2], [1, 3]);
-        // the guest changes its mind in the lobby
-        guest.choose_skin(2);
+        // the guest changes its mind in the lobby, to the last skin (T16:
+        // the host once held a guest's choice to the first four)
+        guest.choose_skin(5);
         trade(&mut host, &mut guest);
-        assert_eq!(host.links().skins[1], 2);
+        assert_eq!(host.links().skins[1], 5);
         host.start();
         trade(&mut host, &mut guest);
-        // the bots wear the two skins no person does: 0 and 3
+        // the bots wear the first two skins no person does: 0 and 2
         let skins = |v: &crate::versus::Versus| -> Vec<u8> {
             v.session()
                 .unwrap()
@@ -1228,7 +1243,7 @@ pub(crate) mod tests {
                 .map(|p| p.skin)
                 .collect()
         };
-        assert_eq!(skins(&host), vec![1, 2, 0, 3]);
+        assert_eq!(skins(&host), vec![1, 5, 0, 2]);
         assert_eq!(skins(&guest), skins(&host));
     }
 

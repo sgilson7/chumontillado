@@ -515,7 +515,7 @@ impl Net {
             }
             Msg::Skin { skin } if self.host && !self.started => {
                 if let Some(seat) = o.seat {
-                    self.skins[seat] = skin.min(SEATS as u8 - 1);
+                    self.skins[seat] = skin.min(crate::skins::COUNT as u8 - 1);
                     self.send_roster();
                 }
                 None

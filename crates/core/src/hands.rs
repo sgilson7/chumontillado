@@ -77,6 +77,7 @@ pub const KICK: [(i32, i32, i32); COUNT] = [
     (0, 0, 0),    // katana
     (0, 0, 0),    // navaja
     (0, 0, 0),    // guadaña
+    (0, 0, 0),    // puñal
 ];
 
 /// The view's tip up after a shot, angle units: the weapon's kick at the
@@ -173,7 +174,7 @@ pub fn pose(a: &Arms, swing: Option<Swinging>, speed: Fx, on_ground: bool, momen
         let sw = s.weapon.swing().expect("a swing is a melee weapon's");
         if s.lunge {
             p.shift = p.shift.add(v3(-cm(10), cm(4), -cm(20)));
-        } else if s.weapon == Weapon::Navaja {
+        } else if matches!(s.weapon, Weapon::Navaja | Weapon::Punal) {
             let t = hump(along(s.age, 0, sw.until + 2));
             p.shift = p.shift.add(v3(-cm(6), cm(2), -fx::mul(cm(22), t)));
         } else {
@@ -336,6 +337,17 @@ pub fn gun_parts(g: Weapon, pal: &Palette) -> Vec<GunPart> {
             part(Mesh::Cube, [0, 2, -17], [1, 3, 16], steel, Role::Fixed),
             part(Mesh::Cube, [0, 1, -8], [3, 4, 2], brass, Role::Fixed),
             part(Mesh::Cube, [0, 0, 0], [3, 4, 14], wood, Role::Fixed),
+        ],
+        // T16: a straight double-edged dagger narrowing to its point, a wide
+        // cross guard and a red tassel at the pommel, so it reads apart from
+        // the navaja's folding blade
+        Weapon::Punal => vec![
+            part(Mesh::Cube, [0, 2, -20], [1, 5, 26], steel, Role::Fixed),
+            part(Mesh::Cube, [0, 2, -35], [1, 3, 6], steel, Role::Fixed),
+            part(Mesh::Cube, [0, 2, -6], [12, 2, 2], brass, Role::Fixed),
+            part(Mesh::Cube, [0, 1, 1], [3, 3, 12], dark, Role::Fixed),
+            part(Mesh::Sphere, [0, 1, 8], [4, 4, 4], brass, Role::Fixed),
+            part(Mesh::Cube, [0, -4, 10], [2, 8, 2], red, Role::Fixed),
         ],
         // a painted scythe: a long shaft, the blade across its end
         Weapon::Guadana => vec![

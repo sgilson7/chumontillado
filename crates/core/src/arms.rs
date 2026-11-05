@@ -110,11 +110,11 @@ impl Arms {
         }
     }
 
-    /// The melee key: the last melee weapon, or the next of the three when
+    /// The melee key: the last melee weapon, or the next of the four when
     /// one is already in hand.
     fn take_melee(&mut self) {
         let next = if self.weapon.swing().is_some() {
-            // the next melee weapon held, round the three
+            // the next melee weapon held, round the four
             let k = MELEE_WEAPONS.iter().position(|&m| m == self.weapon).unwrap_or(0);
             (1..=MELEE_WEAPONS.len())
                 .map(|j| MELEE_WEAPONS[(k + j) % MELEE_WEAPONS.len()])
@@ -350,16 +350,22 @@ mod tests {
         a.tick(&rec(SLOT_10, false));
         assert_eq!(a.weapon, Weapon::Collage);
         // the first press takes the navaja every player starts with; each
-        // further press, the next of the three
+        // further press, the next of the four (T16 added the puñal)
         let mut order = Vec::new();
-        for _ in 0..4 {
+        for _ in 0..5 {
             a.tick(&rec(MELEE, false));
             a.tick(&rec(0, false));
             order.push(a.weapon);
         }
         assert_eq!(
             order,
-            [Weapon::Navaja, Weapon::Guadana, Weapon::Katana, Weapon::Navaja]
+            [
+                Weapon::Navaja,
+                Weapon::Guadana,
+                Weapon::Punal,
+                Weapon::Katana,
+                Weapon::Navaja
+            ]
         );
         // from a gun, E takes the melee weapon last held
         a.tick(&rec(SLOT_8, false));

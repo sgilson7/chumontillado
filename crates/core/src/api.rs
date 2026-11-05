@@ -395,7 +395,8 @@ pub fn settings(g: &Game) -> Vec<Setting> {
 
 /// M5: a skin's name.
 pub fn skin_name(g: &Game, skin: u8) -> String {
-    g.strings.get(&format!("skin_{}", skin % 4))
+    g.strings
+        .get(&format!("skin_{}", skin as usize % crate::skins::COUNT))
 }
 
 /// M5: a seat as the HUD names it: "You", or its skin's name.

@@ -4,7 +4,7 @@ Stage 9, written by the agent. `C5 Consolidate in your own words`. A fresh sessi
 
 ## What this is
 
-Chumontillado is a first-person movement shooter for up to four players online, one life a round, built in the browser on Chumworld Arena's engine. M1 is the practice room's movement (hop, surf, slide, slide jump, wall jump, slam); M2 adds the five hitscan guns, straw targets and a bot that hops round the room, or shoots back in a duel. M3 adds the five projectile guns (drum launcher, Trabuco, Toro, Campana, Collage), the three melee weapons (katana with its lunge and parry, navaja, guadaña with its hook), nails that pin, and weapon jumps at 30% self-damage. M4 adds online play for up to four: the host shares a room code or invite link (`?join=CODE`), guests take seats 2 to 4, bots play empty seats, and the match runs on rollback over links between every pair of browsers, the host passing on what a pair cannot send each other; the host switches a bot on or off for each free seat (T10). The feel pass (journal pages 7 and 8, CS-Q20 to CS-Q24) puts every tapped fire rate and reload on a 120-a-minute beat, adds a view kick, an X on a struck head and a shooting-by-speed card, and the gun animations (T8). The four skins are in (T9), chosen in the settings or the lobby (T11). M5 adds matches: one-life rounds, first to 5, on the Plaza, the Catedral and the Galería in turn, weapons picked up off the map, positions shown through walls from 75 s; Play against bots runs one offline. T12 tells players when the browsers cannot connect; T13 adds three maps (the Mercado, the Puerto, the Acueducto), so a match goes round six. Every map surface is textured (T4). It is published at https://sgilson7.github.io/chumontillado/. The design is the journal's (../chumontillado-journal/, https://claude.ai/artifact/5F9AxuvUdChSWFCDBaygSJ).
+Chumontillado is a first-person movement shooter for up to four players online, one life a round, built in the browser on Chumworld Arena's engine. M1 is the practice room's movement (hop, surf, slide, slide jump, wall jump, slam); M2 adds the five hitscan guns, straw targets and a bot that hops round the room, or shoots back in a duel. M3 adds the five projectile guns (drum launcher, Trabuco, Toro, Campana, Collage), the three melee weapons (katana with its lunge and parry, navaja, guadaña with its hook), nails that pin, and weapon jumps at 30% self-damage. M4 adds online play for up to four: the host shares a room code or invite link (`?join=CODE`), guests take seats 2 to 4, bots play empty seats, and the match runs on rollback over links between every pair of browsers, the host passing on what a pair cannot send each other; the host switches a bot on or off for each free seat (T10). The feel pass (journal pages 7 and 8, CS-Q20 to CS-Q24) puts every tapped fire rate and reload on a 120-a-minute beat, adds a view kick, an X on a struck head and a shooting-by-speed card, and the gun animations (T8). The four skins are in (T9), chosen in the settings or the lobby (T11). M5 adds matches: one-life rounds, first to 5, on the Plaza, the Catedral and the Galería in turn, weapons picked up off the map, positions shown through walls from 75 s; Play against bots runs one offline. T12 tells players when the browsers cannot connect; T13 adds three maps (the Mercado, the Puerto, the Acueducto), so a match goes round six. M6 adds sound and painted bursts; T15 a painted filter, off to start. T16 adds two skins (the Friar, the Torero), a fourth melee weapon (the Puñal, which jumps more than twice as high while held) and two maps (the Molino, the Alcázar), so a match goes round eight. Every map surface is textured (T4). It is published at https://sgilson7.github.io/chumontillado/. The design is the journal's (../chumontillado-journal/, https://claude.ai/artifact/5F9AxuvUdChSWFCDBaygSJ).
 
 ## Rules that hold it up
 
@@ -23,8 +23,8 @@ Chumontillado is a first-person movement shooter for up to four players online, 
 | `crates/core/src/weapons.rs`, `arms.rs` | every weapon's numbers (`WEAPONS`), rays, bursts and arcs; what a player holds, fires and swings |
 | `crates/core/src/pilot.rs` | the bot: a record made from the world |
 | `crates/core/src/online.rs`, `rollback.rs`, `versus.rs` | M4: the wire and the seats; rollback for four; hosting, joining, the lobby and the invite link |
-| `crates/core/src/rounds.rs`, `maps.rs` | M5: a match's rounds; the six maps, held to the 6 m rule |
-| `crates/core/src/hands.rs`, `skins.rs` | the weapon in the hands and how it moves; the four skins, each holding its weapon |
+| `crates/core/src/rounds.rs`, `maps.rs` | M5: a match's rounds; the eight maps, held to the 6 m rule |
+| `crates/core/src/hands.rs`, `skins.rs` | the weapon in the hands and how it moves; the six skins, each holding its weapon |
 | `data/shaders/post.frag`, `web/gl.js` | T15: the painted (Kuwahara) filter, a setting off to start, drawn over the scene |
 | `crates/core/src/sound.rs`, `data/sounds.json`, `web/sound.js` | M6: which sounds are made and how loud and where each is for the listener; each sound's recipe; the page's synthesis with Web Audio |
 | `web/online.js`, `web/net/` | the transport: the one page file that imports it, and the relays (`config.js`), held by `online_fence.rs` |
@@ -34,7 +34,7 @@ Chumontillado is a first-person movement shooter for up to four players online, 
 
 ## Commands
 
-- `cargo test`: the core's tests. `python3 scripts/break_tests.py`: 203 rows, all caught when last run (a row whose broken code does not compile now fails, R7.8).
+- `cargo test`: the core's tests. `python3 scripts/break_tests.py`: 213 rows, all caught when last run (a row whose broken code does not compile now fails, R7.8).
 - `./scripts/check.sh`: BUILDER CHECK PASSED (recorded below).
 - `./scripts/publish.sh`, with `GIT_AUTHOR_NAME`/`GIT_COMMITTER_NAME` set (this machine has no git identity), then `git push origin main`: the push runs `.github/workflows/pages.yml`, which deploys the gh-pages branch (R2.3). Pages' own branch builder hung, so it is not used.
 
@@ -71,8 +71,9 @@ Before trusting a test run, check it compiled: filter for `error` lines as well 
 - R10.11 (person): how the rounds, the three maps and the bots play: Play against bots, or host a match.
 - R9.7 (person): how the animations, the kick, the skins and the fire rates on the beat feel, from play.
 - R13.3 (person): how the sounds sound, from play (`data/sounds.json`).
+- R15.4 (person): how the Friar, the Torero, the Puñal, the Molino and the Alcázar look and play (T16).
 - R7.10 (person): how the projectile guns, melee weapons and weapon jumps feel, from play (`weapons::WEAPONS` and the constants beside it).
 
 ## Check
 
-`./scripts/check.sh` on 2026-11-04 after T15: BUILDER CHECK PASSED (format, lint, 284 tests, the WebAssembly build and import audit, the art check, the notebook, the journal, and the browser check in Chromium, Firefox and WebKit, which counts the sounds Web Audio starts after a jump and turns the painted filter on and off). `python3 scripts/break_tests.py`: 200 of 200 caught after M6, and T15's 3 of 3; every row's text found once after T15.
+`./scripts/check.sh` on 2026-11-04 after T16: BUILDER CHECK PASSED (format, lint, 287 tests, the WebAssembly build and import audit, the art check, the notebook, the journal, and the browser check in Chromium, Firefox and WebKit). `python3 scripts/break_tests.py`: 213 of 213 caught after T16, every row's text found once.

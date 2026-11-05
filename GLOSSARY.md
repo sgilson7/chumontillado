@@ -68,6 +68,12 @@ A valley whose banks are long surf ramps, crossed by an aqueduct to run along an
 
 Not: aqueduct map, canyon
 
+### Alcázar
+
+A fortress courtyard: ramparts along two sides, too high for a jump, a tower in each corner, arcades of columns, a fountain in the middle. The puñal's jump reaches the ramparts.
+
+Not: castle map, fort
+
 ### Bot
 
 A seat played by the game. It moves and shoots only through the same keys and mouse a person's seat uses.
@@ -182,6 +188,12 @@ A market square ringed by arcades: the stalls' steep roofs are short surf ramps,
 
 Not: marketplace map
 
+### Molino
+
+A hill of La Mancha whose four sides are surf ramps, a windmill in each corner with its sails across its face, stone walls and haystacks over the fields.
+
+Not: windmill map, hill
+
 ### Navaja
 
 A folding knife drawn true, quick and short. From behind it fells anyone; held, it makes you a little faster.
@@ -224,6 +236,12 @@ A gun drawn true that fires eight pellets on a fixed ring. Fired at the floor in
 
 Not: scattergun
 
+### Puñal
+
+A straight dagger drawn true, light and quick. Held, it makes a jump more than twice as high.
+
+Not: dagger, knife, high-jump knife
+
 ### Room code
 
 Five letters that name an online match. Anyone who types them joins it while a seat is free.
@@ -250,7 +268,7 @@ Not: handgun, sidearm pistol
 
 ### Skin
 
-How a player looks: the Hidalgo, the Infanta, the Harlequin or El Sordo. Every skin is hit the same.
+How a player looks: the Hidalgo, the Infanta, the Harlequin, El Sordo, the Friar or the Torero. Every skin is hit the same.
 
 Not: costume, outfit
 
@@ -259,6 +277,12 @@ Not: costume, outfit
 A figure on a post in the practice room. Shot down, it stands again a few seconds later.
 
 Not: dummy, mannequin
+
+### The Friar
+
+A skin after Zurbarán: a white habit to the ground in deep folds, a rope belt, the hood up behind a face in shadow.
+
+Not: monk, priest
 
 ### The Harlequin
 
@@ -277,6 +301,12 @@ Not: nobleman
 A skin after Velázquez: a silver bell skirt, wide pale hair and a red bow.
 
 Not: princess
+
+### The Torero
+
+A skin after Zuloaga: a suit of lights in green and gold, pink stockings, a black two-lobed hat and a pink cape over one shoulder.
+
+Not: matador, bullfighter
 
 ### Toro
 

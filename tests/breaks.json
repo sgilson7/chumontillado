@@ -1038,8 +1038,8 @@
   {
     "name": "M6 the seats wear the skins in turn",
     "file": "crates/core/src/skins.rs",
-    "find": "pub const SKINS: [Skin; 4] = [Skin::Hidalgo, Skin::Infanta, Skin::Harlequin, Skin::Sordo];",
-    "replace": "pub const SKINS: [Skin; 4] = [Skin::Infanta, Skin::Hidalgo, Skin::Harlequin, Skin::Sordo];",
+    "find": "    Skin::Hidalgo,\n    Skin::Infanta,\n",
+    "replace": "    Skin::Infanta,\n    Skin::Hidalgo,\n",
     "test": "the_seats_wear_the_four_skins_in_turn"
   },
   {
@@ -1185,7 +1185,7 @@
   {
     "name": "M5 a guest's change of skin reaches the host",
     "file": "crates/core/src/online.rs",
-    "find": "                    self.skins[seat] = skin.min(SEATS as u8 - 1);",
+    "find": "                    self.skins[seat] = skin.min(crate::skins::COUNT as u8 - 1);",
     "replace": "                    self.skins[seat] = 0;",
     "test": "a_guests_skin_reaches_the_host_and_the_match_on_both_browsers"
   },
@@ -1199,16 +1199,16 @@
   {
     "name": "M5 against bots, the bots wear the other skins",
     "file": "crates/core/src/game.rs",
-    "find": "        let mut free = (0..4u8).filter(|k| *k != self.skin);",
-    "replace": "        let mut free = 0..4u8;",
+    "find": "        let mut free = (0..crate::skins::COUNT as u8).filter(|k| *k != self.skin);",
+    "replace": "        let mut free = 0..crate::skins::COUNT as u8;",
     "test": "play_against_bots_is_a_match_in_your_skin_the_bots_in_the_other_three"
   },
   {
     "name": "M5 the skin setting steps round the four",
     "file": "crates/core/src/game.rs",
-    "find": "                self.skin = (self.skin as i32 + step).rem_euclid(4) as u8;",
-    "replace": "                self.skin = step.rem_euclid(4) as u8;",
-    "test": "the_skin_setting_steps_round_the_four_and_shows_its_name"
+    "find": "                self.skin = (self.skin as i32 + step).rem_euclid(crate::skins::COUNT as i32) as u8;",
+    "replace": "                self.skin = step.rem_euclid(crate::skins::COUNT as i32) as u8;",
+    "test": "the_skin_setting_steps_round_the_six_and_shows_its_name"
   },
   {
     "name": "M5 the view is from a standing seat while down",
@@ -1276,8 +1276,8 @@
   {
     "name": "T13 the Puerto's yard is narrow enough",
     "file": "crates/core/src/maps.rs",
-    "find": "    let mut bs = yard(28, 28, 14);",
-    "replace": "    let mut bs = yard(32, 32, 14);",
+    "find": "far edges 9 m\n    // from anything\n    let mut bs = yard(28, 28, 14);",
+    "replace": "far edges 9 m\n    // from anything\n    let mut bs = yard(32, 32, 14);",
     "test": "every_place_on_every_map_has_something_to_move_off_within_six_metres"
   },
   {
@@ -1419,5 +1419,75 @@
     "find": "value: g.strings.get(if g.filter { \"filter_on\" } else { \"filter_off\" }),",
     "replace": "value: g.strings.get(\"filter_off\"),",
     "test": "the_painted_filter_starts_off_and_its_setting_turns_it_on_and_off"
+  },
+  {
+    "name": "T16 the puñal's jump is higher while held",
+    "file": "crates/core/src/world.rs",
+    "find": "            t.jump = t.jump * sw.jump_pct / 100;\n",
+    "replace": "",
+    "test": "the_punal_held_jumps_more_than_twice_as_high_as_the_navaja"
+  },
+  {
+    "name": "T16 the puñal jumps half as fast again",
+    "file": "crates/core/src/weapons.rs",
+    "find": "            jump_pct: 150,",
+    "replace": "            jump_pct: 125,",
+    "test": "the_punal_held_jumps_more_than_twice_as_high_as_the_navaja"
+  },
+  {
+    "name": "T16 the melee key reaches the puñal",
+    "file": "crates/core/src/weapons.rs",
+    "find": "pub const MELEE: [Weapon; 4] = [Weapon::Katana, Weapon::Navaja, Weapon::Guadana, Weapon::Punal];",
+    "replace": "pub const MELEE: [Weapon; 4] = [Weapon::Katana, Weapon::Navaja, Weapon::Guadana, Weapon::Guadana];",
+    "test": "six_to_zero_take_the_projectile_guns_and_e_takes_the_melee_weapons_in_turn"
+  },
+  {
+    "name": "T16 the host keeps a guest's choice of the new skins",
+    "file": "crates/core/src/online.rs",
+    "find": "                    self.skins[seat] = skin.min(crate::skins::COUNT as u8 - 1);",
+    "replace": "                    self.skins[seat] = skin.min(3);",
+    "test": "a_guests_skin_reaches_the_host_and_the_match_on_both_browsers"
+  },
+  {
+    "name": "T16 the skin setting steps round six",
+    "file": "crates/core/src/game.rs",
+    "find": "                self.skin = (self.skin as i32 + step).rem_euclid(crate::skins::COUNT as i32) as u8;",
+    "replace": "                self.skin = (self.skin as i32 + step).rem_euclid(4) as u8;",
+    "test": "the_skin_setting_steps_round_the_six_and_shows_its_name"
+  },
+  {
+    "name": "T16 the Friar's hood stays inside the envelope",
+    "file": "crates/core/src/skins.rs",
+    "find": "            p(Facet, [0, 170, 6], [46, 42, 44], \"fold\"),",
+    "replace": "            p(Facet, [0, 172, 6], [46, 44, 44], \"fold\"),",
+    "test": "every_skin_and_the_straw_target_stay_inside_the_hit_envelope"
+  },
+  {
+    "name": "T16 the Molino's yard is narrow enough",
+    "file": "crates/core/src/maps.rs",
+    "find": "    // 7 m from anything\n    let mut bs = yard(28, 28, 14);",
+    "replace": "    // 7 m from anything\n    let mut bs = yard(30, 30, 14);",
+    "test": "every_place_on_every_map_has_something_to_move_off_within_six_metres"
+  },
+  {
+    "name": "T16 the Alcázar's courtyard has its planters",
+    "file": "crates/core/src/maps.rs",
+    "find": "        (-10, 0),\n        (10, 0),\n",
+    "replace": "",
+    "test": "every_place_on_every_map_has_something_to_move_off_within_six_metres"
+  },
+  {
+    "name": "T16 the Alcázar's rampart is in the puñal's reach",
+    "file": "crates/core/src/maps.rs",
+    "find": "pub const RAMPART: Fx = ONE * 35 / 10;",
+    "replace": "pub const RAMPART: Fx = ONE * 42 / 10;",
+    "test": "on_the_alcazar_the_punal_jumps_onto_the_rampart_and_the_navaja_does_not"
+  },
+  {
+    "name": "T16 a match goes round all eight maps",
+    "file": "crates/core/src/maps.rs",
+    "find": "        molino(),\n        alcazar(),\n",
+    "replace": "        molino(),\n        acueducto(),\n",
+    "test": "a_match_goes_round_the_eight_maps_in_turn"
   }
 ]

@@ -28,11 +28,24 @@ pub enum Skin {
     Infanta,
     Harlequin,
     Sordo,
+    // T16: two more, asked for on 2026-11-04
+    Fraile,
+    Torero,
 }
 
-/// The skins by seat: seat 1 the Hidalgo, then the Infanta, the Harlequin
-/// and El Sordo.
-pub const SKINS: [Skin; 4] = [Skin::Hidalgo, Skin::Infanta, Skin::Harlequin, Skin::Sordo];
+/// How many skins there are to choose from.
+pub const COUNT: usize = 6;
+
+/// The skins in the order the setting steps through them; by default seat
+/// 1 wears the Hidalgo, then the Infanta, the Harlequin and El Sordo.
+pub const SKINS: [Skin; COUNT] = [
+    Skin::Hidalgo,
+    Skin::Infanta,
+    Skin::Harlequin,
+    Skin::Sordo,
+    Skin::Fraile,
+    Skin::Torero,
+];
 
 impl Skin {
     /// Its key in `look.json`'s `skins`.
@@ -42,11 +55,13 @@ impl Skin {
             Skin::Infanta => "infanta",
             Skin::Harlequin => "harlequin",
             Skin::Sordo => "sordo",
+            Skin::Fraile => "fraile",
+            Skin::Torero => "torero",
         }
     }
 
     pub fn of_seat(seat: usize) -> Skin {
-        SKINS[seat % SKINS.len()]
+        SKINS[seat % 4]
     }
 }
 
@@ -192,6 +207,64 @@ pub fn parts(skin: Skin) -> Vec<Part> {
             p(Dot, [-8, 172, -21], [3, 3, 2], "ink"),
             p(Dot, [8, 172, -21], [3, 3, 2], "ink"),
             p(Dot, [0, 157, -18], [9, 11, 3], "mouth"),
+        ],
+        // T16: after Zurbarán: a white habit to the ground in deep folds, a
+        // scapular down its front, a rope belt and its cord, the hood
+        // behind a face in shadow
+        Skin::Fraile => vec![
+            p(Cube, [-11, 3, -6], [12, 6, 18], "sandal"),
+            p(Cube, [11, 3, -6], [12, 6, 18], "sandal"),
+            p(Taper, [0, 56, 0], [86, 112, 78], "habit"),
+            p(Cube, [-20, 52, -30], [6, 96, 3], "fold"),
+            p(Cube, [20, 52, -30], [6, 96, 3], "fold"),
+            p(Cube, [0, 48, 34], [10, 90, 3], "fold"),
+            p(Facet, [0, 126, 0], [72, 54, 52], "habit"),
+            p(Cube, [0, 104, -27], [26, 92, 4], "scapular"),
+            p(Cyl, [0, 100, 0], [74, 6, 60], "rope"),
+            p(Cube, [-16, 78, -30], [3, 42, 3], "rope"),
+            p(Dot, [-16, 56, -30], [6, 6, 6], "rope"),
+            p(Facet, [0, 150, 6], [62, 22, 50], "habit"),
+            p(Facet, [0, 170, 6], [46, 42, 44], "fold"),
+            p(Facet, [0, 168, -3], [30, 36, 32], "flesh"),
+            p(Cube, [0, 181, -14], [30, 8, 8], "fold"),
+            p(Dot, [-6, 169, -19], [5, 3, 3], "ink"),
+            p(Dot, [6, 169, -19], [5, 3, 3], "ink"),
+            p(Pyramid, [0, 186, 10], [24, 8, 24], "fold"),
+        ],
+        // T16: after Zuloaga: a suit of lights in green and gold, breeches
+        // to the knee over pink stockings, a red sash, a black two-lobed
+        // hat, and the pink cape folded over the left shoulder
+        Skin::Torero => vec![
+            leg(p(Cyl, [-10, 22, 0], [15, 44, 15], "stocking"), LegL),
+            leg(p(Cyl, [10, 22, 0], [15, 44, 15], "stocking"), LegR),
+            leg(p(Cyl, [-10, 68, 0], [19, 48, 19], "suit"), LegL),
+            leg(p(Cyl, [10, 68, 0], [19, 48, 19], "suit"), LegR),
+            leg(p(Cube, [-19, 68, 0], [3, 46, 5], "gold"), LegL),
+            leg(p(Cube, [19, 68, 0], [3, 46, 5], "gold"), LegR),
+            leg(p(Cube, [-10, 3, -3], [12, 6, 22], "black"), LegL),
+            leg(p(Cube, [10, 3, -3], [12, 6, 22], "black"), LegR),
+            p(Cyl, [0, 97, 0], [50, 12, 38], "sash"),
+            p(Facet, [0, 125, 0], [62, 50, 44], "suit"),
+            p(Cube, [-14, 124, -21], [10, 40, 3], "gold"),
+            p(Cube, [14, 124, -21], [10, 40, 3], "gold"),
+            p(Cube, [0, 130, -22], [12, 30, 3], "shirt"),
+            p(Cube, [0, 140, -24], [4, 14, 2], "sash"),
+            p(Facet, [-27, 146, 0], [20, 12, 22], "gold"),
+            p(Facet, [27, 146, 0], [20, 12, 22], "gold"),
+            // the cape over the left shoulder, its yellow lining at the hem
+            turned(p(Cube, [-36, 112, 2], [6, 70, 38], "cape"), 4, 0),
+            p(Cube, [-37, 78, 2], [7, 6, 38], "lining"),
+            p(Cyl, [0, 152, 0], [14, 10, 14], "flesh"),
+            p(Facet, [0, 168, -2], [32, 38, 34], "flesh"),
+            p(Cube, [-15, 166, -6], [3, 12, 6], "hair"),
+            p(Cube, [15, 166, -6], [3, 12, 6], "hair"),
+            p(Dot, [0, 160, 17], [8, 8, 6], "hair"),
+            p(Dot, [-7, 171, -19], [5, 3, 3], "ink"),
+            p(Dot, [7, 171, -19], [5, 3, 3], "ink"),
+            // the montera: a brim and two black lobes
+            p(Cyl, [0, 181, 2], [36, 4, 30], "black"),
+            p(Facet, [-9, 185, 2], [20, 12, 24], "black"),
+            p(Facet, [9, 185, 2], [20, 12, 24], "black"),
         ],
     }
 }

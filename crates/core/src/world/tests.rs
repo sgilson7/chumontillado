@@ -1027,6 +1027,67 @@ fn the_navaja_held_runs_ten_percent_faster_and_the_katana_allows_a_fourth_wall_j
     assert_eq!(w.players[0].tuning().wall_jumps, 3);
 }
 
+#[test]
+fn the_punal_held_jumps_more_than_twice_as_high_as_the_navaja() {
+    // T16: 7.92 × 1.5 = 11.88 m/s up; 11.88² / (2 × 18) = 3.92 m, against
+    // the navaja's 7.92² / 36 = 1.74 m
+    let top = |g: Weapon| {
+        let mut w = World::practice();
+        run(&mut w, Input::default(), 30);
+        holding(&mut w, g);
+        let floor = w.players[0].body.origin.y;
+        w.step(&[keys(JUMP)]);
+        let mut top = floor;
+        for _ in 0..90 {
+            w.step(&[Input::default()]);
+            top = top.max(w.players[0].body.origin.y);
+        }
+        top - floor
+    };
+    let (navaja, punal) = (top(Weapon::Navaja), top(Weapon::Punal));
+    assert!(
+        near(navaja, ONE * 174 / 100, ONE / 10),
+        "{}",
+        fx::decimal(navaja, 3)
+    );
+    assert!(
+        near(punal, ONE * 392 / 100, ONE / 10),
+        "{}",
+        fx::decimal(punal, 3)
+    );
+}
+
+#[test]
+fn on_the_alcazar_the_punal_jumps_onto_the_rampart_and_the_navaja_does_not() {
+    // T16: the rampart stands 3.5 m, under the puñal's 3.92 and over a
+    // jump's 1.74. From 3 m off its face, running at it, one jump
+    let after = |g: Weapon| {
+        let mut w = World::practice();
+        w.map = Rc::new(crate::maps::alcazar());
+        w.players.truncate(1);
+        w.dummies.clear();
+        let start = v3(0, 0, -int(22));
+        w.players[0].body.origin = start;
+        w.players[0].prev = start;
+        w.players[0].aim.yaw = 0;
+        holding(&mut w, g);
+        run(&mut w, keys(FORWARD), 30);
+        w.players[0].body.origin = start;
+        w.step(&[keys(FORWARD | JUMP)]);
+        run(&mut w, keys(FORWARD), 90);
+        w.players[0].body.origin
+    };
+    let up = after(Weapon::Punal);
+    assert!(
+        near(up.y, crate::maps::RAMPART, ONE / 50),
+        "{}",
+        fx::decimal(up.y, 3)
+    );
+    assert!(up.z < -int(25), "on the walk, {}", fx::decimal(up.z, 3));
+    let down = after(Weapon::Navaja);
+    assert!(near(down.y, 0, ONE / 50), "{}", fx::decimal(down.y, 3));
+}
+
 /// A rocket from seat 1, 2.5 m in front of the player's eye at the spawn,
 /// flying at them at 20 m/s.
 fn rocket_at_the_player(w: &mut World) {

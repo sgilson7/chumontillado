@@ -10,6 +10,9 @@
 //! post or pillar to circle near its middle, from the talk's account of how
 //! enemies lose you round one.
 //!
+//! T13 added the Mercado, the Puerto and the Acueducto; T16 the Molino
+//! and the Alcázar, whose ramparts stand for the puñal's jump.
+//!
 //! Lengths in metres, y up. A seat's spawn faces the map's middle.
 
 use crate::fx::{self, int, Fx, ONE};
@@ -19,11 +22,20 @@ use crate::weapons::Weapon;
 
 /// The maps in the order a match plays them.
 pub fn all() -> [Map; COUNT] {
-    [plaza(), catedral(), galeria(), mercado(), puerto(), acueducto()]
+    [
+        plaza(),
+        catedral(),
+        galeria(),
+        mercado(),
+        puerto(),
+        acueducto(),
+        molino(),
+        alcazar(),
+    ]
 }
 
 /// How many maps a match goes round.
-pub const COUNT: usize = 6;
+pub const COUNT: usize = 8;
 
 /// The map at place `k` in the order, built alone.
 pub fn map(k: usize) -> Map {
@@ -33,7 +45,9 @@ pub fn map(k: usize) -> Map {
         2 => galeria(),
         3 => mercado(),
         4 => puerto(),
-        _ => acueducto(),
+        5 => acueducto(),
+        6 => molino(),
+        _ => alcazar(),
     }
 }
 
@@ -149,6 +163,7 @@ pub fn plaza() -> Map {
             (on(3, 16), Weapon::Collage),
             (on(5, 16), Weapon::Guadana),
             (on(7, 16), Weapon::Trabuco),
+            (on(5, 11), Weapon::Punal),
         ],
         bot_loop: vec![(8, 0), (0, 8), (-8, 0), (0, -8)],
     }
@@ -250,6 +265,7 @@ pub fn catedral() -> Map {
             (v3(int(8), 0, -int(34)), Weapon::Collage),
             (v3(-int(8), 0, int(34)), Weapon::Guadana),
             (v3(ONE * 285 / 10, 0, int(29)), Weapon::Katana),
+            (v3(-ONE * 285 / 10, 0, -int(29)), Weapon::Punal),
         ],
         bot_loop: vec![
             (0, -20),
@@ -354,6 +370,7 @@ pub fn galeria() -> Map {
             (v3(-int(30), 0, -int(20)), Weapon::Drum),
             (v3(-int(30), 0, int(20)), Weapon::Guadana),
             (v3(int(30), 0, int(20)), Weapon::MachinePistol),
+            (v3(-int(9), 0, -int(8)), Weapon::Punal),
         ],
         bot_loop: vec![(-30, 0), (30, 0)],
     }
@@ -437,6 +454,7 @@ pub fn mercado() -> Map {
             (v3(-int(25), 0, int(25)), Weapon::Collage),
             (v3(0, 0, -int(14)), Weapon::Trabuco),
             (v3(0, 0, int(14)), Weapon::MachinePistol),
+            (v3(-int(14), 0, -int(9)), Weapon::Punal),
         ],
         bot_loop: vec![(14, 0), (0, 14), (-14, 0), (0, -14)],
     }
@@ -513,6 +531,7 @@ pub fn puerto() -> Map {
             (v3(int(12), 0, int(12)), Weapon::Trabuco),
             (v3(-int(12), 0, -int(12)), Weapon::Collage),
             (v3(int(24), 0, int(10)), Weapon::MachinePistol),
+            (v3(-int(24), 0, -int(10)), Weapon::Punal),
         ],
         bot_loop: vec![(12, -22), (12, 22), (-12, 22), (-12, -22)],
     }
@@ -592,8 +611,228 @@ pub fn acueducto() -> Map {
             (v3(int(27), int(10), int(25)), Weapon::Trabuco),
             (v3(int(10), 0, -int(20)), Weapon::Collage),
             (v3(-int(10), 0, int(20)), Weapon::MachinePistol),
+            (V3::ZERO, Weapon::Punal),
         ],
         bot_loop: vec![(0, -24), (0, 24)],
+    }
+}
+
+/// The Molino (T16): a hill of La Mancha in the middle, its four sides
+/// surf ramps up to a flat top; a windmill in each corner, its sails a
+/// cross on the face toward the hill, to wall jump off; dry-stone walls
+/// and haystacks across the fields.
+pub fn molino() -> Map {
+    // 28 m each way: at 30 the probe test found the fields by the walls
+    // 7 m from anything
+    let mut bs = yard(28, 28, 14);
+    // the hill: a top 8 m square, 6 m up, each side a surf ramp down 5 m
+    // out (50°)
+    bs.push(b(-4, 0, -4, 4, 6, 4, Surface::Block));
+    for k in 0..4 {
+        let ramp = prism(
+            [(int(4), 0), (int(9), 0), (int(4), int(6))],
+            false,
+            -int(4),
+            int(4),
+            Surface::Ramp,
+        );
+        bs.push(turned(ramp, fx::TURN * k / 4, V3::ZERO));
+    }
+    // the windmills: towers 4 m square, 11 m high, the sails a cross 8 m
+    // across on the face toward the hill
+    for (x, z) in [(-1, -1), (-1, 1), (1, -1), (1, 1)] {
+        let (cx, cz) = (int(19 * x), int(19 * z));
+        let toward = yaw_of(v3(-cx, 0, -cz));
+        // turned so a face, not a corner, looks at the hill
+        bs.push(turned(
+            block(
+                v3(-int(2), 0, -int(2)),
+                v3(int(2), int(11), int(2)),
+                Surface::Wall,
+            ),
+            toward,
+            v3(cx, 0, cz),
+        ));
+        // the sails stand just off that face, 2.2 m from the middle
+        let d = v3(cx, 0, cz).len();
+        let k = ONE * 22 / 10;
+        let out = v3(
+            cx - fx::mul(k, fx::div(cx, d)),
+            0,
+            cz - fx::mul(k, fx::div(cz, d)),
+        );
+        bs.push(turned(
+            block(
+                v3(-ONE / 4, int(4), -ONE / 5),
+                v3(ONE / 4, int(12), ONE / 5),
+                Surface::Trim,
+            ),
+            toward,
+            out,
+        ));
+        bs.push(turned(
+            block(
+                v3(-int(4), ONE * 77 / 10, -ONE / 5),
+                v3(int(4), ONE * 83 / 10, ONE / 5),
+                Surface::Trim,
+            ),
+            toward,
+            out,
+        ));
+    }
+    // dry-stone walls, 1.2 m high, to hop or wall jump off, one on each
+    // side of the hill
+    bs.push(b(-5, 0, 15, 5, 1, 16, Surface::Block));
+    bs.push(b(-5, 0, -16, 5, 1, -15, Surface::Block));
+    bs.push(b(15, 0, -5, 16, 1, 5, Surface::Block));
+    bs.push(b(-16, 0, -5, -15, 1, 5, Surface::Block));
+    // haystacks
+    for (x, z) in [
+        (-12, -24),
+        (12, 24),
+        (24, -12),
+        (-24, 12),
+        (-12, 12),
+        (12, -12),
+        (24, 24),
+        (-24, -24),
+        (-22, -8),
+        (8, -22),
+        (22, 8),
+        (-8, 22),
+        (11, 11),
+        (-11, -11),
+    ] {
+        bs.push(pillar(int(x), int(z), int(2), ONE * 16 / 10, Surface::Block));
+    }
+    Map {
+        brushes: bs,
+        spawns: vec![
+            spawn(0, -23, 0, 0),
+            spawn(23, 0, 0, 0),
+            spawn(0, 23, 0, 0),
+            spawn(-23, 0, 0, 0),
+        ],
+        name: "map_molino",
+        pickups: vec![
+            (v3(0, int(6), 0), Weapon::Pincel),
+            (v3(-int(11), 0, 0), Weapon::Shotgun),
+            (v3(int(11), 0, 0), Weapon::Rifle),
+            (v3(0, 0, -int(11)), Weapon::Toro),
+            (v3(0, 0, int(11)), Weapon::Drum),
+            (v3(int(14), 0, int(14)), Weapon::Katana),
+            (v3(-int(14), 0, -int(14)), Weapon::Guadana),
+            (v3(int(14), 0, -int(14)), Weapon::Campana),
+            (v3(-int(14), 0, int(14)), Weapon::Punal),
+            (v3(int(24), 0, int(6)), Weapon::Trabuco),
+            (v3(-int(24), 0, -int(6)), Weapon::Collage),
+            (v3(int(6), 0, -int(24)), Weapon::MachinePistol),
+        ],
+        bot_loop: vec![(12, 0), (0, 12), (-12, 0), (0, -12)],
+    }
+}
+
+/// How high the Alcázar's ramparts stand (m): under the 3.92 m the puñal
+/// jumps (T16), over the 1.74 m a jump does, so the walk is reached by the
+/// puñal, a wall jump off a tower, or the surf ramps against it.
+pub const RAMPART: Fx = ONE * 35 / 10;
+
+/// The Alcázar (T16): a fortress courtyard, ramparts 3.5 m high along its
+/// north and south sides with surf ramps against them, a tower in each
+/// corner, arcades of columns down the east and west, and a fountain in
+/// the middle among planters.
+pub fn alcazar() -> Map {
+    let mut bs = yard(30, 30, 16);
+    // the ramparts: 5 m deep, the length of the courtyard
+    for side in [-1, 1] {
+        let (z0, z1) = if side < 0 {
+            (-int(30), -int(25))
+        } else {
+            (int(25), int(30))
+        };
+        bs.push(block(
+            v3(-int(30), 0, z0),
+            v3(int(30), RAMPART, z1),
+            Surface::Block,
+        ));
+        // two surf ramps against each, to its top over 3 m out (49°)
+        for x in [-14, 14] {
+            let ramp = prism(
+                [(int(25), 0), (int(22), 0), (int(25), RAMPART)],
+                false,
+                int(x - 4),
+                int(x + 4),
+                Surface::Ramp,
+            );
+            bs.push(if side < 0 {
+                turned(ramp, fx::HALF_TURN, V3::ZERO)
+            } else {
+                ramp
+            });
+        }
+    }
+    // the towers, 6 m square and 12 m high, in the corners
+    for (x, z) in [(-1, -1), (-1, 1), (1, -1), (1, 1)] {
+        bs.push(pillar(int(27 * x), int(27 * z), int(6), int(12), Surface::Wall));
+    }
+    // the arcades: columns every 5 m, 4 m high, under a beam
+    for x in [-20, 20] {
+        for k in -4..=4 {
+            bs.push(pillar(int(x), int(k * 5), ONE, int(4), Surface::Block));
+        }
+        bs.push(block(
+            v3(int(x) - ONE * 6 / 10, int(4), -int(21)),
+            v3(int(x) + ONE * 6 / 10, ONE * 46 / 10, int(21)),
+            Surface::Trim,
+        ));
+    }
+    // the fountain: a basin 4 m across and a column
+    bs.push(pillar(0, 0, int(4), ONE * 7 / 10, Surface::Trim));
+    bs.push(pillar(0, 0, ONE, int(3), Surface::Block));
+    // planters, 1 m high: the probe test found the courtyard between
+    // the fountain and the arcades 7 m from anything with six
+    for (x, z) in [
+        (-9, -9),
+        (9, 9),
+        (-9, 9),
+        (9, -9),
+        (0, -16),
+        (0, 16),
+        (-10, 0),
+        (10, 0),
+        (0, -9),
+        (0, 9),
+        (-14, 14),
+        (14, -14),
+        (14, 14),
+        (-14, -14),
+    ] {
+        bs.push(pillar(int(x), int(z), ONE * 15 / 10, ONE, Surface::Block));
+    }
+    Map {
+        brushes: bs,
+        spawns: vec![
+            spawn(-25, 0, 0, 0),
+            spawn(25, 0, 0, 0),
+            spawn(0, -21, 0, 0),
+            spawn(0, 21, 0, 0),
+        ],
+        name: "map_alcazar",
+        pickups: vec![
+            (v3(0, ONE * 7 / 10, -int(2)), Weapon::Pincel),
+            (v3(0, RAMPART, -ONE * 275 / 10), Weapon::Rifle),
+            (v3(0, RAMPART, ONE * 275 / 10), Weapon::Toro),
+            (v3(-int(14), 0, 0), Weapon::Shotgun),
+            (v3(int(14), 0, 0), Weapon::Drum),
+            (v3(-int(25), 0, -int(12)), Weapon::Katana),
+            (v3(int(25), 0, int(12)), Weapon::Guadana),
+            (v3(int(25), 0, -int(12)), Weapon::Punal),
+            (v3(-int(25), 0, int(12)), Weapon::Campana),
+            (v3(-int(8), 0, -int(18)), Weapon::Trabuco),
+            (v3(int(8), 0, int(18)), Weapon::Collage),
+            (v3(int(8), 0, -int(18)), Weapon::MachinePistol),
+        ],
+        bot_loop: vec![(-12, -12), (12, -12), (12, 12), (-12, 12)],
     }
 }
 
@@ -698,6 +937,28 @@ mod tests {
                 );
             }
             assert!(m.pickups.len() >= 9, "{}: most weapons lie on the map", m.name);
+        }
+    }
+
+    #[test]
+    fn a_match_goes_round_the_eight_maps_in_turn() {
+        // T16 added the Molino and the Alcázar after the six
+        let names: Vec<&str> = all().iter().map(|m| m.name).collect();
+        assert_eq!(
+            names,
+            [
+                "map_plaza",
+                "map_catedral",
+                "map_galeria",
+                "map_mercado",
+                "map_puerto",
+                "map_acueducto",
+                "map_molino",
+                "map_alcazar"
+            ]
+        );
+        for (k, n) in names.iter().enumerate() {
+            assert_eq!(map(k).name, *n);
         }
     }
 

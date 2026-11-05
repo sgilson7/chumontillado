@@ -250,12 +250,13 @@ impl Player {
     }
 
     /// The movement's numbers while holding its weapon: the navaja's faster
-    /// run, the katana's fourth wall jump.
+    /// run, the katana's fourth wall jump, the puñal's higher jump.
     pub fn tuning(&self) -> Tuning {
         let mut t = TUNING;
         if let Some(sw) = self.arms.weapon.swing() {
             t.run = t.run * sw.run_pct / 100;
             t.wall_jumps = sw.wall_jumps;
+            t.jump = t.jump * sw.jump_pct / 100;
         }
         t
     }

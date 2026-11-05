@@ -36,9 +36,11 @@ pub enum Weapon {
     Katana = 10,
     Navaja = 11,
     Guadana = 12,
+    // asked for on 2026-11-04 (T16): the high-jumping knife
+    Punal = 13,
 }
 
-pub const COUNT: usize = 13;
+pub const COUNT: usize = 14;
 pub const ALL: [Weapon; COUNT] = [
     Weapon::Pistol,
     Weapon::Shotgun,
@@ -53,10 +55,11 @@ pub const ALL: [Weapon; COUNT] = [
     Weapon::Katana,
     Weapon::Navaja,
     Weapon::Guadana,
+    Weapon::Punal,
 ];
 /// The guns take the number keys 1 to 0 in this order; the melee key takes
-/// the three melee weapons in turn.
-pub const MELEE: [Weapon; 3] = [Weapon::Katana, Weapon::Navaja, Weapon::Guadana];
+/// the four melee weapons in turn.
+pub const MELEE: [Weapon; 4] = [Weapon::Katana, Weapon::Navaja, Weapon::Guadana, Weapon::Punal];
 
 /// How a weapon reaches what it hits.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -134,6 +137,8 @@ pub struct Swing {
     pub run_pct: i32,
     /// wall jumps a flight while held
     pub wall_jumps: i32,
+    /// a jump's speed while held, percent (the puñal's higher jump)
+    pub jump_pct: i32,
 }
 
 /// A weapon's numbers. Rates are in ticks (60 a second).
@@ -208,6 +213,7 @@ const SWING: Swing = Swing {
     alt: Alt::None,
     run_pct: 100,
     wall_jumps: 3,
+    jump_pct: 100,
 };
 
 /// The beat every semi-automatic gun's and melee weapon's interval, and
@@ -446,6 +452,23 @@ pub const WEAPONS: [Stats; COUNT] = [
         }),
         damage: 70,
         interval: BEAT * 3,
+        ..HITSCAN
+    },
+    // T16: the puñal, a short stabbing knife that, held, jumps half as fast
+    // again: height goes with the square of the speed, so 1.5² = 2.25 times
+    // a jump's 1.74 m, 3.92 m (R15.1)
+    Stats {
+        name: "melee_punal",
+        kind: Kind::Melee(Swing {
+            reach: ONE,
+            half_arc: fx::deg(30),
+            from: 1,
+            until: 5,
+            jump_pct: 150,
+            ..SWING
+        }),
+        damage: 30,
+        interval: BEAT / 2,
         ..HITSCAN
     },
 ];
