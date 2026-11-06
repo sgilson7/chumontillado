@@ -93,3 +93,5 @@ After T26 (your card picks from the six): `break_tests.py T26`: 2 of 2 caught (2
 T26 live at 14d56a6 (2026-11-06): the live browser check passed in Chromium, Firefox and WebKit. The live online check's first run failed once: the guest joining by invite link did not take its seat in time in one engine; which engine, and what that guest was told, were not kept. The second run passed in full in both engines. Nothing in T26 touches joining; if a guest failing to seat recurs, it is worth chasing (R8.11).
 
 After T27 (no way out over the walls; a fall below the map fells): `break_tests.py T27`: 5 of 5 caught (279 rows).
+
+T27 live at a260055 (2026-11-06): the live browser check passed in Chromium, Firefox and WebKit. The live online check failed on its first run as after T26, the invite-link guest stuck at "Looking … (0 s)", and passed in full on a rerun in Chromium; three joins by link against the live site took about 2 s each (R20.7, open).
