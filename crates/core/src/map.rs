@@ -86,13 +86,28 @@ impl Map {
         self.brushes.iter().map(|b| b.mins.y).min().unwrap_or(0)
     }
 
-    /// T27: inside the walls, across and along: every map's floor (its
-    /// first brush) reaches a metre past the walls' inner faces each way.
-    /// Nobody goes past it at any height, over the walls into the sky
-    /// included; shots do.
-    pub fn inside(&self) -> (V3, V3) {
+    /// T27: inside the walls, across and along: every walled map's floor
+    /// (its first brush) reaches a metre past the walls' inner faces each
+    /// way. Nobody goes past it at any height, over the walls into the sky
+    /// included; shots do. T28: a map with no walls (the Plaza) has no
+    /// inside; off its edge is a fall.
+    pub fn inside(&self) -> Option<(V3, V3)> {
+        if !self.brushes.iter().any(|b| b.surface == Surface::Wall) {
+            return None;
+        }
         let f = &self.brushes[0];
-        (f.mins.add(v3(ONE, 0, ONE)), f.maxs.sub(v3(ONE, 0, ONE)))
+        Some((f.mins.add(v3(ONE, 0, ONE)), f.maxs.sub(v3(ONE, 0, ONE))))
+    }
+
+    /// T28: the box round all its floors, across and along.
+    pub fn floors(&self) -> (V3, V3) {
+        let floors = self.brushes.iter().filter(|b| b.surface == Surface::Floor);
+        floors.fold((self.brushes[0].mins, self.brushes[0].maxs), |(lo, hi), b| {
+            (
+                v3(lo.x.min(b.mins.x), lo.y.min(b.mins.y), lo.z.min(b.mins.z)),
+                v3(hi.x.max(b.maxs.x), hi.y.max(b.maxs.y), hi.z.max(b.maxs.z)),
+            )
+        })
     }
 }
 

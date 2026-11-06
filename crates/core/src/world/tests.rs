@@ -1788,15 +1788,17 @@ fn a_player_fallen_twenty_metres_below_the_map_is_felled_and_one_above_is_not() 
     );
 }
 
-/// T27: on every map the walls' inner faces stand where `Map::inside`
-/// says, the floor reaching a metre past them.
+/// T27: on every walled map the walls' inner faces stand where
+/// `Map::inside` says, the floor reaching a metre past them. T28: the Plaza
+/// alone has no walls and no inside.
 #[test]
 fn every_maps_walls_stand_at_the_edge_of_its_inside() {
     let mut maps = crate::maps::all().to_vec();
     maps.push(crate::map::practice());
     for m in &maps {
         assert_eq!(m.brushes[0].surface, crate::map::Surface::Floor, "{}", m.name);
-        let (lo, hi) = m.inside();
+        assert_eq!(m.inside().is_none(), m.name == "map_plaza", "{}", m.name);
+        let Some((lo, hi)) = m.inside() else { continue };
         let walls: Vec<_> = m
             .brushes
             .iter()
@@ -1818,7 +1820,7 @@ fn a_player_flung_over_a_wall_comes_down_inside_it() {
         // alone: no bot to shoot you on the way down
         let mut w = World::online(0b1, 0b1110, [0, 1, 2, 3]);
         w.start_round(m);
-        let (lo, hi) = w.map.inside();
+        let Some((lo, hi)) = w.map.inside() else { continue };
         let high = w.map.brushes.iter().map(|b| b.maxs.y).max().unwrap();
         let p = &mut w.players[0];
         p.body = body_at(v3(lo.x + int(2), high + int(3), (lo.z + hi.z) / 2));
@@ -1843,4 +1845,45 @@ fn a_player_flung_over_a_wall_comes_down_inside_it() {
         let y = p.body.origin.y;
         assert!(p.alive() && y >= 0 && y < tops, "map {m}: down at y {}", y / ONE);
     }
+}
+
+/// Sam, T28: "in the plaza, if you fall out of the circular ramp, you
+/// should fall off the map, not into a little holding pen you cant get out
+/// of". Every 5° round the ring, straight down from just behind the stands
+/// there is nothing, and from just inside their foot there is the floor;
+/// and a player flung over their top falls and is felled.
+#[test]
+fn over_the_top_of_the_plazas_stands_is_a_fall_off_the_map() {
+    let m = crate::maps::plaza();
+    let mut sc = crate::trace::Scratch::default();
+    for deg in (0..360).step_by(5) {
+        let a = fx::TURN * deg / 360;
+        let r = ONE * 275 / 10;
+        let p = v3(fx::mul(r, fx::sin(a)), int(9), fx::mul(r, fx::cos(a)));
+        let down = p.sub(v3(0, int(40), 0));
+        let t = crate::trace::trace_box(&m, &mut sc, p, down, V3::ZERO, V3::ZERO);
+        assert!(!t.hit(), "{deg}°: something under it at y {}", t.end.y / ONE);
+        let r = ONE * 209 / 10;
+        let p = v3(fx::mul(r, fx::sin(a)), ONE, fx::mul(r, fx::cos(a)));
+        let down = p.sub(v3(0, int(2), 0));
+        let t = crate::trace::trace_box(&m, &mut sc, p, down, V3::ZERO, V3::ZERO);
+        assert!(t.hit() && t.end.y.abs() < ONE / 100, "{deg}°: no floor at 20.9 m");
+    }
+    // alone: no bot to shoot you on the way
+    let mut w = World::online(0b1, 0b1110, [0, 1, 2, 3]);
+    w.start_round(0);
+    assert_eq!(w.map.name, "map_plaza");
+    let p = &mut w.players[0];
+    p.body = body_at(v3(0, int(10), int(25)));
+    p.body.velocity = v3(0, int(4), int(10));
+    let mut out = false;
+    for _ in 0..600 {
+        w.step(&[Input::default()]);
+        out |= w.players[0].body.origin.z > int(28);
+        if !w.players[0].alive() {
+            break;
+        }
+    }
+    assert!(out, "it went over the top");
+    assert!(!w.players[0].alive(), "felled by the fall");
 }

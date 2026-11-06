@@ -218,7 +218,7 @@ Not: railgun, brush gun
 
 ### Plaza
 
-The bullring: an open ring, its stands a ring of surf ramps.
+The bullring: an open ring, its stands a ring of surf ramps, standing in the sky with nothing behind them.
 
 Not: arena, bullring map
 

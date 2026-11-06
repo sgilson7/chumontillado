@@ -1050,10 +1050,10 @@
     "test": "every_skin_and_the_straw_target_stay_inside_the_hit_envelope"
   },
   {
-    "name": "M5 the Plaza's corner columns keep the 6 m rule",
+    "name": "M5 the Plaza's shields keep the 6 m rule (T28: the corner columns went with the corners)",
     "file": "crates/core/src/maps.rs",
-    "find": "            28 * x - 1,\n            0,\n            28 * z - 1,\n            28 * x + 1,",
-    "replace": "            48 * x - 1,\n            0,\n            28 * z - 1,\n            48 * x + 1,",
+    "find": "    for k in 0..8 {\n        let a = fx::TURN * (2 * k + 1) / 16;",
+    "replace": "    for k in 0..0 {\n        let a = fx::TURN * (2 * k + 1) / 16;",
     "test": "every_place_on_every_map_has_something_to_move_off_within_six_metres"
   },
   {
@@ -1951,5 +1951,40 @@
     "find": "        for k in 0..self.players.len() {\n            let p = &self.players[k];\n            if !p.out",
     "replace": "        for k in 0..1 {\n            let p = &self.players[k];\n            if !p.out",
     "test": "a_player_fallen_twenty_metres_below_the_map_is_felled_and_one_above_is_not"
+  },
+  {
+    "name": "T28 no floor behind the Plaza's stands",
+    "file": "crates/core/src/maps.rs",
+    "find": "            v3(ONE * 28 / 10, 0, int(22)),\n            Surface::Floor,",
+    "replace": "            v3(ONE * 28 / 10, 0, int(29)),\n            Surface::Floor,",
+    "test": "over_the_top_of_the_plazas_stands_is_a_fall_off_the_map"
+  },
+  {
+    "name": "T28 the Plaza's floor reaches the stands' foot",
+    "file": "crates/core/src/maps.rs",
+    "find": "            v3(-(ONE * 28 / 10), -ONE, int(14)),\n            v3(ONE * 28 / 10, 0, int(22)),",
+    "replace": "            v3(-(ONE * 28 / 10), -ONE, int(14)),\n            v3(ONE * 28 / 10, 0, int(19)),",
+    "test": "over_the_top_of_the_plazas_stands_is_a_fall_off_the_map"
+  },
+  {
+    "name": "T28 a map without walls has no inside to be kept in",
+    "file": "crates/core/src/map.rs",
+    "find": "        if !self.brushes.iter().any(|b| b.surface == Surface::Wall) {\n            return None;\n        }\n",
+    "replace": "",
+    "test": "over_the_top_of_the_plazas_stands_is_a_fall_off_the_map"
+  },
+  {
+    "name": "T28 a nav cell with no floor under it is shut",
+    "file": "crates/core/src/nav.rs",
+    "find": "open[(cz * w + cx) as usize] = floors.iter().any(|b| b.holds(under));",
+    "replace": "open[(cz * w + cx) as usize] = floors.iter().any(|b| b.holds(under)) || true;",
+    "test": "behind_the_plazas_stands_no_cell_is_open"
+  },
+  {
+    "name": "T28 the nav grid spans every floor, not the first",
+    "file": "crates/core/src/map.rs",
+    "find": "        floors.fold((self.brushes[0].mins, self.brushes[0].maxs), |(lo, hi), b| {",
+    "replace": "        floors.take(1).fold((self.brushes[0].mins, self.brushes[0].maxs), |(lo, hi), b| {",
+    "test": "behind_the_plazas_stands_no_cell_is_open"
   }
 ]

@@ -76,11 +76,21 @@ fn yard(half_x: i32, half_z: i32, high: i32) -> Vec<crate::map::Brush> {
 /// The Plaza: a bullring 40 m across, the stands round it a ring of surf
 /// ramps, wooden shields to wall jump from, and a low plinth in the middle
 /// with the Toro on it. T17: the barrier at the foot of the stands is gone;
-/// a surf round the ring caught on it.
+/// a surf round the ring caught on it. T28: the ring stands in the sky, with
+/// no walls round it and no floor behind the stands: over their top is a
+/// fall off the map.
 pub fn plaza() -> Map {
-    // the walls stand 5 m behind the stands: at 36 m, the probe test found
-    // the corners behind them 9 m from anything
-    let mut bs = yard(32, 32, 16);
+    // the floor: a square 36 m across, its corners under the stands, and
+    // under each stand a strip reaching to its foot and a metre on
+    let mut bs = vec![b(-18, -1, -18, 18, 0, 18, Surface::Floor)];
+    for k in 0..32 {
+        let strip = block(
+            v3(-(ONE * 28 / 10), -ONE, int(14)),
+            v3(ONE * 28 / 10, 0, int(22)),
+            Surface::Floor,
+        );
+        bs.push(turned(strip, fx::TURN * k / 32, V3::ZERO));
+    }
     // the stands: 32 surf ramps from 21 m out to 27, 8 m high (53°)
     for k in 0..32 {
         let a = fx::TURN * k / 32;
@@ -105,19 +115,6 @@ pub fn plaza() -> Map {
             shield,
             a,
             v3(fx::mul(int(12), fx::sin(a)), 0, fx::mul(int(12), fx::cos(a))),
-        ));
-    }
-    // a stone column in each corner behind the stands, to wall jump off
-    // there (the probe test found the corners 7 m from anything)
-    for (x, z) in [(-1, -1), (-1, 1), (1, -1), (1, 1)] {
-        bs.push(b(
-            28 * x - 1,
-            0,
-            28 * z - 1,
-            28 * x + 1,
-            10,
-            28 * z + 1,
-            Surface::Block,
         ));
     }
     // the plinth: 3 m square, 1.2 m high, to hop onto or circle
@@ -892,14 +889,9 @@ mod tests {
             let mut sc = Scratch::default();
             let mut probed = 0;
             let mut far = Vec::new();
-            let (x0, x1) = (
-                fx::floor(m.brushes[0].mins.x) + 2,
-                fx::floor(m.brushes[0].maxs.x) - 2,
-            );
-            let (z0, z1) = (
-                fx::floor(m.brushes[0].mins.z) + 2,
-                fx::floor(m.brushes[0].maxs.z) - 2,
-            );
+            let (lo, hi) = m.floors();
+            let (x0, x1) = (fx::floor(lo.x) + 2, fx::floor(hi.x) - 2);
+            let (z0, z1) = (fx::floor(lo.z) + 2, fx::floor(hi.z) - 2);
             for gx in (x0..=x1).step_by(4) {
                 for gz in (z0..=z1).step_by(4) {
                     let p = v3(int(gx), ONE, int(gz));

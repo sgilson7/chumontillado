@@ -744,7 +744,9 @@ impl World {
                 } else {
                     mover.t = p.tuning();
                     p.events = mover.tick(&mut p.body, input, from, p.aim.yaw);
-                    keep_inside(&mut p.body, inside);
+                    if let Some(inside) = inside {
+                        keep_inside(&mut p.body, inside);
+                    }
                 }
                 p.top_speed = p.top_speed.max(p.body.speed());
                 p.since_trick = p.since_trick.saturating_add(1);

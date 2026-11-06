@@ -34,13 +34,26 @@ pub struct Nav {
 }
 
 impl Nav {
-    /// The open cells of `map`'s floor, which is its first brush.
+    /// The open cells of `map`'s floors. T28: a cell with no floor under
+    /// its middle (off the Plaza's edge) is shut.
     pub fn of(map: &Map) -> Nav {
-        let floor = &map.brushes[0];
+        let (lo, hi) = map.floors();
         let cell = |v: Fx| fx::floor(v * 2);
-        let (x0, z0) = (cell(floor.mins.x), cell(floor.mins.z));
-        let (w, h) = (cell(floor.maxs.x) - x0, cell(floor.maxs.z) - z0);
+        let (x0, z0) = (cell(lo.x), cell(lo.z));
+        let (w, h) = (cell(hi.x) - x0, cell(hi.z) - z0);
+        let floors: Vec<_> = map
+            .brushes
+            .iter()
+            .filter(|b| b.surface == Surface::Floor)
+            .collect();
         let mut open = vec![true; (w * h) as usize];
+        for cz in 0..h {
+            for cx in 0..w {
+                let mid = Nav::middle_of(x0 + cx, z0 + cz);
+                let under = v3(mid.x, -ONE / 2, mid.z);
+                open[(cz * w + cx) as usize] = floors.iter().any(|b| b.holds(under));
+            }
+        }
         for br in map.brushes.iter().filter(|b| b.surface != Surface::Floor) {
             // only the cells near the brush's box, and only if it comes
             // down to head height
@@ -202,5 +215,16 @@ mod tests {
         let nav = Nav::of(&m);
         let (a, b) = (v3(int(8), 0, int(4)), v3(int(8), 0, int(-4)));
         assert_eq!(nav.toward(a, b), Some(b));
+    }
+
+    /// T28: off the Plaza's edge, behind the stands, there is no floor and
+    /// a bot does not head there; the open floor runs to the stands' foot.
+    #[test]
+    fn behind_the_plazas_stands_no_cell_is_open() {
+        let nav = Nav::of(&crate::maps::plaza());
+        let d = ONE * 2025 / 100;
+        assert!(!nav.is_open(v3(d, 0, d)), "28.6 m out on the diagonal");
+        assert!(nav.is_open(v3(0, 0, int(20))), "the foot of a stand");
+        assert!(nav.is_open(v3(int(14), 0, int(14))), "inside the ring");
     }
 }
