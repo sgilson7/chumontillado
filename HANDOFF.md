@@ -97,3 +97,5 @@ After T27 (no way out over the walls; a fall below the map fells): `break_tests.
 T27 live at a260055 (2026-11-06): the live browser check passed in Chromium, Firefox and WebKit. The live online check failed on its first run as after T26, the invite-link guest stuck at "Looking … (0 s)", and passed in full on a rerun in Chromium; three joins by link against the live site took about 2 s each (R20.7, open).
 
 After T28 (the Plaza floats; over its stands is a fall): `break_tests.py T28`: 6 of 6 caught, and the M5 row re-pointed from the corner columns to the shields caught (284 rows).
+
+T28 live at e800d1a (2026-11-06): the live browser check passed in Chromium, Firefox and WebKit, and the live online check in Chromium and Firefox on its first run.
