@@ -42,6 +42,8 @@ use crate::weapons::{self, Alt, Blast, Kind, Target, Weapon};
 pub const HEALTH: i32 = 100;
 /// Ticks a dead player waits before standing again at their spawn.
 pub const RESPAWN: i32 = 120;
+/// T27: how far below a map's lowest point a fall fells you (20 m).
+pub const FALL_OUT: Fx = int(20);
 /// Ticks a felled straw target lies down.
 pub const TARGET_DOWN: i32 = 180;
 /// Ticks the hit mark and the kill mark show, and a body flashes when hit.
@@ -682,10 +684,22 @@ impl World {
             records.push(r);
         }
 
+        // T27: whoever has fallen out of the map, `FALL_OUT` below its
+        // lowest point, is felled by the fall, as by their own shot
+        let floor = self.map.lowest() - FALL_OUT;
+        for k in 0..self.players.len() {
+            let p = &self.players[k];
+            if !p.out && p.alive() && p.body.origin.y < floor {
+                let all = p.health;
+                self.hurt(k, k, all);
+            }
+        }
+
         let mut shots: Vec<(usize, Shot)> = Vec::new();
         let mut moved: Vec<Heard> = Vec::new();
         // online (M4), Backspace does not stand you back at your spawn whole
         let online = self.online;
+        let inside = self.map.inside();
         {
             let mut mover = Mover::new(&self.map);
             for (id, (p, input)) in self.players.iter_mut().zip(&records).enumerate() {
@@ -730,6 +744,7 @@ impl World {
                 } else {
                     mover.t = p.tuning();
                     p.events = mover.tick(&mut p.body, input, from, p.aim.yaw);
+                    keep_inside(&mut p.body, inside);
                 }
                 p.top_speed = p.top_speed.max(p.body.speed());
                 p.since_trick = p.since_trick.saturating_add(1);
@@ -1490,6 +1505,32 @@ fn pull(p: &mut Player, input: &Input) {
         p.body.on_ground = false;
     }
     p.hook = Some(h);
+}
+
+/// T27: a body that has moved past the walls' inner faces, over the top
+/// of them, is set back inside and stops going out; below the walls' tops
+/// the walls already hold it. It is kept 3 cm clear of the faces, so it
+/// cannot stand on a wall's top edge.
+fn keep_inside(b: &mut crate::movement::Body, (lo, hi): (V3, V3)) {
+    let r = crate::movement::HALF_WIDTH + ONE * 3 / 100;
+    let o = &mut b.origin;
+    let v = &mut b.velocity;
+    if o.x < lo.x + r {
+        o.x = lo.x + r;
+        v.x = v.x.max(0);
+    }
+    if o.x > hi.x - r {
+        o.x = hi.x - r;
+        v.x = v.x.min(0);
+    }
+    if o.z < lo.z + r {
+        o.z = lo.z + r;
+        v.z = v.z.max(0);
+    }
+    if o.z > hi.z - r {
+        o.z = hi.z - r;
+        v.z = v.z.min(0);
+    }
 }
 
 /// Where a shot leaves the gun: a little right of and below the eye, ahead.

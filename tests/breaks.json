@@ -1916,5 +1916,40 @@
     "find": "                        .replace(\"{n}\", &(g.skin as usize % crate::skins::COUNT + 1).to_string())",
     "replace": "                        .replace(\"{n}\", &(g.skin as usize % crate::skins::COUNT).to_string())",
     "test": "your_lobby_card_clicks_through_every_skin_both_ways"
+  },
+  {
+    "name": "T27 nobody goes over the walls",
+    "file": "crates/core/src/world.rs",
+    "find": "                    keep_inside(&mut p.body, inside);\n",
+    "replace": "",
+    "test": "a_player_flung_over_a_wall_comes_down_inside_it"
+  },
+  {
+    "name": "T27 kept clear of a wall's top edge",
+    "file": "crates/core/src/world.rs",
+    "find": "    let r = crate::movement::HALF_WIDTH + ONE * 3 / 100;",
+    "replace": "    let r = crate::movement::HALF_WIDTH;",
+    "test": "a_player_flung_over_a_wall_comes_down_inside_it"
+  },
+  {
+    "name": "T27 a body going out stops going out",
+    "file": "crates/core/src/world.rs",
+    "find": "        o.x = lo.x + r;\n        v.x = v.x.max(0);",
+    "replace": "        o.x = lo.x + r;",
+    "test": "a_player_flung_over_a_wall_comes_down_inside_it"
+  },
+  {
+    "name": "T27 a fall below the map fells",
+    "file": "crates/core/src/world.rs",
+    "find": "            if !p.out && p.alive() && p.body.origin.y < floor {",
+    "replace": "            if !p.out && p.alive() && p.body.origin.y < floor - int(5) {",
+    "test": "a_player_fallen_twenty_metres_below_the_map_is_felled_and_one_above_is_not"
+  },
+  {
+    "name": "T27 a fall fells a bot too",
+    "file": "crates/core/src/world.rs",
+    "find": "        for k in 0..self.players.len() {\n            let p = &self.players[k];\n            if !p.out",
+    "replace": "        for k in 0..1 {\n            let p = &self.players[k];\n            if !p.out",
+    "test": "a_player_fallen_twenty_metres_below_the_map_is_felled_and_one_above_is_not"
   }
 ]

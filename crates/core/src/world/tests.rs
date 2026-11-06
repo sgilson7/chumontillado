@@ -1753,3 +1753,94 @@ fn in_a_match_a_bot_hunts_the_nearest_other_seat_standing() {
     assert_eq!(w.view(1, &mut sc).hunt, None);
     assert!(w.view(1, &mut sc).nav.is_none());
 }
+
+/// Sam, T27: "i fell out of the map and there is no killbox". Every map
+/// has its floor at its lowest point; 20 m under it a fall fells you, in
+/// the practice room as in a match.
+#[test]
+fn a_player_fallen_twenty_metres_below_the_map_is_felled_and_one_above_is_not() {
+    // each floor is a metre thick
+    assert_eq!(World::room(Bot::Moves).map.lowest(), -int(1));
+    for m in crate::maps::all() {
+        assert!(m.lowest() >= -int(1), "{}: {}", m.name, m.lowest());
+    }
+    for depth in [19, 21] {
+        let mut w = World::online(0b1, 0, [0, 1, 2, 3]);
+        let low = w.map.lowest() - int(depth);
+        for p in &mut w.players[..2] {
+            p.body = body_at(v3(p.body.origin.x, low, p.body.origin.z));
+        }
+        w.step(&[Input::default()]);
+        let felled = |p: &Player| !p.alive() && p.dead == DOWN_FOR_ROUND && p.health == 0;
+        // a person and a bot alike
+        assert_eq!(felled(&w.players[0]), depth > 20, "{depth} m");
+        assert_eq!(felled(&w.players[1]), depth > 20, "{depth} m, the bot");
+        assert!(w.players[2].alive());
+    }
+    let mut w = World::room(Bot::Moves);
+    w.players[0].body = body_at(v3(0, -int(22), 0));
+    run(&mut w, Input::default(), 1);
+    assert!(!w.players[0].alive());
+    run(&mut w, Input::default(), RESPAWN as usize + 1);
+    assert!(
+        w.players[0].alive() && w.players[0].body.origin.y >= 0,
+        "back at the spawn"
+    );
+}
+
+/// T27: on every map the walls' inner faces stand where `Map::inside`
+/// says, the floor reaching a metre past them.
+#[test]
+fn every_maps_walls_stand_at_the_edge_of_its_inside() {
+    let mut maps = crate::maps::all().to_vec();
+    maps.push(crate::map::practice());
+    for m in &maps {
+        assert_eq!(m.brushes[0].surface, crate::map::Surface::Floor, "{}", m.name);
+        let (lo, hi) = m.inside();
+        let walls: Vec<_> = m
+            .brushes
+            .iter()
+            .filter(|b| b.surface == crate::map::Surface::Wall)
+            .collect();
+        let side = |f: &dyn Fn(&crate::map::Brush) -> bool| walls.iter().any(|b| f(b));
+        assert!(side(&|b| b.maxs.x == lo.x), "{}: west", m.name);
+        assert!(side(&|b| b.mins.x == hi.x), "{}: east", m.name);
+        assert!(side(&|b| b.maxs.z == lo.z), "{}: north", m.name);
+        assert!(side(&|b| b.mins.z == hi.z), "{}: south", m.name);
+    }
+}
+
+/// Sam, T27: "i fell out of the map". Flung over a wall at speed, you
+/// meet nothing in the sky and come down inside.
+#[test]
+fn a_player_flung_over_a_wall_comes_down_inside_it() {
+    for m in 0..crate::maps::COUNT {
+        // alone: no bot to shoot you on the way down
+        let mut w = World::online(0b1, 0b1110, [0, 1, 2, 3]);
+        w.start_round(m);
+        let (lo, hi) = w.map.inside();
+        let high = w.map.brushes.iter().map(|b| b.maxs.y).max().unwrap();
+        let p = &mut w.players[0];
+        p.body = body_at(v3(lo.x + int(2), high + int(3), (lo.z + hi.z) / 2));
+        p.body.velocity = v3(-int(40), int(10), 0);
+        let mut lowest_x = p.body.origin.x;
+        for _ in 0..600 {
+            w.step(&[Input::default()]);
+            lowest_x = lowest_x.min(w.players[0].body.origin.x);
+        }
+        let p = &w.players[0];
+        assert!(lowest_x >= lo.x, "map {m}: out to x {}", lowest_x / ONE);
+        // down inside, not standing on the top of the west wall it went
+        // over (it may land on something inside, as the Acueducto's arches)
+        let tops = w
+            .map
+            .brushes
+            .iter()
+            .filter(|b| b.surface == crate::map::Surface::Wall && b.maxs.x == lo.x)
+            .map(|b| b.maxs.y)
+            .min()
+            .unwrap();
+        let y = p.body.origin.y;
+        assert!(p.alive() && y >= 0 && y < tops, "map {m}: down at y {}", y / ONE);
+    }
+}

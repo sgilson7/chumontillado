@@ -80,6 +80,22 @@ pub struct Map {
     pub bot_loop: Vec<(i32, i32)>,
 }
 
+impl Map {
+    /// T27: the lowest point of any brush: below it there is nothing.
+    pub fn lowest(&self) -> Fx {
+        self.brushes.iter().map(|b| b.mins.y).min().unwrap_or(0)
+    }
+
+    /// T27: inside the walls, across and along: every map's floor (its
+    /// first brush) reaches a metre past the walls' inner faces each way.
+    /// Nobody goes past it at any height, over the walls into the sky
+    /// included; shots do.
+    pub fn inside(&self) -> (V3, V3) {
+        let f = &self.brushes[0];
+        (f.mins.add(v3(ONE, 0, ONE)), f.maxs.sub(v3(ONE, 0, ONE)))
+    }
+}
+
 fn plane(n: V3, through: V3) -> Plane {
     Plane { n, d: n.dot(through) }
 }
