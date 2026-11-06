@@ -89,3 +89,5 @@ After T22 (bots eased): `./scripts/check.sh` passed; `break_tests.py EASE`: 5 of
 After T24 and T25 (the next match in the same room; the lobby of seat cards): `./scripts/check.sh` passed, now with `break_tests.py --rotted` at step 4; `tests/browser/online.py chromium firefox` passed locally, reading the cards; `break_tests.py T24 T25`: 10 of 10 caught, and the 12 rows repaired (R20.3) all caught (272 rows).
 
 After T26 (your card picks from the six): `break_tests.py T26`: 2 of 2 caught (274 rows).
+
+T26 live at 14d56a6 (2026-11-06): the live browser check passed in Chromium, Firefox and WebKit. The live online check's first run failed once: the guest joining by invite link did not take its seat in time in one engine; which engine, and what that guest was told, were not kept. The second run passed in full in both engines. Nothing in T26 touches joining; if a guest failing to seat recurs, it is worth chasing (R8.11).
