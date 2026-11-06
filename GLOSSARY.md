@@ -170,7 +170,7 @@ Not: sniper, marksman rifle
 
 ### Lobby
 
-Where the players of an online match wait for the host to start it.
+Where the players of an online match wait for the host to start it, each seat a card with its figure in it. After a match, everyone still in the room comes back to it for the next.
 
 Not: waiting room
 

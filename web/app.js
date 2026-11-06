@@ -206,11 +206,45 @@ async function main() {
     }
   }
 
+  // T25: a seat in the online lobby: a tall card round the figure the
+  // core stands in it, placed where the core says the figure is
+  function card(c) {
+    const node = make("div", undefined, "card");
+    node.id = c.id;
+    node.dataset.kind = c.kind;
+    const [x, head, feet] = c.at;
+    node.style.setProperty("--x", `${x / 100}%`);
+    node.style.setProperty("--head", `${head / 100}%`);
+    node.style.setProperty("--feet", `${feet / 100}%`);
+    const top = make("div", undefined, "card-top");
+    top.append(make("span", c.heading, "seat"), make("span", c.who, "who"));
+    const plate = make("div", undefined, "plate");
+    if (c.skin) plate.append(make("p", c.skin, "skin"));
+    if (c.note) plate.append(make("p", c.note, "note"));
+    if (c.action) plate.append(button(c.action));
+    node.append(top, plate);
+    return node;
+  }
+
   function panel(p) {
     const box = make("section", undefined, "panel");
     box.id = p.id;
-    if (p.heading) box.append(make("h1", p.heading));
-    if (p.text) box.append(make("p", p.text));
+    // T25: a lobby with seat cards: the room across the top, the cards,
+    // and the match's buttons along the foot
+    const lobby = p.cards && p.cards.length > 0;
+    const intro = lobby ? make("div", undefined, "intro") : box;
+    const room = lobby ? make("div", undefined, "room") : box;
+    const bar = lobby ? make("div", undefined, "bar") : box;
+    if (lobby) {
+      box.classList.add("lobby");
+      const head = make("div", undefined, "head");
+      head.append(intro, room);
+      const cards = make("div", undefined, "cards");
+      cards.append(...p.cards.map(card));
+      box.append(head, cards, bar);
+    }
+    if (p.heading) intro.append(make("h1", p.heading));
+    if (p.text) intro.append(make("p", p.text));
     (p.settings || []).forEach((s) => {
       const row = make("div", undefined, "setting");
       row.id = `setting-${s.id}`;
@@ -218,18 +252,18 @@ async function main() {
       row.append(make("span", s.label, "label"), value, ...s.actions.map(button));
       box.append(row);
     });
-    (p.fields || []).forEach((f) => box.append(field(f)));
+    (p.fields || []).forEach((f) => room.append(field(f)));
     // small buttons that follow one another sit together, two to a row
     let pair = null;
     for (const a of p.actions || []) {
       if (!a.small) {
         pair = null;
-        box.append(button(a));
+        bar.append(button(a));
         continue;
       }
       if (!pair) {
         pair = make("div", undefined, "pair");
-        box.append(pair);
+        room.append(pair);
       }
       pair.append(button(a));
     }

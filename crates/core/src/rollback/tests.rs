@@ -335,6 +335,7 @@ fn a_record_that_comes_twice_is_kept_once_and_two_different_ones_are_garbled() {
         seat: 0,
         tick,
         input: script(0, tick),
+        g: 0,
     };
     let text = crate::online::encode(&rec);
     s.message(id(0), &text);
@@ -347,6 +348,7 @@ fn a_record_that_comes_twice_is_kept_once_and_two_different_ones_are_garbled() {
             keys: JUMP,
             ..Input::default()
         },
+        g: 0,
     };
     s.message(id(0), &crate::online::encode(&other));
     assert_eq!(s.links.status, GARBLED);

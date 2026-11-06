@@ -108,6 +108,8 @@ pub struct Versus {
     /// browser that has reached it but not said hello first did
     pub opened_us: Option<i64>,
     pub knocking: std::collections::BTreeMap<Peer, i64>,
+    /// T24: the last match in this room: who won it and each seat's rounds
+    pub last: Option<(Option<usize>, [i32; online::SEATS])>,
 }
 
 /// R10.12: what to tell the player about the links, beyond the status.
@@ -133,6 +135,9 @@ pub const KNOCKING_US: i64 = 10_000_000;
 pub const WAITING_TICKS: u32 = 30;
 /// A drop is told for four seconds.
 pub const DROPPED_TICKS: u32 = 240;
+/// T24: a match won is shown for five seconds before the host calls
+/// everyone back to the lobby.
+pub const AGAIN_TICKS: i32 = 300;
 
 impl Versus {
     pub fn new(host: bool, code: &str, build: &str, skin: u8) -> Versus {
@@ -149,6 +154,7 @@ impl Versus {
             heard_us: None,
             opened_us: None,
             knocking: std::collections::BTreeMap::new(),
+            last: None,
         }
     }
 
@@ -297,7 +303,9 @@ impl Versus {
                 _ => None,
             },
             Stage::Match(s) => {
-                s.message(peer, text);
+                if s.message(peer, text) {
+                    self.back();
+                }
                 None
             }
         };
@@ -322,6 +330,36 @@ impl Versus {
         let (seats, empty, skins) = n.start();
         self.begin(seats, empty, skins);
         true
+    }
+
+    /// T24: the host, once a match won has been shown `AGAIN_TICKS`,
+    /// calls everyone back to the lobby. Whether it did.
+    pub fn again(&mut self) -> bool {
+        let ended = self.ended();
+        let Stage::Match(s) = &mut self.stage else {
+            return false;
+        };
+        let done = s
+            .world
+            .rounds
+            .is_some_and(|r| r.phase == crate::rounds::Phase::Done && r.ticks >= AGAIN_TICKS);
+        if !self.host || !done || ended {
+            return false;
+        }
+        s.links.again();
+        self.back();
+        true
+    }
+
+    /// T24: from the match back to the lobby, on the links it had; the
+    /// links have been told already (`Net::again`, or the host's word).
+    fn back(&mut self) {
+        let Stage::Match(s) = &mut self.stage else {
+            return;
+        };
+        let links = std::mem::replace(&mut s.links, Net::new(self.host, ""));
+        self.last = s.world.rounds.map(|r| (r.winner, r.scores));
+        self.stage = Stage::Lobby(links);
     }
 
     /// From the lobby to the match, on the world every browser builds alike.

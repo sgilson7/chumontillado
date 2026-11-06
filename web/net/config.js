@@ -20,7 +20,7 @@ export const CONFIG = {
 
   // The core's PROTOCOL. The room name is the app id, this tag and the
   // typed code (crates/core/src/online.rs, room_name), never the build hash.
-  protocol: 1,
+  protocol: 2,
 
   // The vendored Trystero bundle, pinned in vendor/SHA256SUMS and checked
   // by scripts/build.sh. Imported only when a player uses a room code.

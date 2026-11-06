@@ -153,18 +153,22 @@ impl<W: Sim> Rollback<W> {
         self.links.take_outbox()
     }
 
-    /// Text from a browser.
-    pub fn message(&mut self, from: Peer, text: &str) {
+    /// Text from a browser. Whether it was the host's call back to the
+    /// lobby (T24).
+    pub fn message(&mut self, from: Peer, text: &str) -> bool {
         match self.links.message(from, text) {
             Some(Event::Input { seat, tick, input }) => {
                 if self.take(seat, tick, input) {
-                    self.links.pass_on(&Msg::Input { seat, tick, input }, from);
+                    let g = self.links.game;
+                    self.links.pass_on(&Msg::Input { seat, tick, input, g }, from);
                 }
             }
             Some(Event::Drop { seat, from: at }) => self.drop_seat(seat, at),
             Some(Event::Gone { seat }) => self.gone(seat),
+            Some(Event::Again) => return true,
             _ => {}
         }
+        false
     }
 
     /// The transport says a browser left.
@@ -240,7 +244,8 @@ impl<W: Sim> Rollback<W> {
         }
         self.inputs[self.seat].insert(tick, input);
         let seat = self.seat;
-        self.links.broadcast(&Msg::Input { seat, tick, input }, None);
+        let g = self.links.game;
+        self.links.broadcast(&Msg::Input { seat, tick, input, g }, None);
     }
 
     /// A seat's record for tick `t`: the true one if it has come, else the

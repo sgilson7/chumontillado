@@ -12,8 +12,9 @@
 use serde::Serialize;
 
 use crate::game::{Game, Screen};
+use crate::geom::v3;
 use crate::prim::{self, MeshId};
-use crate::{input, look, render, world};
+use crate::{fx, input, look, render, world};
 
 pub fn ok<T: Serialize>(value: &T) -> String {
     serde_json::json!({ "ok": value }).to_string()
@@ -42,6 +43,31 @@ pub struct Action {
     /// M4: a small button beside others (the copy buttons, the seat switches)
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub small: bool,
+}
+
+/// T25: a seat in the online lobby, drawn as a tall card round the figure
+/// standing in it (`Game::lineup`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Card {
+    pub id: String,
+    /// the seat, as Seat 2
+    pub heading: String,
+    /// who holds it: you, a player, a bot, or nobody
+    pub who: String,
+    /// `you`, `player`, `bot` or `empty`, for the page's styling
+    pub kind: String,
+    /// the skin worn, where a figure stands
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub skin: String,
+    /// T24: the last match: the seat that won it, or its rounds
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub note: String,
+    /// where the figure stands on the screen: across, and the heights of
+    /// its head and its feet down, hundredths of a percent
+    pub at: [i32; 3],
+    /// the card's button: your skin, or the host's switch for a free seat
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub action: Option<Action>,
 }
 
 /// M4: a box of text: a code or link to copy (`fixed`), or a box to type
@@ -100,6 +126,9 @@ pub struct Panel {
     pub rows_heading: String,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub rows: Vec<Row>,
+    /// T25: the online lobby's seats
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub cards: Vec<Card>,
 }
 
 /// A line over the play view: its id, its text, and whether it shows.
@@ -253,8 +282,13 @@ fn online_panel(g: &Game) -> Panel {
         (false, None, Some(Notice::StillLooking { secs })) => fill("online.still_looking", secs),
         (false, None, Some(Notice::Looking { secs })) => fill("joining_text", secs),
         (false, None, _) => fill("joining_text", 0),
+        (false, Some(_), _) if v.last.is_some() => s.get("online.again"),
         (false, Some(_), _) => s.get("online.lobby"),
     };
+    // T24: back after a match
+    if v.host && v.last.is_some() && !matches!(notice, Some(Notice::Knocking)) {
+        p.text = s.get("host_again");
+    }
     p.fields = vec![field(g, "room-code", "room_code", &v.code, true)];
     // a copy button says Copied once its text is on the clipboard
     let copy = |id: &str, label: &str| Action {
@@ -274,57 +308,85 @@ fn online_panel(g: &Game) -> Panel {
         p.actions.push(action(g, "online.retry", "", "retry", false));
     }
     if v.host {
-        // the host's seats, two to a row: its own and each guest's say who
-        // holds them; each free one is a switch, a bot or empty (T10)
-        for k in 0..crate::online::SEATS {
-            let n = (k + 1).to_string();
-            let held = k == 0 || crate::online::holds(v.seats(), k);
-            let label = if k == 0 {
-                "seat_you_n"
-            } else if held {
-                "seat_player_n"
-            } else if crate::online::holds(v.empty(), k) {
-                "seat_bot_off"
+        p.actions.push(action(
+            g,
+            "online.start",
+            "",
+            if v.last.is_some() {
+                "start_again"
             } else {
-                "seat_bot_on"
-            };
-            p.actions.push(Action {
-                label: s.get(label).replace("{n}", &n),
-                small: true,
-                enabled: !held,
-                ..action(g, "online.bot", &k.to_string(), "", false)
-            });
-        }
-    }
-    // M5: your skin, here as in the settings
-    p.actions.push(Action {
-        label: s.get("lobby_skin").replace("{name}", &skin_name(g, g.skin)),
-        small: true,
-        ..action(g, "skin.step", "1", "", false)
-    });
-    if v.host {
-        p.actions.push(action(g, "online.start", "", "start_match", true));
+                "start_match"
+            },
+            true,
+        ));
     }
     p.actions.push(leave);
-    // a guest's seats, once it knows them (the host's are its switches)
-    if !v.host && v.seat().is_some() {
-        p.rows_heading = s.get("seats");
-        p.rows = (0..crate::online::SEATS)
-            .map(|k| Row {
-                key: s.get("seat_n").replace("{n}", &(k + 1).to_string()),
-                does: s.get(if Some(k) == v.seat() {
-                    "seat_you"
-                } else if crate::online::holds(v.seats(), k) {
-                    "seat_player"
-                } else if crate::online::holds(v.empty(), k) {
-                    "seat_empty"
-                } else {
-                    "seat_bot"
-                }),
-            })
-            .collect();
-    }
+    p.cards = cards(g, v);
     p
+}
+
+/// T25: the lobby's four seats, each a card round its figure: who holds
+/// it, the skin worn, and after a match (T24) how it went. Your card
+/// changes your skin; the host's cards for free seats switch their bots.
+fn cards(g: &Game, v: &crate::versus::Versus) -> Vec<Card> {
+    let s = &g.strings;
+    let Some((cam, feet)) = g.lineup() else {
+        return Vec::new();
+    };
+    let m = cam.matrix(crate::render::Layer::Far, g.aspect);
+    let screen = |p: crate::geom::V3| {
+        let c = m.project(p.sub(cam.eye));
+        let w = c[3].max(1) as i64;
+        (
+            5_000 + (c[0] as i64 * 5_000 / w) as i32,
+            5_000 - (c[1] as i64 * 5_000 / w) as i32,
+        )
+    };
+    let n = v.links();
+    let bots = n.starting_skins();
+    (0..crate::online::SEATS)
+        .map(|k| {
+            let held = crate::online::holds(n.seats, k);
+            let empty = !held && crate::online::holds(n.empty, k);
+            let kind = if v.seat() == Some(k) {
+                "you"
+            } else if held {
+                "player"
+            } else if empty {
+                "empty"
+            } else {
+                "bot"
+            };
+            let skin = match kind {
+                "you" => g.skin,
+                "player" => n.skins[k],
+                _ => bots[k],
+            };
+            let (x, feet_y) = screen(feet[k]);
+            let (_, head_y) = screen(feet[k].add(v3(0, fx::ONE * 19 / 10, 0)));
+            let note = match v.last {
+                Some((Some(w), _)) if w == k => s.get("card_winner"),
+                Some((_, scores)) => s.get("card_rounds").replace("{n}", &scores[k].to_string()),
+                None => String::new(),
+            };
+            let button = match kind {
+                "you" => Some(action(g, "skin.step", "1", "card_skin", false)),
+                "bot" if v.host => Some(action(g, "online.bot", &k.to_string(), "card_bot_off", false)),
+                "empty" if v.host => Some(action(g, "online.bot", &k.to_string(), "card_bot_on", false)),
+                _ => None,
+            };
+            Card {
+                id: format!("seat-{k}"),
+                heading: s.get("seat_n").replace("{n}", &(k + 1).to_string()),
+                who: s.get(&format!("seat_{kind}")),
+                kind: kind.into(),
+                skin: if empty { String::new() } else { skin_name(g, skin) },
+                note,
+                at: [x, head_y, feet_y],
+                action: button.map(|a| Action { small: true, ..a }),
+            }
+        })
+        .collect()
 }
 
 fn panel(id: &str) -> Panel {
@@ -337,6 +399,7 @@ fn panel(id: &str) -> Panel {
         rows_heading: String::new(),
         rows: Vec::new(),
         fields: Vec::new(),
+        cards: Vec::new(),
     }
 }
 

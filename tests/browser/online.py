@@ -99,10 +99,6 @@ def sums(page):
     return out
 
 
-def seat_rows(page):
-    return [r.inner_text().replace("\t", " ").strip() for r in page.query_selector_all("#online table.controls tr")]
-
-
 def run(p, engine, origin):
     print(f"\n[{engine}] online: a host and two guests by room code, a bot in the fourth seat")
     browser = getattr(p, engine).launch(**LAUNCH.get(engine, {}))
@@ -127,9 +123,10 @@ def run(p, engine, origin):
     typed.click('button[data-action="online.room"]')
 
     you = STRINGS["seat_you"]
-    held = STRINGS["seat_player_n"].replace("{n}", "3")
+    # T25: the lobby's seats are cards, each saying who holds it
+    held = STRINGS["seat_player"]
     try:
-        host.locator('button[data-action="online.bot"]', has_text=held).wait_for(state="attached", timeout=TIMEOUT_MS * 2)
+        host.locator("#seat-2 .who", has_text=held).wait_for(state="attached", timeout=TIMEOUT_MS * 2)
         ok = True
     except Exception:
         ok = False
@@ -138,12 +135,12 @@ def run(p, engine, origin):
         # what each guest was told, for the failure's record
         for who, page in (("linked", linked), ("typed", typed)):
             print(f"    {who} says: {page.inner_text('#online p') if page.query_selector('#online p') else '(no panel)'}")
-    seats = [b.inner_text() for b in host.query_selector_all('button[data-action="online.bot"]')]
-    want = [STRINGS["seat_you_n"].replace("{n}", "1"), STRINGS["seat_player_n"].replace("{n}", "2"), held, STRINGS["seat_bot_on"].replace("{n}", "4")]
+    seats = [host.inner_text(f"#seat-{k} .who") for k in range(4)]
+    want = [you, held, held, STRINGS["seat_bot"]]
     check([x.lower() for x in seats] == [x.lower() for x in want], f"the host holds seat 1, the guests 2 and 3, and seat 4 is a bot's ({seats})")
     for who, page in (("linked", linked), ("typed", typed)):
         try:
-            page.locator("#online table.controls tr", has_text=you).wait_for(state="attached", timeout=TIMEOUT_MS)
+            page.locator(".card[data-kind='you'] .who", has_text=you).wait_for(state="attached", timeout=TIMEOUT_MS)
             ok = True
         except Exception:
             ok = False

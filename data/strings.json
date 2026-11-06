@@ -76,7 +76,7 @@
   "hud_dead": "Down. Back in a moment.",
   "host_match": "Host a match",
   "join_match": "Join a match",
-  "host_text": "Send friends the invite link, or read them the code. Switch a bot on or off for each free seat, then start.",
+  "host_text": "Send friends the invite link, or read them the code. Each free seat's card puts a bot in it or leaves it empty. Then start.",
   "join_text": "Type the room code the host gave you, or paste the whole invite link.",
   "joining_text": "Looking for room {code}. This usually takes a few seconds. ({n} s)",
   "room_code": "Room code",
@@ -171,5 +171,13 @@
   "skill_normal": "Normal",
   "skill_hard": "Hard",
   "easier": "Easier",
-  "harder": "Harder"
+  "harder": "Harder",
+  "start_again": "Start the next match",
+  "host_again": "That match is over, and everyone who stayed is still here. Anyone new can join with the code. Switch the bots, then start the next.",
+  "online.again": "That match is over, and you are still in the room. The next begins when the host starts it.",
+  "card_skin": "Next skin",
+  "card_bot_off": "Leave it empty",
+  "card_bot_on": "Put a bot here",
+  "card_winner": "Won the last match",
+  "card_rounds": "Rounds won: {n}"
 }

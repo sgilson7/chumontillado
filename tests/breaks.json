@@ -289,8 +289,8 @@
   {
     "name": "R5.3 the bot's pitch is signed",
     "file": "crates/core/src/pilot.rs",
-    "find": "                fx::wrap(fx::atan2(to.y, to.len_xz())),",
-    "replace": "                fx::atan2(to.y, to.len_xz()),",
+    "find": "                fx::wrap(fx::atan2(to.y, to.len_xz())) + bob,",
+    "replace": "                fx::atan2(to.y, to.len_xz()) + bob,",
     "test": "a_player_below_makes_it_look_down_and_one_above_up"
   },
   {
@@ -394,8 +394,8 @@
   {
     "name": "M2 the bot waits its reaction",
     "file": "crates/core/src/pilot.rs",
-    "find": "    let fire = aimed && p.seen >= REACTION && v.tick.is_multiple_of(2);",
-    "replace": "    let fire = aimed && v.tick.is_multiple_of(2);",
+    "find": "    let fire = aimed && p.seen >= t.reaction && burst && v.tick.is_multiple_of(2);",
+    "replace": "    let fire = aimed && burst && v.tick.is_multiple_of(2);",
     "test": "it_waits_its_reaction_then_fires_only_with_its_aim_close"
   },
   {
@@ -408,7 +408,7 @@
   {
     "name": "M2 the bot shoots in a duel",
     "file": "crates/core/src/pilot.rs",
-    "find": "    let fire = aimed && p.seen >= REACTION && v.tick.is_multiple_of(2);",
+    "find": "    let fire = aimed && p.seen >= t.reaction && burst && v.tick.is_multiple_of(2);",
     "replace": "    let fire = false;",
     "test": "in_a_duel_the_bot_shoots_the_player_and_in_the_practice_room_it_never_does"
   },
@@ -450,8 +450,8 @@
   {
     "name": "T5 the drawn bot stays inside the envelope",
     "file": "crates/core/src/skins.rs",
-    "find": "            p(Facet, [0, 128, 0], [80, 70, 56], \"black\"),",
-    "replace": "            p(Facet, [0, 128, 0], [120, 70, 56], \"black\"),",
+    "find": "            p(Bell, [0, 98, 0], [76, 24, 56], \"black\"),",
+    "replace": "            p(Bell, [0, 98, 0], [120, 24, 56], \"black\"),",
     "test": "every_skin_and_the_straw_target_stay_inside_the_hit_envelope"
   },
   {
@@ -464,8 +464,8 @@
   {
     "name": "R6.2 the bot's body is drawn as wide as meant",
     "file": "crates/core/src/skins.rs",
-    "find": "            p(Facet, [0, 128, 0], [80, 70, 56], \"black\"),",
-    "replace": "            p(Capsule, [0, 128, 0], [80, 70, 56], \"black\"),",
+    "find": "            p(Bell, [0, 98, 0], [76, 24, 56], \"black\"),",
+    "replace": "            p(Capsule, [0, 98, 0], [76, 24, 56], \"black\"),",
     "test": "every_part_is_drawn_as_wide_as_it_says"
   },
   {
@@ -485,8 +485,8 @@
   {
     "name": "M3 a swing's reach",
     "file": "crates/core/src/weapons.rs",
-    "find": "    if d - BODY_R > s.reach {",
-    "replace": "    if d - BODY_R > s.reach + int(9) {",
+    "find": "    let d = p.dist(eye);\n    if d - BODY_R > s.reach {",
+    "replace": "    let d = p.dist(eye);\n    if d - BODY_R > s.reach + int(9) {",
     "test": "a_katana_swing_reaches_a_body_whose_edge_is_within_its_reach_and_in_its_arc"
   },
   {
@@ -618,8 +618,8 @@
   {
     "name": "M3 a swing hits each body once",
     "file": "crates/core/src/world.rs",
-    "find": "                    if s.struck & (1 << k) != 0 || !weapons::in_arc(&sw, eye, aim, t) {",
-    "replace": "                    if !weapons::in_arc(&sw, eye, aim, t) {",
+    "find": "                    if s.struck & (1 << k) != 0 || !meets {",
+    "replace": "                    if !meets {",
     "test": "a_katana_swing_hits_a_straw_target_within_reach_once_and_misses_one_beyond"
   },
   {
@@ -800,8 +800,8 @@
   {
     "name": "M4 the host passes records on",
     "file": "crates/core/src/rollback.rs",
-    "find": "                    self.links.pass_on(&Msg::Input { seat, tick, input }, from);",
-    "replace": "                    let _ = from;",
+    "find": "                    self.links.pass_on(&Msg::Input { seat, tick, input, g }, from);",
+    "replace": "                    let _ = (from, g);",
     "test": "two_guests_that_cannot_link_hear_each_other_through_the_host"
   },
   {
@@ -898,7 +898,7 @@
   {
     "name": "M4 the lobby shows empty seats as bots'",
     "file": "crates/core/src/api.rs",
-    "find": "            let held = k == 0 || crate::online::holds(v.seats(), k);",
+    "find": "            let held = crate::online::holds(n.seats, k);",
     "replace": "            let held = k < 9;",
     "test": "hosting_shows_the_room_code_and_an_invite_link_and_tells_the_transport_to_open_the_room"
   },
@@ -954,8 +954,8 @@
   {
     "name": "M4 the lobby's seat switch says what it does",
     "file": "crates/core/src/api.rs",
-    "find": "            } else if crate::online::holds(v.empty(), k) {\n                \"seat_bot_off\"\n            } else {\n                \"seat_bot_on\"\n            };",
-    "replace": "            } else if crate::online::holds(v.empty(), k) {\n                \"seat_bot_on\"\n            } else {\n                \"seat_bot_on\"\n            };",
+    "find": "                \"empty\" if v.host => Some(action(g, \"online.bot\", &k.to_string(), \"card_bot_on\", false)),",
+    "replace": "                \"empty\" if v.host => Some(action(g, \"online.bot\", &k.to_string(), \"card_bot_off\", false)),",
     "test": "the_hosts_lobby_has_a_switch_for_each_free_seat_and_it_flips_the_seat_to_empty"
   },
   {
@@ -1584,8 +1584,8 @@
   {
     "name": "T19 a hunting bot keeps its distance",
     "file": "crates/core/src/pilot.rs",
-    "find": "if let (Some(c), Some(_), None) = (target, v.hunt, v.reach) {",
-    "replace": "if let (Some(c), Some(_), None, true) = (target, v.hunt, v.reach, false) {",
+    "find": "    if let (Some(c), Some(_), None, None) = (target, v.hunt, v.reach, cover) {",
+    "replace": "    if let (Some(c), Some(_), None, None, true) = (target, v.hunt, v.reach, cover, false) {",
     "test": "on_every_map_a_round_with_bots_is_decided_inside_a_minute"
   },
   {
@@ -1598,9 +1598,9 @@
   {
     "name": "T19 a bot with a blade runs in",
     "file": "crates/core/src/pilot.rs",
-    "find": "if let (Some(c), Some(_), None) = (target, v.hunt, v.reach) {",
-    "replace": "if let (Some(c), Some(_)) = (target, v.hunt) {",
-    "test": "a_lone_bot_finds_and_fells_a_person_standing_still_on_every_map"
+    "find": "    if let (Some(c), Some(_), None, None) = (target, v.hunt, v.reach, cover) {",
+    "replace": "    if let (Some(c), Some(_), None) = (target, v.hunt, cover) {",
+    "test": "close_in_a_bot_with_a_blade_runs_at_its_quarry_and_one_with_a_gun_backs_off"
   },
   {
     "name": "T21 the smooth shapes wind outward and fill their box",
@@ -1694,10 +1694,10 @@
     "test": "each_weapon_suits_its_distance"
   },
   {
-    "name": "T20 a harder bot reacts sooner",
+    "name": "T20 a harder bot fells a person sooner",
     "file": "crates/core/src/pilot.rs",
-    "find": "                reaction: 12,",
-    "replace": "                reaction: 90,",
+    "find": "                burst: 40,",
+    "replace": "                burst: 8,",
     "test": "a_harder_bot_fells_a_person_sooner"
   },
   {
@@ -1832,5 +1832,75 @@
     "find": "let oldest = (s.age - TRAIL + 1).max(sw.from);",
     "replace": "let oldest = (s.age - TRAIL + 1).max(0);",
     "test": "a_cut_leaves_a_trail_through_its_strike_and_none_before_or_after"
+  },
+  {
+    "name": "T24 the call back names the next match",
+    "file": "crates/core/src/online.rs",
+    "find": "        self.back(self.game + 1);",
+    "replace": "        self.back(self.game);",
+    "test": "the_host_calls_everyone_back_to_the_lobby_and_a_late_record_of_the_match_before_is_let_go"
+  },
+  {
+    "name": "T24 a late record of the match before is let go",
+    "file": "crates/core/src/online.rs",
+    "find": "            Msg::Input { g, .. } | Msg::Sum { g, .. } if g != self.game => None,",
+    "replace": "            Msg::Input { g, .. } | Msg::Sum { g, .. } if false && g != self.game => None,",
+    "test": "the_host_calls_everyone_back_to_the_lobby_and_a_late_record_of_the_match_before_is_let_go"
+  },
+  {
+    "name": "T24 the host's seats after a match are those still here",
+    "file": "crates/core/src/online.rs",
+    "find": "        self.seats = 1 | self\n",
+    "replace": "        self.seats = 0b1111 | self\n",
+    "test": "the_host_calls_everyone_back_to_the_lobby_and_a_late_record_of_the_match_before_is_let_go"
+  },
+  {
+    "name": "T24 a match won is shown a while first",
+    "file": "crates/core/src/versus.rs",
+    "find": "r.phase == crate::rounds::Phase::Done && r.ticks >= AGAIN_TICKS",
+    "replace": "r.phase == crate::rounds::Phase::Done && r.ticks >= 0",
+    "test": "a_match_won_brings_the_room_back_to_its_lobby_still_linked_and_the_next_one_plays"
+  },
+  {
+    "name": "T24 only the host calls the room back",
+    "file": "crates/core/src/versus.rs",
+    "find": "        if !self.host || !done || ended {",
+    "replace": "        if !done || ended {",
+    "test": "a_match_won_brings_the_room_back_to_its_lobby_still_linked_and_the_next_one_plays"
+  },
+  {
+    "name": "T24 a guest goes back on the host's word",
+    "file": "crates/core/src/versus.rs",
+    "find": "                if s.message(peer, text) {",
+    "replace": "                if s.message(peer, text) && false {",
+    "test": "a_match_won_brings_the_room_back_to_its_lobby_still_linked_and_the_next_one_plays"
+  },
+  {
+    "name": "T24 a record carries its match's number",
+    "file": "crates/core/src/rollback.rs",
+    "find": "        let g = self.links.game;\n        self.links.broadcast(&Msg::Input",
+    "replace": "        let g = 0;\n        self.links.broadcast(&Msg::Input",
+    "test": "a_match_won_brings_the_room_back_to_its_lobby_still_linked_and_the_next_one_plays"
+  },
+  {
+    "name": "T24 the last match's winner is named on its card",
+    "file": "crates/core/src/api.rs",
+    "find": "                Some((Some(w), _)) if w == k => s.get(\"card_winner\"),",
+    "replace": "                Some((Some(w), _)) if w == k + 1 => s.get(\"card_winner\"),",
+    "test": "a_match_won_brings_the_room_back_to_its_lobby_still_linked_and_the_next_one_plays"
+  },
+  {
+    "name": "T25 the seats stand a fifth of the screen apart",
+    "file": "crates/core/src/game.rs",
+    "find": "apart(depth) * (2 * k as i32 - 3) / 2",
+    "replace": "apart(depth) * (2 * k as i32 - 3) / 3",
+    "test": "hosting_shows_the_room_code_and_an_invite_link_and_tells_the_transport_to_open_the_room"
+  },
+  {
+    "name": "T25 a bot's card wears the skin the bot will",
+    "file": "crates/core/src/api.rs",
+    "find": "                _ => bots[k],",
+    "replace": "                _ => g.skin,",
+    "test": "hosting_shows_the_room_code_and_an_invite_link_and_tells_the_transport_to_open_the_room"
   }
 ]

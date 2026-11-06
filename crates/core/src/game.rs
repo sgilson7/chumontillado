@@ -296,10 +296,22 @@ impl Game {
             }
         }
         self.alpha = self.clock.alpha();
+        // T24: a match won, shown a while, brings the room back to the lobby
+        let again = v.again();
         if v.ended() {
             self.show(Screen::Online);
         }
+        if again {
+            self.back_to_lobby();
+        }
         self.follow_hud();
+    }
+
+    /// T24: back in the room's lobby after a match, still linked.
+    fn back_to_lobby(&mut self) {
+        self.lobby_world();
+        self.show(Screen::Online);
+        self.ui_version += 1;
     }
 
     /// M6: the last tick's sounds in the room or match against bots, as the
@@ -362,6 +374,9 @@ impl Game {
     }
 
     pub fn camera(&self) -> render::Camera {
+        if let Some((cam, _)) = self.lineup() {
+            return cam;
+        }
         if self.previewing() {
             // in the practice room by its spawn, looking north at the
             // figure, which stands off to the left of the panel
@@ -398,6 +413,84 @@ impl Game {
             self.aspect,
             self.shake,
         )
+    }
+
+    /// T25: the online lobby's seats stand in a row in the practice room,
+    /// each where the page draws its card: the camera, and each seat's
+    /// feet. The cards' centres are a fifth of the screen apart, at 20, 40,
+    /// 60 and 80% across, and the seats at least 1.2 m apart, so the camera
+    /// stands back on a narrow screen.
+    pub fn lineup(&self) -> Option<(render::Camera, [crate::geom::V3; 4])> {
+        let v = self.versus.as_ref()?;
+        if self.screen != Screen::Online || v.ended() || v.session().is_some() || v.seat().is_none() {
+            return None;
+        }
+        let half = fx::deg(self.fov) / 2;
+        let wide = fx::div(fx::sin(half), fx::cos(half));
+        let apart = |depth: Fx| fx::mul(fx::mul(depth, wide), fx::ONE * 4 / 10);
+        let depth = (fx::ONE * 33 / 10).max(fx::div(fx::ONE * 12 / 10, apart(fx::ONE)));
+        let eye = v3(fx::int(8), fx::ONE, fx::int(13));
+        // tipped down a little, so each figure stands clear above its
+        // card's plate
+        let aim = Aim {
+            yaw: 0,
+            pitch: -fx::deg(5),
+            rest: (0, 0),
+            pct: 100,
+        };
+        let cam = camera::eye_view(eye, aim, camera::vertical_fov(self.fov, self.aspect));
+        let feet =
+            std::array::from_fn(|k| v3(eye.x + apart(depth) * (2 * k as i32 - 3) / 2, 0, eye.z - depth));
+        Some((cam, feet))
+    }
+
+    /// T25: the lobby's figures: each seat a person holds in its skin, and
+    /// each free seat with its bot on in the skin the bot will wear.
+    fn draw_lineup(&self, out: &mut Shapes) {
+        let (Some((_, feet)), Some(v)) = (self.lineup(), self.versus.as_ref()) else {
+            return;
+        };
+        let n = v.links();
+        let bots = n.starting_skins();
+        for (k, at) in feet.iter().enumerate() {
+            let held = crate::online::holds(n.seats, k);
+            if !held && crate::online::holds(n.empty, k) {
+                continue;
+            }
+            let skin = if v.seat() == Some(k) {
+                self.skin
+            } else if held {
+                n.skins[k]
+            } else {
+                bots[k]
+            };
+            // each turns a little to and fro, out of step with the others
+            let phase = (self.title_ticks as i64 * fx::deg(1) as i64 / 2 % fx::TURN as i64) as i32;
+            let sway = fx::mul(
+                fx::sin(phase.wrapping_add(k as i32 * fx::QUARTER_TURN)),
+                fx::deg(20),
+            );
+            let figure = crate::skins::Figure {
+                skin: crate::skins::SKINS[skin as usize % crate::skins::COUNT],
+                feet: *at,
+                yaw: fx::wrap(fx::HALF_TURN.wrapping_add(sway)),
+                pitch: 0,
+                ducked: false,
+                flashed: false,
+                speed: 0,
+                on_ground: true,
+                moment: 0,
+                arms: None,
+            };
+            crate::skins::draw(out, &figure, &self.look);
+        }
+    }
+
+    /// T25: the world the online lobby stands in: the practice room, empty.
+    fn lobby_world(&mut self) {
+        self.world = World::room(Bot::Moves);
+        self.world.players.truncate(1);
+        self.world.dummies.clear();
     }
 
     /// The seat whose eyes the view is from: yours, or in a match while you
@@ -463,6 +556,7 @@ impl Game {
             };
             crate::skins::draw(&mut moving, &figure, &self.look);
         }
+        self.draw_lineup(&mut moving);
         crate::render::keep_visible(&mut moving.list, cam.eye);
         self.frame = Frame::build(&self.scene, &moving, &cam, self.aspect);
     }
@@ -517,6 +611,7 @@ impl Game {
         v.set_skill(self.skill);
         v.opened_us = Some(self.now_us);
         self.versus = Some(v);
+        self.lobby_world();
         self.invited = code.to_string();
         self.command("open", host, &crate::online::room_name(code));
         self.show(Screen::Online);
@@ -574,6 +669,10 @@ impl Game {
         let began = v.message(peer, text, now);
         if lobby || v.ended() {
             self.ui_version += 1;
+        }
+        // T24: the host's call back to the lobby
+        if !lobby && v.session().is_none() {
+            self.back_to_lobby();
         }
         if began {
             self.clock.rest();
@@ -808,6 +907,21 @@ impl Game {
                     w.players.push(p);
                 }
                 self.draw();
+            }
+            // for tests and the journal's shots (T24): the lobby as after a
+            // match, "w a b c d" its winner's seat (or -) and each seat's
+            // rounds
+            "place.last" => {
+                let t: Vec<&str> = v.split_whitespace().collect();
+                let n: Option<Vec<i32>> = t.iter().skip(1).map(|x| x.parse().ok()).collect();
+                let (Some(w), Some([a, b, c, d])) = (t.first(), n.as_deref()) else {
+                    return Err(format!("\"{value}\" is not a winner and four scores."));
+                };
+                let winner = w.parse().ok();
+                if let Some(vs) = self.versus.as_mut() {
+                    vs.last = Some((winner, [*a, *b, *c, *d]));
+                }
+                self.ui_version += 1;
             }
             // for tests and the journal's shots: stand the player at x y z
             // (centimetres) facing a heading (degrees), still
@@ -1138,17 +1252,30 @@ pub(crate) mod tests {
         let cmd = g.cmds.last().unwrap();
         assert_eq!(
             (cmd.act.as_str(), cmd.host, cmd.room.clone()),
-            ("open", true, format!("chumontillado-p1-{code}"))
+            ("open", true, format!("chumontillado-p2-{code}"))
         );
         // the host's seats: itself, and three bots until guests come
-        let seats: Vec<(String, bool)> = ui.panels[0]
-            .actions
+        let seats: Vec<(&str, &str)> = ui.panels[0]
+            .cards
             .iter()
-            .filter(|a| a.name == "online.bot")
-            .map(|a| (a.label.clone(), a.enabled))
+            .map(|c| (c.heading.as_str(), c.who.as_str()))
             .collect();
-        assert_eq!(seats[0], ("Seat 1: you".to_string(), false));
-        assert_eq!(seats[3], ("Seat 4: bot on".to_string(), true));
+        assert_eq!(seats[0], ("Seat 1", "You"));
+        assert_eq!(seats[3], ("Seat 4", "A bot"));
+        // T25: each card stands round its figure, a fifth of the screen
+        // apart, and a bot's wears the skin it will play in
+        let cards = &ui.panels[0].cards;
+        for (k, c) in cards.iter().enumerate() {
+            let want = 2_000 * (k as i32 + 1);
+            assert!((c.at[0] - want).abs() < 150, "seat {k} at {:?}", c.at);
+            assert!(
+                c.at[1] < c.at[2] && (2_000..9_000).contains(&c.at[2]),
+                "seat {k} at {:?}",
+                c.at
+            );
+        }
+        let skins: Vec<&str> = cards.iter().map(|c| c.skin.as_str()).collect();
+        assert_eq!(skins, ["The Hidalgo", "The Infanta", "The Harlequin", "El Sordo"]);
     }
 
     #[test]
@@ -1157,7 +1284,7 @@ pub(crate) mod tests {
         g.act("online.link", "kqxrt").unwrap();
         let v = g.versus.as_ref().unwrap();
         assert_eq!((v.host, v.code.as_str()), (false, "KQXRT"));
-        assert_eq!(g.cmds.last().unwrap().room, "chumontillado-p1-KQXRT");
+        assert_eq!(g.cmds.last().unwrap().room, "chumontillado-p2-KQXRT");
         assert_eq!(g.screen, Screen::Online);
         let mut g = game();
         assert_eq!(
@@ -1227,24 +1354,129 @@ pub(crate) mod tests {
         assert_ne!(yaw_once, 0);
     }
 
+    /// Two pages linked as the transport would link them: the host's
+    /// peer is 1 to the guest, the guest's 2 to the host.
+    fn pump(h: &mut Game, g: &mut Game) {
+        for _ in 0..4 {
+            let to_g: Vec<(u32, String)> = serde_json::from_str(&h.online_outbox()).unwrap();
+            for (_, t) in to_g {
+                g.online_message(1, &t);
+            }
+            let to_h: Vec<(u32, String)> = serde_json::from_str(&g.online_outbox()).unwrap();
+            for (_, t) in to_h {
+                h.online_message(2, &t);
+            }
+        }
+    }
+
+    #[test]
+    fn a_match_won_brings_the_room_back_to_its_lobby_still_linked_and_the_next_one_plays() {
+        let (mut h, mut g) = (game(), game());
+        h.act("online.host", "").unwrap();
+        let code = h.versus.as_ref().unwrap().code.clone();
+        g.act("online.room", &code).unwrap();
+        h.online_connected(2);
+        g.online_connected(1);
+        pump(&mut h, &mut g);
+        assert_eq!(g.versus.as_ref().unwrap().seat(), Some(1));
+        h.act("online.start", "").unwrap();
+        pump(&mut h, &mut g);
+        assert_eq!((h.screen, g.screen), (Screen::Play, Screen::Play));
+        // the guest has won it, on both pages alike before the first tick
+        for p in [&mut h, &mut g] {
+            let w = &mut p.versus.as_mut().unwrap().session_mut().unwrap().world;
+            let r = w.rounds.as_mut().unwrap();
+            r.phase = crate::rounds::Phase::Done;
+            r.winner = Some(1);
+            r.scores = [3, 5, 1, 0];
+        }
+        // only the host calls the room back, once the win has shown
+        for (p, calls) in [(&h, true), (&g, false)] {
+            let mut probe = p.versus.clone().unwrap();
+            let r = probe.session_mut().unwrap().world.rounds.as_mut().unwrap();
+            r.ticks = crate::versus::AGAIN_TICKS;
+            assert_eq!(probe.again(), calls);
+        }
+        let mut now = 0;
+        let mut frame = |h: &mut Game, g: &mut Game, n: i32| {
+            for _ in 0..n {
+                now += 16_667;
+                h.advance(now, 0, 0, 0, 0);
+                g.advance(now, 0, 0, 0, 0);
+                pump(h, g);
+            }
+        };
+        frame(&mut h, &mut g, crate::versus::AGAIN_TICKS - 30);
+        assert!(h.in_match() && g.in_match(), "the win shows a while first");
+        frame(&mut h, &mut g, 60);
+        for p in [&h, &g] {
+            let v = p.versus.as_ref().unwrap();
+            assert_eq!(p.screen, Screen::Online);
+            assert!(v.session().is_none() && !v.ended(), "{}", v.status());
+            assert_eq!(v.last, Some((Some(1), [3, 5, 1, 0])));
+            let ui = crate::api::ui(p);
+            let notes: Vec<&str> = ui.panels[0].cards.iter().map(|c| c.note.as_str()).collect();
+            assert_eq!(
+                notes,
+                [
+                    "Rounds won: 3",
+                    "Won the last match",
+                    "Rounds won: 1",
+                    "Rounds won: 0"
+                ]
+            );
+        }
+        assert_eq!(crate::api::ui(&g).panels[0].text, g.strings.get("online.again"));
+        let start = crate::api::ui(&h).panels[0]
+            .actions
+            .iter()
+            .find(|a| a.name == "online.start")
+            .cloned();
+        assert_eq!(start.map(|a| a.label), Some("Start the next match".to_string()));
+        // the next match, on the same links
+        h.act("online.start", "").unwrap();
+        pump(&mut h, &mut g);
+        assert_eq!((h.screen, g.screen), (Screen::Play, Screen::Play));
+        frame(&mut h, &mut g, 120);
+        for p in [&h, &g] {
+            let v = p.versus.as_ref().unwrap();
+            let s = v.session().unwrap();
+            assert_eq!((v.status(), s.links.game), (crate::online::PLAYING, 1));
+            assert!(
+                s.tick > 60 && s.links.agreed.is_some(),
+                "the next match runs and agrees"
+            );
+        }
+    }
+
     #[test]
     fn the_hosts_lobby_has_a_switch_for_each_free_seat_and_it_flips_the_seat_to_empty() {
         let mut g = game();
         g.act("online.host", "").unwrap();
-        let switches = |g: &Game| -> Vec<String> {
+        // T25: each free seat's card is its switch, and says what it does
+        let switches = |g: &Game| -> Vec<(String, String)> {
             crate::api::ui(g).panels[0]
-                .actions
+                .cards
                 .iter()
-                .filter(|a| a.name == "online.bot" && a.enabled)
-                .map(|a| a.label.clone())
+                .filter_map(|c| {
+                    c.action
+                        .as_ref()
+                        .filter(|a| a.name == "online.bot")
+                        .map(|a| (c.who.clone(), a.label.clone()))
+                })
                 .collect()
         };
-        assert_eq!(
-            switches(&g),
-            vec!["Seat 2: bot on", "Seat 3: bot on", "Seat 4: bot on"]
-        );
+        let bot = ("A bot".to_string(), "Leave it empty".to_string());
+        assert_eq!(switches(&g), vec![bot.clone(), bot.clone(), bot.clone()]);
         g.act("online.bot", "2").unwrap();
-        assert_eq!(switches(&g)[1], "Seat 3: bot off");
+        assert_eq!(
+            switches(&g)[1],
+            ("Empty".to_string(), "Put a bot here".to_string())
+        );
+        assert_eq!(
+            (switches(&g)[0].clone(), switches(&g)[2].clone()),
+            (bot.clone(), bot)
+        );
         assert!(g.act("online.bot", "0").is_err(), "the host's own seat");
         g.act("online.start", "").unwrap();
         let w = &g.versus.as_ref().unwrap().session().unwrap().world;
@@ -1406,7 +1638,7 @@ pub(crate) mod tests {
         let last: Vec<&str> = g.cmds.iter().rev().take(2).map(|c| c.act.as_str()).collect();
         assert_eq!(last, vec!["open", "close"]);
         assert_eq!(g.cmds.iter().filter(|c| c.act == "open").count(), opens + 1);
-        assert_eq!(g.cmds.last().unwrap().room, "chumontillado-p1-KQXRT");
+        assert_eq!(g.cmds.last().unwrap().room, "chumontillado-p2-KQXRT");
         // and the count starts again
         assert_eq!(
             g.versus.as_ref().unwrap().notice(g.now_us),

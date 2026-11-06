@@ -15,32 +15,35 @@ fi
 
 step() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 
-step "1/9 format (cargo fmt --check)"
+step "1/10 format (cargo fmt --check)"
 cargo fmt --all -- --check
 
-step "2/9 lint (cargo clippy, warnings are errors)"
+step "2/10 lint (cargo clippy, warnings are errors)"
 cargo clippy --workspace --all-targets --quiet -- -D warnings
 
-step "3/9 core and boundary tests (cargo test)"
+step "3/10 core and boundary tests (cargo test)"
 cargo test --workspace --quiet
 
-step "4/9 release WebAssembly build (scripts/build.sh)"
+step "4/10 every break row still finds its code (scripts/break_tests.py --rotted)"
+"$PY" scripts/break_tests.py --rotted
+
+step "5/10 release WebAssembly build (scripts/build.sh)"
 ./scripts/build.sh >/dev/null
 echo "dist/ assembled"
 
-step "5/9 WebAssembly import audit (scripts/wasm_imports.py)"
+step "6/10 WebAssembly import audit (scripts/wasm_imports.py)"
 "$PY" scripts/wasm_imports.py dist
 
-step "6/9 art pipeline checks, no TeX needed (tests/art_check.py)"
+step "7/10 art pipeline checks, no TeX needed (tests/art_check.py)"
 if [ -f tests/art_check.py ]; then "$PY" tests/art_check.py; else echo "no art pipeline in this project"; fi
 
-step "7/9 notebook form (scripts/notebook_check.py)"
+step "8/10 notebook form (scripts/notebook_check.py)"
 "$PY" scripts/notebook_check.py
 
-step "8/9 design journal (scripts/journal_check.py)"
+step "9/10 design journal (scripts/journal_check.py)"
 "$PY" scripts/journal_check.py
 
-step "9/9 browser check (tests/browser/check.py)"
+step "10/10 browser check (tests/browser/check.py)"
 "$PY" tests/browser/check.py
 
 printf '\n\033[1mBUILDER CHECK PASSED\033[0m\n'

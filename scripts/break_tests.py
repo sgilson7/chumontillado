@@ -5,6 +5,7 @@ behaviour broken does not cover it. (After Long Time Comin' and Lowballer.)
 
     python3 scripts/break_tests.py              every break in tests/breaks.json
     python3 scripts/break_tests.py title intro  the breaks whose names hold these words
+    python3 scripts/break_tests.py --rotted     only that each break's text is still in its file, once
 
 tests/breaks.json is a list of objects:
 
@@ -31,7 +32,24 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 LIST = ROOT / "tests" / "breaks.json"
 
 
+def rotted():
+    """T24: each break's text still in its file, once: fast, so the everyday
+    check runs it. A commit that runs only its own breaks left ten rows of
+    T20 to T23 pointing at code that had changed (R20.3)."""
+    bad = []
+    for b in json.loads(LIST.read_text()):
+        n = (ROOT / b["file"]).read_text().count(b["find"])
+        if n != 1:
+            print(f"  ROTTED  {b['name']}: the text to break appears {n} times in {b['file']}")
+            bad.append(b["name"])
+    if bad:
+        sys.exit(f"{len(bad)} breaks have rotted: point each at the code its test now covers")
+    print("every break's text is in its file once")
+
+
 def main(words):
+    if words == ["--rotted"]:
+        return rotted()
     breaks = json.loads(LIST.read_text())
     if words:
         breaks = [b for b in breaks if any(w in b["name"] for w in words)]

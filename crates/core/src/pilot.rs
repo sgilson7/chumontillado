@@ -568,6 +568,47 @@ mod tests {
         assert_eq!(p.seen, 0);
     }
 
+    /// T19: a person 3 m off: a bot holding a blade runs at them, one
+    /// holding a gun backs off rather than run onto them.
+    #[test]
+    fn close_in_a_bot_with_a_blade_runs_at_its_quarry_and_one_with_a_gun_backs_off() {
+        let quarry = v3(int(8), 0, int(-19));
+        for (weapon, reach, way) in [
+            (Weapon::Katana, Some(int(2)), FORWARD),
+            (Weapon::Pistol, None, BACK),
+        ] {
+            let mut p = Pilot {
+                shoots: true,
+                ..Pilot::default()
+            };
+            let v = View {
+                route: &LOOP,
+                nav: None,
+                hunt: Some(quarry),
+                speed: 0,
+                frozen: false,
+                reach,
+                tick: 0,
+                feet: v3(int(8), 0, int(-16)),
+                eye: v3(int(8), ONE * 165 / 100, int(-16)),
+                yaw: 0,
+                pitch: 0,
+                on_ground: true,
+                chest: Some(quarry.add(v3(0, ONE * 13 / 10, 0))),
+                skill: Skill::Normal,
+                chest_velocity: V3::ZERO,
+                hit_from: None,
+                health: 100,
+                cover: None,
+                weapon,
+                owned: crate::arms::ROUND_OWNED,
+                pickups: &[],
+            };
+            let r = record(&mut p, &v);
+            assert_eq!(r.keys & (FORWARD | BACK), way, "{weapon:?}");
+        }
+    }
+
     /// Sam, after T21 ("the bots are all still way too difficult"): at
     /// every skill it fires only in its bursts, and rests between them.
     #[test]

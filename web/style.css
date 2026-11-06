@@ -65,6 +65,42 @@ body[data-screen="title"] #overlay, body[data-screen="menu"] #overlay { align-it
 .panel .pair button.small { margin: 0; padding: 8px 10px; font-size: 13px; letter-spacing: 0.06em; box-shadow: none; }
 .panel .pair button.small:disabled { opacity: 0.55; cursor: default; }
 #online h1 { margin-bottom: 8px; }
+/* T25: the online lobby, in portrait: the room's code across the top, the
+   four seats as tall cards each round the figure standing in it (the core
+   says where), and Start and Leave along the foot */
+#online.lobby { position: fixed; inset: 0; min-width: 0; max-width: none; max-height: none; padding: 0; overflow: visible; border: none; border-radius: 0; background: none; box-shadow: none; pointer-events: none; }
+#online.lobby .head, #online.lobby .bar, #online.lobby .card { pointer-events: auto; }
+#online.lobby .head { position: absolute; left: 0; right: 0; top: 0; display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px 32px; padding: 18px 4vw 40px; background: linear-gradient(to bottom, rgba(12, 8, 5, 0.92) 0%, rgba(12, 8, 5, 0.7) 70%, rgba(12, 8, 5, 0) 100%); }
+#online.lobby .intro { flex: 1 1 340px; max-width: 62ch; }
+#online.lobby .intro h1 { font-size: 34px; }
+#online.lobby .intro p { margin: 0; font-size: 15px; }
+#online.lobby .room { flex: 0 1 460px; display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 0 12px; align-items: end; }
+#online.lobby .room .field { margin: 0 0 8px; }
+#online.lobby .room .pair { grid-column: 1 / -1; margin: 0; }
+#online.lobby #room-code { font-size: 22px; padding: 7px 8px; }
+#online.lobby .bar { position: absolute; left: 0; right: 0; bottom: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; padding: 40px 4vw 22px; background: linear-gradient(to top, rgba(12, 8, 5, 0.85) 0%, rgba(12, 8, 5, 0) 100%); }
+#online.lobby .bar button { width: auto; min-width: 240px; margin: 0; }
+.cards { position: absolute; inset: 0; }
+.card { position: absolute; left: var(--x); top: max(calc(var(--head) - 44px), 142px); bottom: calc(100% - var(--feet) - 92px); width: min(18.5vw, 280px); transform: translateX(-50%); display: flex; flex-direction: column; justify-content: space-between; padding: 10px 12px 12px; border: 1px solid var(--umber-edge); border-radius: 8px; background: linear-gradient(to bottom, rgba(23, 17, 12, 0.55) 0%, rgba(23, 17, 12, 0) 18%, rgba(23, 17, 12, 0) 70%, rgba(23, 17, 12, 0.92) 86%); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(239, 227, 200, 0.04); }
+.card-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 12px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
+.card-top .seat { color: var(--ink-soft); }
+.card-top .who { padding: 2px 8px; border-radius: 3px; background: var(--umber); border: 1px solid var(--umber-edge); }
+.card .plate { display: flex; flex-direction: column; gap: 4px; }
+.card .plate p { margin: 0; }
+.card .skin { font-size: 20px; font-style: italic; font-weight: 700; line-height: 1.15; color: var(--ink); }
+.card .note { font-size: 13px; color: var(--ochre); }
+.panel .card .pair, .card .plate button.small { margin: 6px 0 0; padding: 7px 10px; font-size: 12px; letter-spacing: 0.06em; box-shadow: none; }
+.card[data-kind="you"] { border-color: var(--ochre); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), 0 0 0 1px var(--ochre), 0 0 24px rgba(199, 154, 58, 0.25); }
+.card[data-kind="you"] .who { background: var(--ochre); border-color: var(--ochre); color: var(--umber); }
+.card[data-kind="player"] .who { background: var(--accent); border-color: var(--accent-deep); color: #f6efe2; }
+.card[data-kind="bot"] { border-style: solid; opacity: 0.92; }
+.card[data-kind="empty"] { border: 1px dashed var(--ink-soft); background: rgba(23, 17, 12, 0.35); justify-content: space-between; }
+.card[data-kind="empty"] .plate button.small { background: transparent; color: var(--ink); border-color: var(--ink-soft); }
+@media (max-height: 640px) {
+  #online.lobby .intro h1 { font-size: 26px; }
+  #online.lobby .intro p { font-size: 13px; }
+  .card .skin { font-size: 16px; }
+}
 #online table.controls td { padding: 2px 0; }
 .setting output { min-width: 64px; text-align: right; font-weight: 700; color: var(--ochre); }
 .setting button { width: auto; min-width: 44px; margin: 0; padding: 6px 12px; font-size: 14px; letter-spacing: 0.04em; box-shadow: none; }

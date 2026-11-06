@@ -22,6 +22,11 @@
 //! leaves during the match is played by its bot from a tick the host
 //! chooses and tells everyone (`Msg::Drop`).
 //!
+//! T24: a match that is won brings everyone back to the room's lobby on
+//! the host's word (`Msg::Again`), still linked, for the next match. Each
+//! match has a number, and a record or checksum carries its match's, so
+//! one from a match just ended that arrives late is let go.
+//!
 //! Every status is a key for a string in `data/strings.json`.
 
 use crate::input::Input;
@@ -31,7 +36,7 @@ use std::collections::{BTreeMap, VecDeque};
 /// Bumped whenever a message changes shape or a rule changes how a tick
 /// runs. It is in the room's name, so a stale tab and a fresh one still
 /// meet, and the hello turns the stale one away with a reason.
-pub const PROTOCOL: u32 = 1;
+pub const PROTOCOL: u32 = 2;
 
 /// The first part of each room's name, keeping this game's rooms apart
 /// from every other app on the same public relays.
@@ -119,12 +124,22 @@ pub enum Msg {
         seat: usize,
         tick: u32,
         input: Input,
+        /// T24: the match's number (none on the first)
+        #[serde(default, skip_serializing_if = "is_first")]
+        g: u32,
     },
     /// one seat's checksum of the world before a tick
     Sum {
         seat: usize,
         tick: u32,
         sum: u64,
+        #[serde(default, skip_serializing_if = "is_first")]
+        g: u32,
+    },
+    /// T24: host to everyone: the match is over; back to the lobby for
+    /// match number `game`
+    Again {
+        game: u32,
     },
     /// host to everyone: a seat's player has gone, and its bot plays it
     /// from tick `from` on
@@ -135,6 +150,10 @@ pub enum Msg {
     Bye {
         why: String,
     },
+}
+
+fn is_first(g: &u32) -> bool {
+    *g == 0
 }
 
 fn normal_skill() -> u8 {
@@ -189,6 +208,8 @@ pub struct Net {
     pub skill: u8,
     /// the match has begun
     pub started: bool,
+    /// T24: the match's number in this room, from 0
+    pub game: u32,
     /// this browser's checksums and the others', by tick, kept until each
     /// pair can be compared
     mine: BTreeMap<u32, u64>,
@@ -220,6 +241,8 @@ pub enum Event {
     Gone {
         seat: usize,
     },
+    /// T24: the host has called everyone back to the lobby
+    Again,
 }
 
 impl Net {
@@ -236,6 +259,7 @@ impl Net {
             chosen: 0,
             skill: normal_skill(),
             started: false,
+            game: 0,
             mine: BTreeMap::new(),
             theirs: BTreeMap::new(),
             agreed: None,
@@ -391,7 +415,7 @@ impl Net {
     /// The skins at the start: each person's as chosen, and each bot's the
     /// first not worn by a person, in seat order, so the four differ where
     /// they can.
-    fn starting_skins(&self) -> [u8; SEATS] {
+    pub fn starting_skins(&self) -> [u8; SEATS] {
         let mut skins = self.skins;
         let worn: Vec<u8> = (0..SEATS)
             .filter(|&s| holds(self.seats, s))
@@ -437,6 +461,35 @@ impl Net {
             None,
         );
         (seats, empty, skins)
+    }
+
+    /// T24: the host ends the match and calls everyone back to the lobby
+    /// for the next, with the seats of those still here.
+    pub fn again(&mut self) {
+        if !self.host || !self.started {
+            return;
+        }
+        self.back(self.game + 1);
+        self.broadcast(&Msg::Again { game: self.game }, None);
+        self.seats = 1 | self
+            .others
+            .values()
+            .filter_map(|o| o.seat)
+            .fold(0, |seats, s| seats | 1 << s);
+        self.send_roster();
+    }
+
+    /// T24: back in the lobby, waiting for match `game`.
+    fn back(&mut self, game: u32) {
+        self.game = game;
+        self.started = false;
+        self.status = LOBBY;
+        self.mine.clear();
+        self.theirs.clear();
+        self.agreed = None;
+        if let Some(s) = self.seat {
+            self.skins[s] = self.chosen;
+        }
     }
 
     /// Text from a browser. Anything that cannot be a message, or that no
@@ -563,14 +616,27 @@ impl Net {
                 })
             }
             Msg::Drop { seat, from: at } if o.host && !self.host => Some(Event::Drop { seat, from: at }),
-            Msg::Input { seat, tick, input } => {
+            Msg::Again { game } if o.host && !self.host => {
+                // only the next match: a second word of it changes nothing
+                if !self.started || game != self.game + 1 {
+                    return None;
+                }
+                self.back(game);
+                Some(Event::Again)
+            }
+            // T24: a record or checksum of another match than this one,
+            // come late or early, is let go
+            Msg::Input { g, .. } | Msg::Sum { g, .. } if g != self.game => None,
+            Msg::Input {
+                seat, tick, input, ..
+            } => {
                 if !self.started || !holds(self.seats, seat) || Some(seat) == self.seat {
                     self.status = GARBLED;
                     return None;
                 }
                 Some(Event::Input { seat, tick, input })
             }
-            Msg::Sum { seat, tick, sum } => {
+            Msg::Sum { seat, tick, sum, .. } => {
                 if !holds(self.seats, seat) || Some(seat) == self.seat {
                     self.status = GARBLED;
                     return None;
@@ -579,7 +645,8 @@ impl Net {
                     return None;
                 }
                 if self.host {
-                    self.broadcast(&Msg::Sum { seat, tick, sum }, Some(from));
+                    let g = self.game;
+                    self.broadcast(&Msg::Sum { seat, tick, sum, g }, Some(from));
                 }
                 self.theirs.insert((tick, seat), sum);
                 self.compare();
@@ -605,7 +672,8 @@ impl Net {
     pub fn summed(&mut self, tick: u32, sum: u64) {
         let Some(seat) = self.seat else { return };
         self.mine.insert(tick, sum);
-        self.broadcast(&Msg::Sum { seat, tick, sum }, None);
+        let g = self.game;
+        self.broadcast(&Msg::Sum { seat, tick, sum, g }, None);
         self.compare();
     }
 
@@ -687,11 +755,13 @@ pub(crate) mod tests {
                     dy: 30,
                     wheel: 0,
                 },
+                g: 0,
             },
             Msg::Sum {
                 seat: 1,
                 tick: 30,
                 sum: u64::MAX - 3,
+                g: 0,
             },
             Msg::Drop { seat: 2, from: 400 },
             Msg::Bye { why: FULL.into() },
@@ -704,7 +774,7 @@ pub(crate) mod tests {
 
     #[test]
     fn the_room_name_holds_the_app_the_protocol_and_the_code_and_no_build() {
-        assert_eq!(room_name("KQXRT"), "chumontillado-p1-KQXRT");
+        assert_eq!(room_name("KQXRT"), "chumontillado-p2-KQXRT");
     }
 
     #[test]
@@ -812,6 +882,80 @@ pub(crate) mod tests {
         g.summed(60, 8);
         deliver(&mut g, A, &mut [(&mut host, HOST)]);
         assert_eq!(host.status, DESYNC);
+    }
+
+    #[test]
+    fn the_host_calls_everyone_back_to_the_lobby_and_a_late_record_of_the_match_before_is_let_go() {
+        let mut host = Net::new(true, "b");
+        let mut a = Net::new(false, "b");
+        let mut b = Net::new(false, "b");
+        host.connected(A);
+        host.connected(B);
+        a.connected(HOST);
+        b.connected(HOST);
+        a.connected(B);
+        b.connected(A);
+        for _ in 0..3 {
+            deliver(&mut host, HOST, &mut [(&mut a, A), (&mut b, B)]);
+            deliver(&mut a, A, &mut [(&mut host, HOST), (&mut b, B)]);
+            deliver(&mut b, B, &mut [(&mut host, HOST), (&mut a, A)]);
+        }
+        host.start();
+        deliver(&mut host, HOST, &mut [(&mut a, A), (&mut b, B)]);
+        assert!(a.started && b.started);
+        // b leaves during the match; the rest are called back
+        host.left(B);
+        a.left(B);
+        host.again();
+        let words = host.take_outbox();
+        let again = words
+            .iter()
+            .find(|(p, _)| *p == A)
+            .map(|(_, t)| t.clone())
+            .unwrap();
+        assert_eq!(a.message(HOST, &again), Some(Event::Again));
+        for n in [&host, &a] {
+            assert_eq!((n.started, n.status, n.game), (false, LOBBY, 1));
+        }
+        assert_eq!(a.message(HOST, &again), None, "a second word changes nothing");
+        assert_eq!(a.game, 1);
+        // the host's seats are those still here, and it says so
+        assert_eq!(host.seats, 0b011);
+        let roster = words
+            .iter()
+            .filter(|(p, _)| *p == A)
+            .map(|(_, t)| t.clone())
+            .next_back()
+            .unwrap();
+        a.message(HOST, &roster);
+        assert_eq!(a.seats, 0b011);
+        // a record from the match just ended, come late, is let go
+        let late = Msg::Input {
+            seat: 0,
+            tick: 9_000,
+            input: Input::default(),
+            g: 0,
+        };
+        assert_eq!(a.message(HOST, &encode(&late)), None);
+        assert_eq!(a.status, LOBBY);
+        // and the next match's are taken
+        host.start();
+        deliver(&mut host, HOST, &mut [(&mut a, A)]);
+        assert!(a.started);
+        let next = Msg::Input {
+            seat: 0,
+            tick: 3,
+            input: Input::default(),
+            g: 1,
+        };
+        assert!(matches!(
+            a.message(HOST, &encode(&next)),
+            Some(Event::Input { tick: 3, .. })
+        ));
+        assert!(
+            !encode(&late).contains("\"g\""),
+            "the first match's records are as they were"
+        );
     }
 
     #[test]
