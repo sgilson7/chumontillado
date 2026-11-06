@@ -219,7 +219,15 @@ async function main() {
     const top = make("div", undefined, "card-top");
     top.append(make("span", c.heading, "seat"), make("span", c.who, "who"));
     const plate = make("div", undefined, "plate");
-    if (c.skin) plate.append(make("p", c.skin, "skin"));
+    // T26: your own card picks your skin: back, its name and place, on
+    const [back, on] = c.pick || [];
+    if (back && on) {
+      const row = make("div", undefined, "picker");
+      const name = make("div", undefined, "picked");
+      name.append(make("p", c.skin, "skin"), make("p", c.picked, "of"));
+      row.append(button(back), name, button(on));
+      plate.append(row);
+    } else if (c.skin) plate.append(make("p", c.skin, "skin"));
     if (c.note) plate.append(make("p", c.note, "note"));
     if (c.action) plate.append(button(c.action));
     node.append(top, plate);

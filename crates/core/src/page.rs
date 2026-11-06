@@ -123,6 +123,7 @@ pub const REQUIRED: &[&str] = &[
     "card_bot_on",
     "card_winner",
     "card_rounds",
+    "card_pick",
     "you",
     "map_plaza",
     "map_catedral",

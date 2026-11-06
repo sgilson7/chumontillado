@@ -1449,6 +1449,34 @@ pub(crate) mod tests {
         }
     }
 
+    /// T26: your card in the lobby clicks through all six skins, back and
+    /// on, and says which of them it shows.
+    #[test]
+    fn your_lobby_card_clicks_through_every_skin_both_ways() {
+        let mut g = game();
+        g.act("online.host", "").unwrap();
+        let mine = |g: &Game| crate::api::ui(g).panels[0].cards[0].clone();
+        let c = mine(&g);
+        assert_eq!((c.skin.as_str(), c.picked.as_str()), ("The Hidalgo", "1 of 6"));
+        let steps: Vec<(&str, &str)> = c
+            .pick
+            .iter()
+            .map(|a| (a.name.as_str(), a.value.as_str()))
+            .collect();
+        assert_eq!(steps, [("skin.step", "-1"), ("skin.step", "1")]);
+        g.act("skin.step", &c.pick[0].value).unwrap();
+        let c = mine(&g);
+        assert_eq!((c.skin.as_str(), c.picked.as_str()), ("The Torero", "6 of 6"));
+        for _ in 0..2 {
+            g.act("skin.step", &c.pick[1].value).unwrap();
+        }
+        assert_eq!(mine(&g).skin, "The Infanta");
+        // the others' cards pick nothing
+        assert!(crate::api::ui(&g).panels[0].cards[1..]
+            .iter()
+            .all(|c| c.pick.is_empty()));
+    }
+
     #[test]
     fn the_hosts_lobby_has_a_switch_for_each_free_seat_and_it_flips_the_seat_to_empty() {
         let mut g = game();

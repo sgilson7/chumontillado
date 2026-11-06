@@ -1902,5 +1902,19 @@
     "find": "                _ => bots[k],",
     "replace": "                _ => g.skin,",
     "test": "hosting_shows_the_room_code_and_an_invite_link_and_tells_the_transport_to_open_the_room"
+  },
+  {
+    "name": "T26 your card steps back as well as on",
+    "file": "crates/core/src/api.rs",
+    "find": "                    [(\"-1\", \"skin_prev\"), (\"1\", \"skin_next\")]",
+    "replace": "                    [(\"1\", \"skin_prev\"), (\"1\", \"skin_next\")]",
+    "test": "your_lobby_card_clicks_through_every_skin_both_ways"
+  },
+  {
+    "name": "T26 your card says which skin of the six",
+    "file": "crates/core/src/api.rs",
+    "find": "                        .replace(\"{n}\", &(g.skin as usize % crate::skins::COUNT + 1).to_string())",
+    "replace": "                        .replace(\"{n}\", &(g.skin as usize % crate::skins::COUNT).to_string())",
+    "test": "your_lobby_card_clicks_through_every_skin_both_ways"
   }
 ]

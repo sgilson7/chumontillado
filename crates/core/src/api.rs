@@ -65,9 +65,15 @@ pub struct Card {
     /// where the figure stands on the screen: across, and the heights of
     /// its head and its feet down, hundredths of a percent
     pub at: [i32; 3],
-    /// the card's button: your skin, or the host's switch for a free seat
+    /// the host's switch for a free seat
     #[serde(skip_serializing_if = "Option::is_none")]
     pub action: Option<Action>,
+    /// T26: on your own card, the skins to click through, back and on,
+    /// and which of them this is
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub pick: Vec<Action>,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub picked: String,
 }
 
 /// M4: a box of text: a code or link to copy (`fixed`), or a box to type
@@ -370,7 +376,6 @@ fn cards(g: &Game, v: &crate::versus::Versus) -> Vec<Card> {
                 None => String::new(),
             };
             let button = match kind {
-                "you" => Some(action(g, "skin.step", "1", "card_skin", false)),
                 "bot" if v.host => Some(action(g, "online.bot", &k.to_string(), "card_bot_off", false)),
                 "empty" if v.host => Some(action(g, "online.bot", &k.to_string(), "card_bot_on", false)),
                 _ => None,
@@ -384,6 +389,25 @@ fn cards(g: &Game, v: &crate::versus::Versus) -> Vec<Card> {
                 note,
                 at: [x, head_y, feet_y],
                 action: button.map(|a| Action { small: true, ..a }),
+                // T26: your card picks your skin from all of them
+                pick: if kind == "you" {
+                    [("-1", "skin_prev"), ("1", "skin_next")]
+                        .iter()
+                        .map(|(step, label)| Action {
+                            small: true,
+                            ..action(g, "skin.step", step, label, false)
+                        })
+                        .collect()
+                } else {
+                    Vec::new()
+                },
+                picked: if kind == "you" {
+                    s.get("card_pick")
+                        .replace("{n}", &(g.skin as usize % crate::skins::COUNT + 1).to_string())
+                        .replace("{of}", &crate::skins::COUNT.to_string())
+                } else {
+                    String::new()
+                },
             }
         })
         .collect()

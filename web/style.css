@@ -90,6 +90,11 @@ body[data-screen="title"] #overlay, body[data-screen="menu"] #overlay { align-it
 .card .skin { font-size: 20px; font-style: italic; font-weight: 700; line-height: 1.15; color: var(--ink); }
 .card .note { font-size: 13px; color: var(--ochre); }
 .panel .card .pair, .card .plate button.small { margin: 6px 0 0; padding: 7px 10px; font-size: 12px; letter-spacing: 0.06em; box-shadow: none; }
+/* T26: your card's skin picker: Previous and Next either side of the name */
+.card .picker { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 6px 8px; }
+.card .picker .picked { grid-column: 1 / -1; grid-row: 1; min-width: 0; display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.card .picker .of { font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-soft); }
+.panel .card .picker button.small { margin: 0; padding: 7px 8px; font-size: 12px; letter-spacing: 0.06em; }
 .card[data-kind="you"] { border-color: var(--ochre); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), 0 0 0 1px var(--ochre), 0 0 24px rgba(199, 154, 58, 0.25); }
 .card[data-kind="you"] .who { background: var(--ochre); border-color: var(--ochre); color: var(--umber); }
 .card[data-kind="player"] .who { background: var(--accent); border-color: var(--accent-deep); color: #f6efe2; }

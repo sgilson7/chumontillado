@@ -179,5 +179,6 @@
   "card_bot_off": "Leave it empty",
   "card_bot_on": "Put a bot here",
   "card_winner": "Won the last match",
-  "card_rounds": "Rounds won: {n}"
+  "card_rounds": "Rounds won: {n}",
+  "card_pick": "{n} of {of}"
 }
