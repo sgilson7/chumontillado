@@ -1,0 +1,607 @@
+{
+  "_note": "Presentation numbers for the light, the sky, the haze and the surfaces' colours. Colours are 0 to 255; shares are percent. Chumworld Arena's look.json (e78945b) with a darker, warmer sky and a cellar's palette (M1). crates/core/src/look.rs reads this file and turns it into the shaders' uniforms.",
+  "sun_toward": [
+    -70,
+    30,
+    52
+  ],
+  "_sun_toward": "the direction toward the sun, any length: west-south-west and low, late afternoon",
+  "sun": [
+    255,
+    222,
+    176
+  ],
+  "sun_pct": 80,
+  "sky_fill": [
+    110,
+    96,
+    88
+  ],
+  "bounce": [
+    150,
+    104,
+    70
+  ],
+  "wrap_pct": [
+    40,
+    30,
+    75,
+    55
+  ],
+  "_wrap_pct": "light wrapped past the terminator, the ramp's start and end, and how much of the ramp is used (Protection of the Spheres' bands)",
+  "zenith": [
+    38,
+    30,
+    26
+  ],
+  "horizon": [
+    150,
+    118,
+    84
+  ],
+  "sun_glow": [
+    255,
+    190,
+    128
+  ],
+  "sun_glow_pct": 55,
+  "sky_curve_pct": 48,
+  "sun_glow_power": 7,
+  "sun_disc_tenths_deg": [
+    11,
+    19
+  ],
+  "haze_start_m": 90,
+  "haze_per_km_pct": 15,
+  "haze_most_pct": 100,
+  "haze_sunward_pct": 100,
+  "halo_power_pct": 220,
+  "ink_haze_pct": 85,
+  "shadow_pct": 34,
+  "ink": [
+    31,
+    24,
+    18
+  ],
+  "ink_bias_millionths": [
+    1,
+    1
+  ],
+  "_ink_bias_millionths": "the ink hull pushed back, and halos and shadows pulled forward, as millionths of clip w: about eight steps of a 24-bit depth buffer, so a tie with a solid goes the solid's way (Long Time Comin's INK_BIAS and HALO_BIAS)",
+  "palette": {
+    "floor": [
+      150,
+      92,
+      64
+    ],
+    "wall": [
+      184,
+      166,
+      138
+    ],
+    "ramp": [
+      196,
+      148,
+      72
+    ],
+    "slope": [
+      146,
+      108,
+      70
+    ],
+    "block": [
+      118,
+      46,
+      40
+    ],
+    "trim": [
+      180,
+      54,
+      31
+    ],
+    "shadow": [
+      40,
+      30,
+      22
+    ],
+    "steel": [
+      120,
+      126,
+      132
+    ],
+    "dark_steel": [
+      52,
+      56,
+      60
+    ],
+    "wood": [
+      122,
+      78,
+      42
+    ],
+    "brass": [
+      176,
+      138,
+      62
+    ],
+    "bone": [
+      226,
+      214,
+      188
+    ],
+    "blue": [
+      60,
+      95,
+      134
+    ],
+    "ochre": [
+      199,
+      154,
+      58
+    ],
+    "umber": [
+      74,
+      53,
+      39
+    ],
+    "stroke": [
+      179,
+      54,
+      31
+    ],
+    "tracer": [
+      255,
+      226,
+      170
+    ],
+    "flash": [
+      255,
+      244,
+      214
+    ],
+    "mark": [
+      30,
+      24,
+      20
+    ],
+    "straw": [
+      205,
+      170,
+      96
+    ],
+    "figure": [
+      38,
+      32,
+      28
+    ],
+    "head": [
+      214,
+      190,
+      160
+    ]
+  },
+  "grit": {
+    "_note": "T4: every map surface's texture (scene.frag's grit). Lengths in cm, strengths in percent. materials: by map::Surface::material's number (0 unused, 1 floor, 2 wall, 3 ramp, 4 slope, 5 block, 6 trim): tiles, bricks, planks, the pattern's scale.",
+    "edge_cm": 8,
+    "edge_dark_pct": 45,
+    "joint_cm": 2,
+    "joint_dark_pct": 32,
+    "mottle_per_m_hundredths": 60,
+    "mottle_pct": 16,
+    "speck_per_m": 11,
+    "speck_pct": 7,
+    "tile_cm": 100,
+    "brick_high_cm": 30,
+    "brick_long_cm": 70,
+    "plank_cm": 28,
+    "cell_pct": 14,
+    "grain_along_per_m_hundredths": 40,
+    "grain_across_per_m": 14,
+    "grain_pct": 16,
+    "hash_thousandths": [
+      127100,
+      311700,
+      43758545
+    ],
+    "far_m": 1000,
+    "materials": [
+      [
+        0,
+        0,
+        0,
+        100
+      ],
+      [
+        100,
+        0,
+        0,
+        100
+      ],
+      [
+        0,
+        100,
+        0,
+        100
+      ],
+      [
+        0,
+        0,
+        100,
+        100
+      ],
+      [
+        100,
+        0,
+        0,
+        55
+      ],
+      [
+        0,
+        0,
+        100,
+        150
+      ],
+      [
+        0,
+        0,
+        0,
+        100
+      ]
+    ]
+  },
+  "_skins": "M6: each skin's colours by part name (crates/core/src/skins.rs), from the Roster page's drawings (tools/roster.py).",
+  "skins": {
+    "hidalgo": {
+      "black": [
+        38,
+        32,
+        28
+      ],
+      "hose": [
+        47,
+        41,
+        36
+      ],
+      "shoe": [
+        29,
+        24,
+        20
+      ],
+      "flesh": [
+        185,
+        164,
+        135
+      ],
+      "bone": [
+        231,
+        223,
+        207
+      ],
+      "crimson": [
+        138,
+        36,
+        32
+      ],
+      "ochre": [
+        183,
+        134,
+        47
+      ],
+      "beard": [
+        59,
+        43,
+        32
+      ],
+      "ink": [
+        18,
+        13,
+        9
+      ],
+      "arm_l": [
+        38,
+        32,
+        28
+      ],
+      "arm_r": [
+        38,
+        32,
+        28
+      ],
+      "hand": [
+        185,
+        164,
+        135
+      ]
+    },
+    "infanta": {
+      "silver": [
+        167,
+        166,
+        156
+      ],
+      "salmon": [
+        201,
+        123,
+        99
+      ],
+      "flesh": [
+        230,
+        205,
+        180
+      ],
+      "hair": [
+        205,
+        179,
+        122
+      ],
+      "red": [
+        168,
+        40,
+        31
+      ],
+      "shoe": [
+        43,
+        36,
+        32
+      ],
+      "blush": [
+        217,
+        154,
+        138
+      ],
+      "ink": [
+        18,
+        13,
+        9
+      ],
+      "arm_l": [
+        167,
+        166,
+        156
+      ],
+      "arm_r": [
+        167,
+        166,
+        156
+      ],
+      "hand": [
+        230,
+        205,
+        180
+      ]
+    },
+    "harlequin": {
+      "ochre": [
+        199,
+        154,
+        58
+      ],
+      "blue": [
+        60,
+        95,
+        134
+      ],
+      "red": [
+        179,
+        54,
+        31
+      ],
+      "bone": [
+        226,
+        214,
+        188
+      ],
+      "black": [
+        29,
+        25,
+        21
+      ],
+      "profile": [
+        205,
+        179,
+        140
+      ],
+      "ink": [
+        18,
+        13,
+        9
+      ],
+      "arm_l": [
+        60,
+        95,
+        134
+      ],
+      "arm_r": [
+        179,
+        54,
+        31
+      ],
+      "hand": [
+        226,
+        214,
+        188
+      ]
+    },
+    "sordo": {
+      "black": [
+        30,
+        26,
+        23
+      ],
+      "umber": [
+        74,
+        53,
+        39
+      ],
+      "flesh": [
+        163,
+        138,
+        94
+      ],
+      "grey": [
+        143,
+        138,
+        128
+      ],
+      "bone": [
+        236,
+        227,
+        207
+      ],
+      "mouth": [
+        42,
+        18,
+        14
+      ],
+      "shoe": [
+        23,
+        18,
+        14
+      ],
+      "ink": [
+        18,
+        13,
+        9
+      ],
+      "arm_l": [
+        30,
+        26,
+        23
+      ],
+      "arm_r": [
+        30,
+        26,
+        23
+      ],
+      "hand": [
+        163,
+        138,
+        94
+      ]
+    },
+    "fraile": {
+      "habit": [
+        222,
+        214,
+        194
+      ],
+      "fold": [
+        132,
+        122,
+        104
+      ],
+      "scapular": [
+        198,
+        188,
+        166
+      ],
+      "rope": [
+        150,
+        116,
+        70
+      ],
+      "sandal": [
+        86,
+        58,
+        36
+      ],
+      "flesh": [
+        166,
+        128,
+        94
+      ],
+      "ink": [
+        18,
+        13,
+        9
+      ],
+      "arm_l": [
+        222,
+        214,
+        194
+      ],
+      "arm_r": [
+        222,
+        214,
+        194
+      ],
+      "hand": [
+        166,
+        128,
+        94
+      ]
+    },
+    "torero": {
+      "suit": [
+        34,
+        88,
+        68
+      ],
+      "gold": [
+        204,
+        162,
+        60
+      ],
+      "stocking": [
+        214,
+        152,
+        160
+      ],
+      "black": [
+        26,
+        22,
+        20
+      ],
+      "sash": [
+        150,
+        34,
+        40
+      ],
+      "shirt": [
+        236,
+        230,
+        214
+      ],
+      "cape": [
+        184,
+        50,
+        96
+      ],
+      "lining": [
+        224,
+        186,
+        62
+      ],
+      "flesh": [
+        184,
+        150,
+        118
+      ],
+      "hair": [
+        34,
+        26,
+        22
+      ],
+      "ink": [
+        18,
+        13,
+        9
+      ],
+      "arm_l": [
+        34,
+        88,
+        68
+      ],
+      "arm_r": [
+        34,
+        88,
+        68
+      ],
+      "hand": [
+        184,
+        150,
+        118
+      ]
+    }
+  }
+}
