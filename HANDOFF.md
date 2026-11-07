@@ -103,4 +103,4 @@ T28 live at e800d1a (2026-11-06): the live browser check passed in Chromium, Fir
 
 After T29 (one floor under the Plaza; no surfaces in one plane): `break_tests.py T28`: 13 of 14 caught; the one missed, the nav grid over every floor, cannot fail while each map has one floor (live at b75a60d: the live browser check and online check passed; 292 rows).
 
-After T30 and T31 (the reach, the Garrocha, four maps): `break_tests.py T30 T31`: 9 of 9 and 11 of 11 caught, with five rows rotted by these changes re-pointed and caught (311 rows).
+After T30 and T31 (the reach, the Garrocha, four maps): `break_tests.py T30 T31`: 9 of 9 and 11 of 11 caught, with five rows rotted by these changes re-pointed and caught (311 rows). Live at ac3df1e (2026-11-07): the live browser check and online check passed on their first runs.
