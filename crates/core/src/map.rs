@@ -55,6 +55,16 @@ pub enum Shape {
     /// T28: a flat-sided column of `mesh::DISC_SIDES` about the vertical
     /// through the origin, its faces `apothem` out, from `y0` up to `y1`
     Disc { apothem: Fx, y0: Fx, y1: Fx },
+    /// T31: a prism along z whose cross-section, (x, up) as `Prism`'s, falls
+    /// or rises as it runs: at `from` it stands on `from_y`, at `to` on
+    /// `to_y` (the Tobogán's slide)
+    Sheared {
+        corners: [(Fx, Fx); 3],
+        from: Fx,
+        to: Fx,
+        from_y: Fx,
+        to_y: Fx,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -207,6 +217,74 @@ pub fn prism(corners: [(Fx, Fx); 3], along_z: bool, from: Fx, to: Fx, surface: S
     }
 }
 
+/// The sheared prism's six corners: each of its cross-section's at `from`
+/// then at `to`.
+fn sheared_corners(shape: &Shape) -> [V3; 6] {
+    let Shape::Sheared {
+        corners,
+        from,
+        to,
+        from_y,
+        to_y,
+    } = *shape
+    else {
+        return [V3::ZERO; 6];
+    };
+    let at = |c: (Fx, Fx), z: Fx, y: Fx| v3(c.0, c.1 + y, z);
+    [
+        at(corners[0], from, from_y),
+        at(corners[0], to, to_y),
+        at(corners[1], from, from_y),
+        at(corners[1], to, to_y),
+        at(corners[2], from, from_y),
+        at(corners[2], to, to_y),
+    ]
+}
+
+/// T31: a prism along z from `from` to `to`, its cross-section's corners
+/// (x, up) standing on `from_y` at one end and `to_y` at the other, so its
+/// faces fall or rise as it runs: a stretch of the Tobogán's slide. Its
+/// planes are the three sides, the two upright ends and the box round it.
+pub fn sheared(corners: [(Fx, Fx); 3], from: Fx, to: Fx, from_y: Fx, to_y: Fx, surface: Surface) -> Brush {
+    let shape = Shape::Sheared {
+        corners,
+        from,
+        to,
+        from_y,
+        to_y,
+    };
+    let c = sheared_corners(&shape);
+    let centre = c.iter().fold(V3::ZERO, |a, p| a.add(p.scale(ONE / 6)));
+    let run = c[1].sub(c[0]);
+    let mut planes = Vec::new();
+    for k in 0..3 {
+        let (a, b) = (c[2 * k], c[2 * ((k + 1) % 3)]);
+        let mut n = b.sub(a).cross(run).norm();
+        if n.dot(a.sub(centre)) < 0 {
+            n = n.neg();
+        }
+        planes.push(plane(n, a));
+    }
+    let (lo, hi) = (from.min(to), from.max(to));
+    planes.push(plane(v3(0, 0, -ONE), v3(0, 0, lo)));
+    planes.push(plane(v3(0, 0, ONE), v3(0, 0, hi)));
+    let mins = c
+        .iter()
+        .fold(c[0], |m, p| v3(m.x.min(p.x), m.y.min(p.y), m.z.min(p.z)));
+    let maxs = c
+        .iter()
+        .fold(c[0], |m, p| v3(m.x.max(p.x), m.y.max(p.y), m.z.max(p.z)));
+    planes.extend(box_planes(mins, maxs));
+    Brush {
+        planes,
+        mins,
+        maxs,
+        surface,
+        shape,
+        turn: Affine::IDENTITY,
+    }
+}
+
 /// How far out the disc's corners lie.
 fn disc_reach(shape: &Shape) -> Fx {
     match *shape {
@@ -278,6 +356,7 @@ pub fn turned(b: Brush, yaw: i32, to: V3) -> Brush {
             .iter()
             .flat_map(|c| [place(along_z, c.0, c.1, from), place(along_z, c.0, c.1, to)])
             .collect(),
+        Shape::Sheared { .. } => sheared_corners(&b.shape).to_vec(),
         Shape::Disc { y0, y1, .. } => disc_corners(&b.shape)
             .iter()
             .flat_map(|&(x, z)| [v3(x, y0, z), v3(x, y1, z)])
@@ -370,6 +449,19 @@ impl Brush {
                 // along x, or with its corners in the other order, runs its
                 // length the other way
                 let (c0, c1) = (br.sub(bl), top.sub(base_mid));
+                let c2 = if c0.dot(c1.cross(c2)) < 0 { c2.neg() } else { c2 };
+                (Mesh::Wedge, Affine { c0, c1, c2, t })
+            }
+            Shape::Sheared { .. } => {
+                // the unit wedge carried onto the middle cross-section, its
+                // length the run along z and the fall with it
+                let [a0, a1, b0, b1, c0_, c1_] = sheared_corners(&self.shape);
+                let mid = |p: V3, q: V3| p.add(q).scale(ONE / 2);
+                let (bl, br, top) = (mid(a0, a1), mid(b0, b1), mid(c0_, c1_));
+                let base_mid = mid(bl, br);
+                let (c0, c1) = (br.sub(bl), top.sub(base_mid));
+                let c2 = a1.sub(a0);
+                let t = mid(top, base_mid);
                 let c2 = if c0.dot(c1.cross(c2)) < 0 { c2.neg() } else { c2 };
                 (Mesh::Wedge, Affine { c0, c1, c2, t })
             }
@@ -635,13 +727,16 @@ mod tests {
             int(10),
             Surface::Ramp,
         ));
-        for (k, b) in m.brushes.iter().enumerate() {
-            let (_, a) = b.drawn();
-            let det = (a.c0.x as i64 * (a.c1.y as i64 * a.c2.z as i64 - a.c1.z as i64 * a.c2.y as i64)
-                - a.c0.y as i64 * (a.c1.x as i64 * a.c2.z as i64 - a.c1.z as i64 * a.c2.x as i64)
-                + a.c0.z as i64 * (a.c1.x as i64 * a.c2.y as i64 - a.c1.y as i64 * a.c2.x as i64))
-                .signum();
-            assert_eq!(det, 1, "brush {k} ({:?}) draws inside out", b.surface);
+        // T31: and every map's, the Tobogán's sheared prisms among them
+        for m in std::iter::once(m).chain(crate::maps::all()) {
+            for (k, b) in m.brushes.iter().enumerate() {
+                let (_, a) = b.drawn();
+                let det = (a.c0.x as i64 * (a.c1.y as i64 * a.c2.z as i64 - a.c1.z as i64 * a.c2.y as i64)
+                    - a.c0.y as i64 * (a.c1.x as i64 * a.c2.z as i64 - a.c1.z as i64 * a.c2.x as i64)
+                    + a.c0.z as i64 * (a.c1.x as i64 * a.c2.y as i64 - a.c1.y as i64 * a.c2.x as i64))
+                    .signum();
+                assert_eq!(det, 1, "{}: brush {k} ({:?}) draws inside out", m.name, b.surface);
+            }
         }
     }
 

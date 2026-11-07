@@ -363,15 +363,15 @@ mod tests {
                 Weapon::Navaja,
                 Weapon::Guadana,
                 Weapon::Punal,
-                Weapon::Katana,
-                Weapon::Navaja
+                Weapon::Garrocha,
+                Weapon::Katana
             ]
         );
         // from a gun, E takes the melee weapon last held
         a.tick(&rec(SLOT_8, false));
         a.tick(&rec(0, false));
         a.tick(&rec(MELEE, false));
-        assert_eq!(a.weapon, Weapon::Navaja);
+        assert_eq!(a.weapon, Weapon::Katana);
     }
 
     #[test]

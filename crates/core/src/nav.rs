@@ -50,8 +50,9 @@ impl Nav {
         for cz in 0..h {
             for cx in 0..w {
                 let mid = Nav::middle_of(x0 + cx, z0 + cz);
-                let under = v3(mid.x, -ONE / 2, mid.z);
-                open[(cz * w + cx) as usize] = floors.iter().any(|b| b.holds(under));
+                // T31: just under each floor's own top, wherever it stands
+                let under = |b: &&crate::map::Brush| v3(mid.x, b.maxs.y - ONE / 2, mid.z);
+                open[(cz * w + cx) as usize] = floors.iter().any(|b| b.holds(under(b)));
             }
         }
         for br in map.brushes.iter().filter(|b| b.surface != Surface::Floor) {
@@ -226,5 +227,15 @@ mod tests {
         assert!(!nav.is_open(v3(d, 0, d)), "28.6 m out on the diagonal");
         assert!(nav.is_open(v3(0, 0, int(20))), "the foot of a stand");
         assert!(nav.is_open(v3(int(14), 0, int(14))), "inside the ring");
+    }
+
+    /// T31: the Tobogán's floors stand 90 m apart in height: the platform
+    /// and the arena are open, and the sky between them is not.
+    #[test]
+    fn on_the_tobogan_the_platform_and_the_arena_are_open_and_the_sky_between_is_not() {
+        let nav = Nav::of(&crate::maps::tobogan());
+        assert!(nav.is_open(v3(int(4), int(90), int(246))), "the platform");
+        assert!(nav.is_open(v3(int(8), 0, -int(60))), "the arena");
+        assert!(!nav.is_open(v3(int(4), 0, int(120))), "under the slide");
     }
 }

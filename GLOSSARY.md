@@ -74,6 +74,12 @@ A fortress courtyard: ramparts along two sides, too high for a jump, a tower in 
 
 Not: castle map, fort
 
+### Arrabal
+
+A quarter of houses on a grid of streets, twice as wide as the first maps, with a surf ramp up a house on each side of its square.
+
+Not: town, city map
+
 ### Bot
 
 A seat played by the game. It moves and shoots only through the same keys and mouse a person's seat uses.
@@ -102,6 +108,12 @@ Not: ricochet gun
 
 A melee swing's path, picked by how your view turns as you swing: across a level cut, down a chop, up a rising cut. Between them it cuts on the diagonal; turning too little, the katana and guadaña cut level each way in turn and a knife thrusts.
 
+### Dehesa
+
+A pasture of holm oaks twice as wide as the first maps: a trunk to wall jump off wherever you are, two long ridges to surf and a well at its centre.
+
+Not: pasture map, forest
+
 ### Drum launcher
 
 A gun drawn true that throws bouncing grenades. Each bursts when it meets a body or its fuse runs out.
@@ -125,6 +137,12 @@ Not: deaf man
 A long hall with rooms of paintings off it, some tall enough to climb wall to wall.
 
 Not: museum, gallery map
+
+### Garrocha
+
+A picador's pole drawn true, long and slow. Wound back for a long moment, it flings you along your aim faster than anything else can, its point striking whoever it meets.
+
+Not: lance, spear, pole vault
 
 ### Guadaña
 
@@ -270,6 +288,12 @@ The sidearm every player starts with.
 
 Not: handgun, sidearm pistol
 
+### Sierra
+
+Four long ridges to surf, each cut by a pass at its middle, with rocks in the valleys between; twice as wide as the first maps.
+
+Not: mountains, hills map
+
 ### Skin
 
 How a player looks: the Hidalgo, the Infanta, the Harlequin, El Sordo, the Friar or the Torero. Every skin is hit the same.
@@ -311,6 +335,12 @@ Not: princess
 A skin after Zuloaga: a suit of lights in green and gold, pink stockings, a black two-lobed hat and a pink cape over one shoulder.
 
 Not: matador, bullfighter
+
+### Tobogán
+
+A slide from a platform high in the sky: a trough of two surf faces that falls, levels and rises to a jump into a walled arena. Off its sides is a fall to your death.
+
+Not: slide map, chute
 
 ### Toro
 

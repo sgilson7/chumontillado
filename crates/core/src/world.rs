@@ -1204,12 +1204,14 @@ impl World {
             let along = facing(yaw, pitch).scale(weapons::LUNGE_SPEED.max(p.body.speed()));
             p.body.velocity = v3(along.x, along.y.max(weapons::LUNGE_LIFT), along.z);
             p.body.on_ground = false;
+        } else if sw.launch > 0 {
+            // T30: the garrocha flings you once wound up (`swings`)
         } else {
             p.body.velocity = p.body.velocity.add(facing(yaw, 0).scale(sw.carry));
         }
         // T23: the cut the flick picks; none, a level cut the other way
         // from the last, or a knife's thrust
-        let cut = match (lunge, weapons::cut_of(p.flick)) {
+        let cut = match (lunge || sw.launch > 0, weapons::cut_of(p.flick)) {
             (true, _) => None,
             (false, Some(c)) => Some(c),
             (false, None) if sw.thrusts => None,
@@ -1255,6 +1257,25 @@ impl World {
             });
             if s.weapon == Weapon::Katana && !s.lunge && s.age <= weapons::PARRY {
                 self.parry(id, eye, aim);
+            }
+            // T30: the garrocha, wound up, flings you along the aim; put
+            // away before then, it does nothing
+            if sw.launch > 0 && s.age <= sw.from && self.players[id].arms.weapon != s.weapon {
+                self.players[id].swing = None;
+                continue;
+            }
+            if sw.launch > 0 && s.age == sw.from {
+                // off the ground as the lunge leaves it, or friction eats
+                // the fling within a third of a second
+                let p = &mut self.players[id];
+                let along = aim.scale(sw.launch);
+                let up = if p.body.on_ground {
+                    along.y.max(weapons::LUNGE_LIFT)
+                } else {
+                    along.y
+                };
+                p.body.velocity = v3(along.x, up, along.z);
+                p.body.on_ground = false;
             }
             let (from, until) = if s.lunge {
                 (1, weapons::LUNGE_TICKS)

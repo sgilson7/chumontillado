@@ -715,8 +715,11 @@ impl<'a> Mover<'a> {
                 break;
             }
             let mut end = b.origin.add(b.velocity.scale(time_left));
-            if count > 0 {
-                end = end.add(planes[count - 1].scale(self.t.snag_offset));
+            // off the one face met, by a hair, so a seam does not snag; in
+            // a crease between two (T31: the Tobogán's trough), a nudge off
+            // one is a push into the other, and the box never moves
+            if count == 1 {
+                end = end.add(planes[0].scale(self.t.snag_offset));
             }
             let t = self.trace(b, b.origin, end);
             moved += t.fraction;
@@ -768,13 +771,25 @@ impl<'a> Mover<'a> {
                     i += 1;
                 }
                 if i == count {
-                    // along the crease of two planes
-                    if count != 2 {
-                        b.velocity = V3::ZERO;
-                        break;
+                    // along the crease of two planes. T31: met by more, as
+                    // at a bend in the Tobogán's trough, along the crease
+                    // of the first two whose crease runs clear of the rest
+                    // (Quake III's way); Source stops dead there
+                    let along = |a: usize, c: usize| {
+                        let dir = planes[a].cross(planes[c]).norm();
+                        dir.scale(dir.dot(b.velocity))
+                    };
+                    let crease = (0..count)
+                        .flat_map(|a| (a + 1..count).map(move |c| (a, c)))
+                        .map(|(a, c)| (along(a, c), a, c))
+                        .find(|&(v, a, c)| (0..count).all(|j| j == a || j == c || v.dot(planes[j]) >= 0));
+                    match crease {
+                        Some((v, _, _)) => b.velocity = v,
+                        None => {
+                            b.velocity = V3::ZERO;
+                            break;
+                        }
                     }
-                    let dir = planes[0].cross(planes[1]).norm();
-                    b.velocity = dir.scale(dir.dot(b.velocity));
                 }
                 // back against the way it came: stop, so a corner does not
                 // make it shake

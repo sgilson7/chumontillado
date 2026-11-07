@@ -38,9 +38,11 @@ pub enum Weapon {
     Guadana = 12,
     // asked for on 2026-11-04 (T16): the high-jumping knife
     Punal = 13,
+    // T30: the picador's pole, wound up long, that flings you along the aim
+    Garrocha = 14,
 }
 
-pub const COUNT: usize = 14;
+pub const COUNT: usize = 15;
 pub const ALL: [Weapon; COUNT] = [
     Weapon::Pistol,
     Weapon::Shotgun,
@@ -56,10 +58,17 @@ pub const ALL: [Weapon; COUNT] = [
     Weapon::Navaja,
     Weapon::Guadana,
     Weapon::Punal,
+    Weapon::Garrocha,
 ];
 /// The guns take the number keys 1 to 0 in this order; the melee key takes
-/// the four melee weapons in turn.
-pub const MELEE: [Weapon; 4] = [Weapon::Katana, Weapon::Navaja, Weapon::Guadana, Weapon::Punal];
+/// the five melee weapons in turn.
+pub const MELEE: [Weapon; 5] = [
+    Weapon::Katana,
+    Weapon::Navaja,
+    Weapon::Guadana,
+    Weapon::Punal,
+    Weapon::Garrocha,
+];
 
 /// How a weapon reaches what it hits.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -142,6 +151,9 @@ pub struct Swing {
     /// T23: with no flick it thrusts straight ahead, in `half_arc` of the
     /// aim (the knives), rather than cut level
     pub thrusts: bool,
+    /// T30: the speed a swing flings you along the aim once wound up, at
+    /// its `from` tick (m/s); 0 for none (the garrocha's 50)
+    pub launch: Fx,
 }
 
 /// A weapon's numbers. Rates are in ticks (60 a second).
@@ -218,6 +230,7 @@ const SWING: Swing = Swing {
     wall_jumps: 3,
     jump_pct: 100,
     thrusts: false,
+    launch: 0,
 };
 
 /// The beat every semi-automatic gun's and melee weapon's interval, and
@@ -418,7 +431,8 @@ pub const WEAPONS: [Stats; COUNT] = [
     Stats {
         name: "melee_katana",
         kind: Kind::Melee(Swing {
-            reach: ONE * 16 / 10,
+            // T30: every blade reaches half as far again: 2.4 m, was 1.6
+            reach: ONE * 24 / 10,
             half_arc: fx::deg(50),
             carry: ONE,
             alt: Alt::Lunge,
@@ -432,7 +446,7 @@ pub const WEAPONS: [Stats; COUNT] = [
     Stats {
         name: "melee_navaja",
         kind: Kind::Melee(Swing {
-            reach: ONE * 11 / 10,
+            reach: ONE * 165 / 100,
             half_arc: fx::deg(35),
             from: 1,
             until: 5,
@@ -448,7 +462,7 @@ pub const WEAPONS: [Stats; COUNT] = [
     Stats {
         name: "melee_guadana",
         kind: Kind::Melee(Swing {
-            reach: ONE * 25 / 10,
+            reach: ONE * 375 / 100,
             half_arc: fx::deg(65),
             from: 6,
             until: 14,
@@ -465,7 +479,7 @@ pub const WEAPONS: [Stats; COUNT] = [
     Stats {
         name: "melee_punal",
         kind: Kind::Melee(Swing {
-            reach: ONE,
+            reach: ONE * 15 / 10,
             half_arc: fx::deg(30),
             from: 1,
             until: 5,
@@ -477,7 +491,29 @@ pub const WEAPONS: [Stats; COUNT] = [
         interval: BEAT / 2,
         ..HITSCAN
     },
+    // T30: the garrocha, a picador's pole 3 m long: a second and a half
+    // wound back, then it flings you along the aim at 50 m/s, its iron
+    // point striking what it meets for the lunge's ticks
+    Stats {
+        name: "melee_garrocha",
+        kind: Kind::Melee(Swing {
+            reach: ONE * 3,
+            half_arc: fx::deg(25),
+            from: GARROCHA_WINDUP,
+            until: GARROCHA_WINDUP + LUNGE_TICKS,
+            launch: int(50),
+            thrusts: true,
+            ..SWING
+        }),
+        damage: 100,
+        interval: BEAT * 4,
+        ..HITSCAN
+    },
 ];
+
+/// T30: the garrocha's wind-up (ticks), a beat and a half of the tempo's
+/// 120: three beats, 1.5 s.
+pub const GARROCHA_WINDUP: i32 = BEAT * 3;
 
 /// A head takes twice a body's damage.
 pub const HEAD_PCT: i32 = 200;
@@ -1040,16 +1076,33 @@ mod tests {
         );
     }
 
+    /// Sam, T30: "make the slash distance of all melee weapons about 1.5x
+    /// as long". Each blade's reach before (m), and half as far again now.
+    #[test]
+    fn every_blade_reaches_half_as_far_again_as_before() {
+        let before = [
+            (Weapon::Katana, ONE * 16 / 10),
+            (Weapon::Navaja, ONE * 11 / 10),
+            (Weapon::Guadana, ONE * 25 / 10),
+            (Weapon::Punal, ONE),
+        ];
+        for (g, was) in before {
+            // within the rounding of a tenth in Q16
+            let now = g.swing().unwrap().reach;
+            assert!((now - was * 3 / 2).abs() <= 1, "{g:?}: {now}");
+        }
+    }
+
     #[test]
     fn a_katana_swing_reaches_a_body_whose_edge_is_within_its_reach_and_in_its_arc() {
         let k = Weapon::Katana.swing().unwrap();
         let eye = v3(0, ONE * 165 / 100, 0);
         let north = v3(0, 0, -ONE);
         let at = |x: Fx, z: Fx| Target::of(v3(x, 0, z), ONE * 165 / 100);
-        // 2 m off: its edge 2 − 0.48 = 1.52 m, within the 1.6
-        assert!(in_arc(&k, eye, north, &at(0, -int(2))));
-        // 2.2 m off: 1.72, past it
-        assert!(!in_arc(&k, eye, north, &at(0, -(ONE * 22 / 10))));
+        // 2.8 m off: its edge 2.8 − 0.48 = 2.32 m, within the 2.4 (T30)
+        assert!(in_arc(&k, eye, north, &at(0, -(ONE * 28 / 10))));
+        // 3 m off: 2.52, past it
+        assert!(!in_arc(&k, eye, north, &at(0, -int(3))));
         // 45° to the side at the same distance: within the 50° arc
         assert!(in_arc(&k, eye, north, &at(ONE * 14 / 10, -(ONE * 14 / 10))));
         // square to the side, and behind: no
@@ -1119,7 +1172,7 @@ mod tests {
 
     /// T23 (CS-Q28: A): a cut meets what its arc passes, not what lies off
     /// its plane. From an eye 1.65 m up looking along −z, the katana's arc
-    /// is 50° each side and reaches 1.6 m past a body's edge.
+    /// is 50° each side and reaches 2.4 m past a body's edge (T30).
     #[test]
     fn a_cut_meets_what_its_arc_passes_and_not_what_lies_off_its_plane() {
         let s = katana();

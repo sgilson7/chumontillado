@@ -78,6 +78,7 @@ pub const KICK: [(i32, i32, i32); COUNT] = [
     (0, 0, 0),    // navaja
     (0, 0, 0),    // guadaña
     (0, 0, 0),    // puñal
+    (0, 0, 0),    // garrocha
 ];
 
 /// The view's tip up after a shot, angle units: the weapon's kick at the
@@ -265,6 +266,7 @@ fn blade(g: Weapon) -> Option<([i32; 3], [i32; 3])> {
         Weapon::Navaja => Some(([0, 2, -10], [0, 2, -25])),
         Weapon::Guadana => Some(([0, 0, -79], [-33, 6, -78])),
         Weapon::Punal => Some(([0, 2, -8], [0, 2, -38])),
+        Weapon::Garrocha => Some(([0, 2, -200], [0, 2, -262])),
         _ => None,
     }
 }
@@ -469,6 +471,14 @@ pub fn gun_parts(g: Weapon, pal: &Palette) -> Vec<GunPart> {
             part(Mesh::Cube, [0, 1, 1], [3, 3, 12], dark, Role::Fixed),
             part(Mesh::Sphere, [0, 1, 8], [4, 4, 4], brass, Role::Fixed),
             part(Mesh::Cube, [0, -4, 10], [2, 8, 2], red, Role::Fixed),
+        ],
+        // T30: a picador's pole: a long ash shaft, a red cord wound at the
+        // grip and an iron point with a stop below it
+        Weapon::Garrocha => vec![
+            part(Mesh::Cube, [0, 2, -115], [3, 3, 270], wood, Role::Fixed),
+            part(Mesh::Cube, [0, 2, 4], [4, 4, 14], red, Role::Fixed),
+            part(Mesh::Cube, [0, 2, -246], [6, 6, 3], steel, Role::Fixed),
+            part(Mesh::Cube, [0, 2, -256], [2, 2, 14], steel, Role::Fixed),
         ],
         // a painted scythe: a long shaft, the blade across its end
         Weapon::Guadana => vec![

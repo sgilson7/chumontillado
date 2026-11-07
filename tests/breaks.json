@@ -205,8 +205,8 @@
   {
     "name": "R1.15 a wedge keeps its handedness",
     "file": "crates/core/src/map.rs",
-    "find": "                let c2 = if c0.dot(c1.cross(c2)) < 0 { c2.neg() } else { c2 };",
-    "replace": "                let c2 = c2;",
+    "find": "                let (c0, c1) = (br.sub(bl), top.sub(base_mid));\n                let c2 = if c0.dot(c1.cross(c2)) < 0 { c2.neg() } else { c2 };",
+    "replace": "                let (c0, c1) = (br.sub(bl), top.sub(base_mid));\n                let c2 = c2;",
     "test": "every_drawn_brush_keeps_its_handedness_so_none_draws_inside_out"
   },
   {
@@ -1437,8 +1437,8 @@
   {
     "name": "T16 the melee key reaches the puñal",
     "file": "crates/core/src/weapons.rs",
-    "find": "pub const MELEE: [Weapon; 4] = [Weapon::Katana, Weapon::Navaja, Weapon::Guadana, Weapon::Punal];",
-    "replace": "pub const MELEE: [Weapon; 4] = [Weapon::Katana, Weapon::Navaja, Weapon::Guadana, Weapon::Guadana];",
+    "find": "    Weapon::Guadana,\n    Weapon::Punal,\n    Weapon::Garrocha,\n];\n\n/// How a weapon",
+    "replace": "    Weapon::Guadana,\n    Weapon::Guadana,\n    Weapon::Garrocha,\n];\n\n/// How a weapon",
     "test": "six_to_zero_take_the_projectile_guns_and_e_takes_the_melee_weapons_in_turn"
   },
   {
@@ -1976,8 +1976,8 @@
   {
     "name": "T28 a nav cell with no floor under it is shut",
     "file": "crates/core/src/nav.rs",
-    "find": "open[(cz * w + cx) as usize] = floors.iter().any(|b| b.holds(under));",
-    "replace": "open[(cz * w + cx) as usize] = floors.iter().any(|b| b.holds(under)) || true;",
+    "find": "floors.iter().any(|b| b.holds(under(b)));",
+    "replace": "floors.iter().any(|b| b.holds(under(b))) || true;",
     "test": "behind_the_plazas_stands_no_cell_is_open"
   },
   {
@@ -1985,7 +1985,7 @@
     "file": "crates/core/src/map.rs",
     "find": "        floors.fold((self.brushes[0].mins, self.brushes[0].maxs), |(lo, hi), b| {",
     "replace": "        floors.take(1).fold((self.brushes[0].mins, self.brushes[0].maxs), |(lo, hi), b| {",
-    "test": "behind_the_plazas_stands_no_cell_is_open"
+    "test": "on_the_tobogan_the_platform_and_the_arena_are_open_and_the_sky_between_is_not"
   },
   {
     "name": "T28b map surfaces alike in one plane fight (their rims show)",
@@ -2042,5 +2042,138 @@
     "find": "        let (c, d) = (at(j + 1, H), at(j, H));\n        quad(&mut o, a, b, c, d);\n        tri(&mut o, b, a, v3(0, -H, 0));",
     "replace": "        let (c, d) = (at(j + 1, H), at(j, H));\n        quad(&mut o, a, b, c, d);\n        tri(&mut o, a, b, v3(0, -H, 0));",
     "test": "every_new_shape_winds_its_faces_outward"
+  },
+  {
+    "name": "T30 the katana reaches half as far again",
+    "file": "crates/core/src/weapons.rs",
+    "find": "            reach: ONE * 24 / 10,",
+    "replace": "            reach: ONE * 16 / 10,",
+    "test": "a_katana_swing_reaches_a_body_whose_edge_is_within_its_reach_and_in_its_arc"
+  },
+  {
+    "name": "T30 the navaja reaches half as far again",
+    "file": "crates/core/src/weapons.rs",
+    "find": "            reach: ONE * 165 / 100,",
+    "replace": "            reach: ONE * 11 / 10,",
+    "test": "every_blade_reaches_half_as_far_again_as_before"
+  },
+  {
+    "name": "T30 the guadaña reaches half as far again",
+    "file": "crates/core/src/weapons.rs",
+    "find": "            reach: ONE * 375 / 100,",
+    "replace": "            reach: ONE * 25 / 10,",
+    "test": "every_blade_reaches_half_as_far_again_as_before"
+  },
+  {
+    "name": "T30 the puñal reaches half as far again",
+    "file": "crates/core/src/weapons.rs",
+    "find": "            reach: ONE * 15 / 10,\n            half_arc: fx::deg(30),",
+    "replace": "            reach: ONE,\n            half_arc: fx::deg(30),",
+    "test": "every_blade_reaches_half_as_far_again_as_before"
+  },
+  {
+    "name": "T30 the garrocha flings at 50 m/s",
+    "file": "crates/core/src/weapons.rs",
+    "find": "            launch: int(50),",
+    "replace": "            launch: int(16),",
+    "test": "a_garrocha_wound_up_flings_you_along_the_aim_at_fifty_and_its_point_fells_what_it_meets"
+  },
+  {
+    "name": "T30 the garrocha winds up before it flings",
+    "file": "crates/core/src/world.rs",
+    "find": "            if sw.launch > 0 && s.age == sw.from {",
+    "replace": "            if sw.launch > 0 && s.age == 1 {",
+    "test": "a_garrocha_wound_up_flings_you_along_the_aim_at_fifty_and_its_point_fells_what_it_meets"
+  },
+  {
+    "name": "T30 a garrocha put away while winding up flings no one",
+    "file": "crates/core/src/world.rs",
+    "find": "            if sw.launch > 0 && s.age <= sw.from && self.players[id].arms.weapon != s.weapon {",
+    "replace": "            if false {",
+    "test": "a_garrocha_wound_up_flings_you_along_the_aim_at_fifty_and_its_point_fells_what_it_meets"
+  },
+  {
+    "name": "T30 the garrocha's fling leaves the ground",
+    "file": "crates/core/src/world.rs",
+    "find": "                    along.y.max(weapons::LUNGE_LIFT)\n                } else {",
+    "replace": "                    along.y\n                } else {",
+    "test": "a_garrocha_wound_up_flings_you_along_the_aim_at_fifty_and_its_point_fells_what_it_meets"
+  },
+  {
+    "name": "T30 E takes the garrocha in turn",
+    "file": "crates/core/src/weapons.rs",
+    "find": "    Weapon::Punal,\n    Weapon::Garrocha,\n];\n\n/// How a weapon",
+    "replace": "    Weapon::Punal,\n    Weapon::Katana,\n];\n\n/// How a weapon",
+    "test": "six_to_zero_take_the_projectile_guns_and_e_takes_the_melee_weapons_in_turn"
+  },
+  {
+    "name": "T31 the wide maps space what to move off up to 12 m apart",
+    "file": "crates/core/src/maps.rs",
+    "find": "    if WIDE.contains(&m.name) {\n        12",
+    "replace": "    if WIDE.contains(&m.name) {\n        6",
+    "test": "every_place_on_every_map_has_something_to_move_off_within_six_metres"
+  },
+  {
+    "name": "T31 the Tobogán's trough runs down to its lip",
+    "file": "crates/core/src/maps.rs",
+    "find": "    (30, 2560),\n];",
+    "replace": "    (30, 6560),\n];",
+    "test": "down_the_toboga_n_and_over_its_jump_you_land_in_the_arena_and_off_its_side_you_die"
+  },
+  {
+    "name": "T31 the Tobogán's arena reaches back to catch the jump",
+    "file": "crates/core/src/maps.rs",
+    "find": "    let mut bs = vec![b(-44, -1, -160, 44, 0, 20, Surface::Floor)];",
+    "replace": "    let mut bs = vec![b(-44, -1, -40, 44, 0, 20, Surface::Floor)];",
+    "test": "down_the_toboga_n_and_over_its_jump_you_land_in_the_arena_and_off_its_side_you_die"
+  },
+  {
+    "name": "T31 a sheared prism's faces look out",
+    "file": "crates/core/src/map.rs",
+    "find": "        if n.dot(a.sub(centre)) < 0 {\n            n = n.neg();\n        }",
+    "replace": "",
+    "test": "down_the_toboga_n_and_over_its_jump_you_land_in_the_arena_and_off_its_side_you_die"
+  },
+  {
+    "name": "T31 a nudge off a face only when one is met",
+    "file": "crates/core/src/movement.rs",
+    "find": "            if count == 1 {\n                end = end.add(planes[0].scale(self.t.snag_offset));",
+    "replace": "            if count > 0 {\n                end = end.add(planes[count - 1].scale(self.t.snag_offset));",
+    "test": "down_the_toboga_n_and_over_its_jump_you_land_in_the_arena_and_off_its_side_you_die"
+  },
+  {
+    "name": "T31 among three faces or more, along a crease that runs clear",
+    "file": "crates/core/src/movement.rs",
+    "find": "                        Some((v, _, _)) => b.velocity = v,",
+    "replace": "                        Some(_) if count != 2 => {\n                            b.velocity = V3::ZERO;\n                            break;\n                        }\n                        Some((v, _, _)) => b.velocity = v,",
+    "test": "down_the_toboga_n_and_over_its_jump_you_land_in_the_arena_and_off_its_side_you_die"
+  },
+  {
+    "name": "T31 a nav cell is open over any floor at its own height",
+    "file": "crates/core/src/nav.rs",
+    "find": "                let under = |b: &&crate::map::Brush| v3(mid.x, b.maxs.y - ONE / 2, mid.z);",
+    "replace": "                let under = |_: &&crate::map::Brush| v3(mid.x, -ONE / 2, mid.z);",
+    "test": "on_the_tobogan_the_platform_and_the_arena_are_open_and_the_sky_between_is_not"
+  },
+  {
+    "name": "T31 the Sierra's passes are wide enough for bots to find you",
+    "file": "crates/core/src/maps.rs",
+    "find": "        for (from, to) in [(-52, -12), (12, 52)] {",
+    "replace": "        for (from, to) in [(-52, -4), (4, 52)] {",
+    "test": "a_lone_bot_finds_and_fells_a_person_standing_still_on_every_map"
+  },
+  {
+    "name": "T31 the Plaza and the Tobogán alone stand without walls",
+    "file": "crates/core/src/maps.rs",
+    "find": "    bs.push(b(-46, 0, -162, -44, 24, 20, Surface::Block));",
+    "replace": "    bs.push(b(-46, 0, -162, -44, 24, 20, Surface::Wall));",
+    "test": "every_maps_walls_stand_at_the_edge_of_its_inside"
+  },
+  {
+    "name": "T31 a sheared prism keeps its handedness",
+    "file": "crates/core/src/map.rs",
+    "find": "                let t = mid(top, base_mid);\n                let c2 = if c0.dot(c1.cross(c2)) < 0 { c2.neg() } else { c2 };",
+    "replace": "                let t = mid(top, base_mid);\n                let c2 = c2;",
+    "test": "every_drawn_brush_keeps_its_handedness_so_none_draws_inside_out"
   }
 ]

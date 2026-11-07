@@ -988,11 +988,11 @@ fn a_katana_swing_hits_a_straw_target_within_reach_once_and_misses_one_beyond() 
         run(&mut w, Input::default(), 12);
         w.dummies[0].health
     };
-    // the target at z = −4: from −2, its edge 1.52 m off, within the 1.6;
-    // one swing, 50, however many of its active ticks it is in the arc
-    assert_eq!(swing_from(-200), 50);
-    // from −1.8, 1.72 m: out of reach
-    assert_eq!(swing_from(-180), HEALTH);
+    // the target at z = −4: from −1.2, its edge 2.32 m off, within the 2.4
+    // (T30); one swing, 50, however many of its active ticks it is in the arc
+    assert_eq!(swing_from(-120), 50);
+    // from −1, 2.52 m: out of reach
+    assert_eq!(swing_from(-100), HEALTH);
 }
 
 /// T23 (CS-Q27: A): the view's turn as the button goes down picks the cut:
@@ -1790,14 +1790,16 @@ fn a_player_fallen_twenty_metres_below_the_map_is_felled_and_one_above_is_not() 
 
 /// T27: on every walled map the walls' inner faces stand where
 /// `Map::inside` says, the floor reaching a metre past them. T28: the Plaza
-/// alone has no walls and no inside.
+/// has no walls and no inside, and (T31) the Tobogán.
 #[test]
 fn every_maps_walls_stand_at_the_edge_of_its_inside() {
     let mut maps = crate::maps::all().to_vec();
     maps.push(crate::map::practice());
     for m in &maps {
         assert_eq!(m.brushes[0].surface, crate::map::Surface::Floor, "{}", m.name);
-        assert_eq!(m.inside().is_none(), m.name == "map_plaza", "{}", m.name);
+        // T31: nor the Tobogán, whose arena is walled in stone blocks
+        let open = ["map_plaza", "map_tobogan"].contains(&m.name);
+        assert_eq!(m.inside().is_none(), open, "{}", m.name);
         let Some((lo, hi)) = m.inside() else { continue };
         let walls: Vec<_> = m
             .brushes
@@ -1886,4 +1888,82 @@ fn over_the_top_of_the_plazas_stands_is_a_fall_off_the_map() {
     }
     assert!(out, "it went over the top");
     assert!(!w.players[0].alive(), "felled by the fall");
+}
+
+/// Sam, T30: "a melee weapon that has a long wind up time but then fires
+/// you in the direction you are aiming at 50 m/s". The garrocha does
+/// nothing through its wind-up, then flings you north at 50 m/s, and its
+/// point fells the straw target 12 m ahead; put away while winding up, it
+/// flings no one.
+#[test]
+fn a_garrocha_wound_up_flings_you_along_the_aim_at_fifty_and_its_point_fells_what_it_meets() {
+    let mut w = settled(Bot::Moves);
+    w.players[0].body.origin = v3(int(8), 0, int(8));
+    holding(&mut w, Weapon::Garrocha);
+    // the press is the swing's first tick
+    w.step(&[fire()]);
+    for t in 2..weapons::GARROCHA_WINDUP {
+        w.step(&[Input::default()]);
+        assert!(w.players[0].body.speed() < int(1), "still, winding up: tick {t}");
+    }
+    w.step(&[Input::default()]);
+    let v = w.players[0].body.velocity;
+    assert!(near(v.z, -int(50), ONE), "flung north at 50: {v:?}");
+    assert!(v.x.abs() < ONE / 10);
+    run(&mut w, Input::default(), 20);
+    assert_eq!(w.dummies[0].health, 0, "the point fells the target");
+
+    let mut w = settled(Bot::Moves);
+    holding(&mut w, Weapon::Garrocha);
+    w.step(&[fire()]);
+    run(&mut w, Input::default(), 30);
+    holding(&mut w, Weapon::Katana);
+    run(&mut w, Input::default(), weapons::GARROCHA_WINDUP as usize);
+    assert!(w.players[0].body.speed() < int(1), "put away, no fling");
+}
+
+/// Sam, T31: "a giant slide that you go down and at the bottom hit a huge
+/// jump then land in an arena ... and if you fall off the ramp you die".
+/// Let into the top of the Tobogán's trough and left alone, you slide to
+/// the lip, fly, and come down standing in the arena; just past its side
+/// partway down, you fall and are felled.
+#[test]
+fn down_the_toboga_n_and_over_its_jump_you_land_in_the_arena_and_off_its_side_you_die() {
+    let tobogan = (0..crate::maps::COUNT)
+        .find(|&k| crate::maps::map(k).name == "map_tobogan")
+        .unwrap();
+    let start = |at: V3, push: V3| {
+        // alone: no bot to shoot you on the way
+        let mut w = World::online(0b1, 0b1110, [0, 1, 2, 3]);
+        w.start_round(tobogan);
+        run(&mut w, Input::default(), crate::rounds::COUNT_TICKS as usize + 1);
+        let p = &mut w.players[0];
+        p.body = body_at(at);
+        p.body.velocity = push;
+        w
+    };
+    let top = v3(0, int(90), int(238));
+    let mut w = start(top, v3(0, 0, -int(2)));
+    let (mut fastest, mut highest_after_lip) = (0, 0);
+    for _ in 0..60 * 20 {
+        w.step(&[Input::default()]);
+        let b = &w.players[0].body;
+        fastest = fastest.max(b.speed());
+        if b.origin.z < int(30) {
+            highest_after_lip = highest_after_lip.max(b.origin.y);
+        }
+    }
+    let p = &w.players[0];
+    let (o, fast, high) = (p.body.origin, fastest / ONE, highest_after_lip / ONE);
+    assert!(p.alive(), "felled: at {o:?}, {fast} m/s at most");
+    assert!(
+        p.body.on_ground && o.y.abs() < ONE / 10 && o.z < int(20) && o.z > -int(160),
+        "down in the arena: at {o:?}, {fast} m/s at most, {high} m up past the lip"
+    );
+    assert!(fast > 35, "a slide fast enough to fly: {fast} m/s");
+
+    // just past the trough's edge halfway down, there is nothing under you
+    let mut w = start(v3(int(11), int(68), int(165)), V3::ZERO);
+    run(&mut w, Input::default(), 60 * 8);
+    assert!(!w.players[0].alive(), "off the side, felled by the fall");
 }

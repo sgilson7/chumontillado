@@ -13,11 +13,16 @@
 //! T13 added the Mercado, the Puerto and the Acueducto; T16 the Molino
 //! and the Alcázar, whose ramparts stand for the puñal's jump.
 //!
+//! T31 added three maps twice as wide, for hops at the speeds held jumps
+//! reach: the Dehesa, the Sierra and the Arrabal. On them, and in the
+//! Tobogán's arena, the rule is 12 m (`spacing`). The Tobogán is a slide
+//! from a platform high in the sky, a jump at its foot into an arena.
+//!
 //! Lengths in metres, y up. A seat's spawn faces the map's middle.
 
 use crate::fx::{self, int, Fx, ONE};
 use crate::geom::{v3, yaw_of, V3};
-use crate::map::{block, disc, prism, turned, Map, Surface};
+use crate::map::{block, disc, prism, sheared, turned, Map, Surface};
 use crate::weapons::Weapon;
 
 /// The maps in the order a match plays them.
@@ -31,11 +36,30 @@ pub fn all() -> [Map; COUNT] {
         acueducto(),
         molino(),
         alcazar(),
+        dehesa(),
+        sierra(),
+        arrabal(),
+        tobogan(),
     ]
 }
 
 /// How many maps a match goes round.
-pub const COUNT: usize = 8;
+pub const COUNT: usize = 12;
+
+/// T31: the twice-as-wide maps and the Tobogán, where nothing to move off
+/// need be nearer than 12 m.
+pub const WIDE: [&str; 4] = ["map_dehesa", "map_sierra", "map_arrabal", "map_tobogan"];
+
+/// How far from something to move off a place on `m`'s floor may be (m):
+/// 6 (CS-Q24: A), or 12 on the wide maps (T31: Sam, "double the 6m to 12m
+/// for inter-jump point spacing").
+pub fn spacing(m: &Map) -> i32 {
+    if WIDE.contains(&m.name) {
+        12
+    } else {
+        6
+    }
+}
 
 /// The map at place `k` in the order, built alone.
 pub fn map(k: usize) -> Map {
@@ -47,7 +71,11 @@ pub fn map(k: usize) -> Map {
         4 => puerto(),
         5 => acueducto(),
         6 => molino(),
-        _ => alcazar(),
+        7 => alcazar(),
+        8 => dehesa(),
+        9 => sierra(),
+        10 => arrabal(),
+        _ => tobogan(),
     }
 }
 
@@ -818,6 +846,268 @@ pub fn alcazar() -> Map {
     }
 }
 
+/// A spawn at (x, y, z) facing the point (fx, fz).
+fn spawn_at(x: i32, y: i32, z: i32, face_x: i32, face_z: i32) -> (V3, i32) {
+    (
+        v3(int(x), int(y), int(z)),
+        yaw_of(v3(int(face_x - x), 0, int(face_z - z))),
+    )
+}
+
+/// T31: the Dehesa, a pasture of holm oaks 128 m across, twice the width
+/// of the first eight maps: a trunk to wall jump off every 16 m, two long
+/// ridges to surf across its middle, and a well in the centre to circle.
+pub fn dehesa() -> Map {
+    let mut bs = yard(64, 64, 20);
+    // two ridges along x, 7 m high over 6 m each side (49°)
+    for z in [-24, 24] {
+        bs.push(prism(
+            [(int(z - 6), 0), (int(z + 6), 0), (int(z), int(7))],
+            false,
+            -int(40),
+            int(40),
+            Surface::Ramp,
+        ));
+    }
+    // the oaks: trunks 2 m thick and 9 m high on a 16 m grid, none under
+    // a ridge
+    for x in (0..8).map(|k: i32| k * 16 - 56) {
+        for z in (0..8).map(|k: i32| k * 16 - 56) {
+            if z.abs() == 24 && x.abs() <= 40 {
+                continue;
+            }
+            bs.push(pillar(int(x), int(z), int(2), int(9), Surface::Block));
+        }
+    }
+    // the well: 4 m across, a metre high
+    bs.push(pillar(0, 0, int(4), ONE, Surface::Block));
+    Map {
+        brushes: bs,
+        spawns: vec![
+            spawn(0, 48, 0, 0),
+            spawn(48, 0, 0, 0),
+            spawn(0, -48, 0, 0),
+            spawn(-48, 0, 0, 0),
+        ],
+        name: "map_dehesa",
+        pickups: vec![
+            (v3(0, ONE, 0), Weapon::Toro),
+            (v3(int(16), 0, 0), Weapon::Shotgun),
+            (v3(-int(16), 0, 0), Weapon::Drum),
+            (v3(0, 0, -int(12)), Weapon::Rifle),
+            (v3(0, 0, int(12)), Weapon::Katana),
+            (v3(int(32), 0, int(32)), Weapon::MachinePistol),
+            (v3(-int(32), 0, int(32)), Weapon::Collage),
+            (v3(int(32), 0, -int(32)), Weapon::Guadana),
+            (v3(-int(32), 0, -int(32)), Weapon::Trabuco),
+            (v3(int(48), 0, int(16)), Weapon::Punal),
+            (v3(-int(48), 0, -int(16)), Weapon::Garrocha),
+            (v3(int(16), 0, int(48)), Weapon::Campana),
+            (v3(-int(16), 0, -int(48)), Weapon::Pincel),
+        ],
+        bot_loop: vec![(16, -8), (16, 8), (-16, 8), (-16, -8)],
+    }
+}
+
+/// T31: the Sierra, 128 m across: four ridges run its length, 10 m high
+/// over 8 m each side (51°), each cut by a pass 24 m wide at its middle;
+/// rocks lie in the valleys between, and a pillar stands at the centre.
+pub fn sierra() -> Map {
+    let mut bs = yard(64, 64, 22);
+    for x in [-48, -16, 16, 48] {
+        for (from, to) in [(-52, -12), (12, 52)] {
+            bs.push(prism(
+                [(int(x - 8), 0), (int(x + 8), 0), (int(x), int(10))],
+                true,
+                int(from),
+                int(to),
+                Surface::Ramp,
+            ));
+        }
+    }
+    // rocks in the valleys, 3 m across and 5 m high, to wall jump off
+    for x in [-32, 0, 32] {
+        for z in [-28, 28] {
+            bs.push(pillar(int(x), int(z), int(3), int(5), Surface::Block));
+        }
+    }
+    bs.push(pillar(0, 0, int(2), int(8), Surface::Block));
+    Map {
+        brushes: bs,
+        spawns: vec![
+            spawn(0, 46, 0, 0),
+            spawn(32, 0, 0, 0),
+            spawn(0, -46, 0, 0),
+            spawn(-32, 0, 0, 0),
+        ],
+        name: "map_sierra",
+        pickups: vec![
+            (v3(0, 0, int(36)), Weapon::Toro),
+            (v3(0, 0, int(16)), Weapon::Shotgun),
+            (v3(0, 0, -int(16)), Weapon::Drum),
+            (v3(int(32), 0, int(16)), Weapon::Rifle),
+            (v3(-int(32), 0, -int(16)), Weapon::Katana),
+            (v3(int(32), 0, -int(46)), Weapon::MachinePistol),
+            (v3(-int(32), 0, int(46)), Weapon::Collage),
+            (v3(-int(32), 0, int(16)), Weapon::Guadana),
+            (v3(int(32), 0, -int(16)), Weapon::Trabuco),
+            (v3(int(60), 0, 0), Weapon::Punal),
+            (v3(-int(60), 0, 0), Weapon::Garrocha),
+            (v3(-int(32), 0, -int(46)), Weapon::Campana),
+            (v3(int(32), 0, int(46)), Weapon::Pincel),
+        ],
+        bot_loop: vec![(-4, 20), (4, 20), (4, -20), (-4, -20)],
+    }
+}
+
+/// How high the Arrabal's house at grid place (i, j) stands (m): 6 to 12.
+fn house_high(i: i32, j: i32) -> i32 {
+    6 + (i * 7 + j * 3).rem_euclid(4) * 2
+}
+
+/// T31: the Arrabal, a quarter of houses 128 m across: 24 houses 10 m
+/// square on a 24 m grid, streets 14 m wide between, a surf ramp up a
+/// house on each side of the square, and a fountain in the square.
+pub fn arrabal() -> Map {
+    let mut bs = yard(64, 64, 18);
+    for i in -2..=2 {
+        for j in -2..=2 {
+            if i == 0 && j == 0 {
+                continue;
+            }
+            let (x, z) = (i * 24, j * 24);
+            bs.push(b(x - 5, 0, z - 5, x + 5, house_high(i, j), z + 5, Surface::Wall));
+        }
+    }
+    // a surf ramp 6 m out up the face of each house beside the square
+    for (i, j) in [(0, 1), (1, 0), (0, -1), (-1, 0)] {
+        let high = int(house_high(i, j));
+        let ramp = prism(
+            [(int(13), 0), (int(19), 0), (int(19), high)],
+            false,
+            -int(5),
+            int(5),
+            Surface::Ramp,
+        );
+        // built against the house at +z, turned to the others
+        let a = yaw_of(v3(int(i), 0, int(j)));
+        bs.push(turned(ramp, a, V3::ZERO));
+    }
+    bs.push(pillar(0, 0, int(4), ONE * 8 / 10, Surface::Block));
+    bs.push(pillar(0, 0, ONE, int(3), Surface::Block));
+    Map {
+        brushes: bs,
+        spawns: vec![
+            spawn(0, 36, 0, 0),
+            spawn(36, 0, 0, 0),
+            spawn(0, -36, 0, 0),
+            spawn(-36, 0, 0, 0),
+        ],
+        name: "map_arrabal",
+        pickups: vec![
+            (v3(-int(24), int(house_high(-1, -1)), -int(24)), Weapon::Toro),
+            (v3(int(12), 0, int(12)), Weapon::Shotgun),
+            (v3(-int(12), 0, int(12)), Weapon::Drum),
+            (v3(int(12), 0, -int(12)), Weapon::Rifle),
+            (v3(-int(12), 0, -int(12)), Weapon::Katana),
+            (v3(int(36), 0, int(36)), Weapon::MachinePistol),
+            (v3(-int(36), 0, int(36)), Weapon::Collage),
+            (v3(int(36), 0, -int(36)), Weapon::Guadana),
+            (v3(-int(36), 0, -int(36)), Weapon::Trabuco),
+            (v3(int(60), 0, 0), Weapon::Punal),
+            (v3(-int(60), 0, 0), Weapon::Garrocha),
+            (v3(0, 0, int(60)), Weapon::Campana),
+            (v3(0, 0, -int(60)), Weapon::Pincel),
+        ],
+        bot_loop: vec![(12, 12), (-12, 12), (-12, -12), (12, -12)],
+    }
+}
+
+/// The Tobogán's slide: where its crease runs, (z, height in cm), from the
+/// platform down a long fall of 25°, easing to level and rising to the lip
+/// at 24°.
+pub const SLIDE: [(i32, i32); 6] = [
+    (240, 9000),
+    (90, 2000),
+    (70, 1575),
+    (60, 1575),
+    (45, 1890),
+    (30, 2560),
+];
+
+/// How high the slide's crease runs at `z` (between its first two points).
+fn crease_at(z: i32) -> Fx {
+    let ((z0, y0), (z1, y1)) = (SLIDE[0], SLIDE[1]);
+    (y1 + (y0 - y1) * (z - z1) / (z0 - z1)) * ONE / 100
+}
+
+/// T31: the Tobogán. Sam: "a giant slide that you go down and at the
+/// bottom hit a huge jump then land in an arena and battle with the
+/// weapons you found on the slide ... and if you fall off the ramp you
+/// die". A platform 90 m up opens onto a trough of two surf faces, 10 m out
+/// and 12 m up each side, that falls 150 m along at 25°, eases level and
+/// rises to a lip at 24°. Off its sides, or short of the arena, there is
+/// nothing to land on. The arena, 88 m by 180 m, is walled in stone on
+/// three sides; pillars and benches stand on a 16 m grid.
+pub fn tobogan() -> Map {
+    let mut bs = vec![b(-44, -1, -160, 44, 0, 20, Surface::Floor)];
+    // the arena's walls are stone blocks, not walls: walls hold everyone
+    // inside them (T27), and the slide stands outside
+    bs.push(b(-46, 0, -162, -44, 24, 20, Surface::Block));
+    bs.push(b(44, 0, -162, 46, 24, 20, Surface::Block));
+    bs.push(b(-44, 0, -162, 44, 30, -160, Surface::Block));
+    // pillars 8 m high, and down the middle, where the jump lands, benches
+    // a metre high
+    for x in [-32, -16, 0, 16, 32] {
+        for z in (0..11).map(|k| 12 - 16 * k) {
+            let high = if x == 0 { ONE } else { int(8) };
+            bs.push(pillar(int(x), int(z), int(2), high, Surface::Block));
+        }
+    }
+    // the platform
+    bs.push(b(-10, 89, 240, 10, 90, 252, Surface::Floor));
+    // the slide, a stretch at a time
+    for w in SLIDE.windows(2) {
+        let ((za, ya), (zb, yb)) = (w[0], w[1]);
+        let (ya, yb) = (ya * ONE / 100, yb * ONE / 100);
+        for side in [-1, 1] {
+            let (out, up) = (int(10) * side, int(12));
+            let corners = if side < 0 {
+                [(0, 0), (out, up), (out, 0)]
+            } else {
+                [(0, 0), (out, 0), (out, up)]
+            };
+            bs.push(sheared(corners, int(za), int(zb), ya, yb, Surface::Ramp));
+        }
+    }
+    let on_slide = |z: i32| v3(0, crease_at(z), int(z));
+    Map {
+        brushes: bs,
+        spawns: vec![
+            spawn_at(-6, 90, 248, -6, 0),
+            spawn_at(-2, 90, 248, -2, 0),
+            spawn_at(2, 90, 248, 2, 0),
+            spawn_at(6, 90, 248, 6, 0),
+        ],
+        name: "map_tobogan",
+        pickups: vec![
+            (on_slide(215), Weapon::Shotgun),
+            (on_slide(190), Weapon::Rifle),
+            (on_slide(165), Weapon::Drum),
+            (on_slide(140), Weapon::Katana),
+            (on_slide(115), Weapon::Toro),
+            (on_slide(100), Weapon::Garrocha),
+            (v3(-int(24), 0, -int(40)), Weapon::Guadana),
+            (v3(int(24), 0, -int(40)), Weapon::Punal),
+            (v3(-int(24), 0, -int(90)), Weapon::Trabuco),
+            (v3(int(24), 0, -int(90)), Weapon::Collage),
+            (v3(-int(24), 0, -int(120)), Weapon::MachinePistol),
+            (v3(int(24), 0, -int(120)), Weapon::Pincel),
+        ],
+        bot_loop: vec![(-8, -60), (8, -60), (8, -80), (-8, -80)],
+    }
+}
+
 /// How far `p` is from brush `br`: exact for a box (turned boxes are
 /// turned back first), and for a ramp the largest of its planes'
 /// distances, which never exceeds the true distance.
@@ -910,7 +1200,7 @@ mod tests {
                         .map(|br| distance_to(br, p))
                         .min()
                         .unwrap_or(int(999));
-                    if near > int(6) {
+                    if near > int(spacing(&m)) {
                         far.push((gx, gz, fx::decimal(near, 1)));
                     }
                 }
@@ -948,8 +1238,9 @@ mod tests {
     }
 
     #[test]
-    fn a_match_goes_round_the_eight_maps_in_turn() {
-        // T16 added the Molino and the Alcázar after the six
+    fn a_match_goes_round_the_twelve_maps_in_turn() {
+        // T16 added the Molino and the Alcázar after the six; T31 the
+        // Dehesa, the Sierra, the Arrabal and the Tobogán
         let names: Vec<&str> = all().iter().map(|m| m.name).collect();
         assert_eq!(
             names,
@@ -961,7 +1252,11 @@ mod tests {
                 "map_puerto",
                 "map_acueducto",
                 "map_molino",
-                "map_alcazar"
+                "map_alcazar",
+                "map_dehesa",
+                "map_sierra",
+                "map_arrabal",
+                "map_tobogan"
             ]
         );
         for (k, n) in names.iter().enumerate() {
