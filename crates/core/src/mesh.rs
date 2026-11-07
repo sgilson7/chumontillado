@@ -203,6 +203,34 @@ pub fn taper() -> Vec<i32> {
     o
 }
 
+/// T28: the disc's sides.
+pub const DISC_SIDES: i32 = 32;
+
+/// A corner of the disc's rim: `j` of `DISC_SIDES` round, half a side on
+/// from the way (sin, cos) of `j` sides, so a face looks each such way.
+pub fn disc_corner(j: i32, r: i32) -> (i32, i32) {
+    let a = fx::TURN * (2 * j + 1) / (2 * DISC_SIDES);
+    (fx::mul(fx::sin(a), r), fx::mul(fx::cos(a), r))
+}
+
+/// A flat-sided column of `DISC_SIDES`, its corners on a circle of radius
+/// a half: the Plaza's floor.
+pub fn disc() -> Vec<i32> {
+    let mut o = Vec::new();
+    let at = |j: i32, y: i32| {
+        let (x, z) = disc_corner(j, H);
+        v3(x, y, z)
+    };
+    for j in 0..DISC_SIDES {
+        let (a, b) = (at(j, -H), at(j + 1, -H));
+        let (c, d) = (at(j + 1, H), at(j, H));
+        quad(&mut o, a, b, c, d);
+        tri(&mut o, b, a, v3(0, -H, 0));
+        tri(&mut o, d, c, v3(0, H, 0));
+    }
+    o
+}
+
 /// A ring of sixteen sides, open through the middle.
 pub fn tube() -> Vec<i32> {
     const SIDES: i32 = 16;
@@ -420,6 +448,7 @@ mod tests {
             ("half_cyl", half_cyl(), v3(0, -H / 2, 0)),
             ("taper", taper(), V3::ZERO),
             ("pyramid", pyramid(), v3(0, -H / 2, 0)),
+            ("disc", disc(), V3::ZERO),
         ] {
             for t in tris(&vs) {
                 let c = centroid(&t);

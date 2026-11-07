@@ -129,7 +129,7 @@ impl Game {
         let strings = page::parse_strings(strings).map_err(|e| e.message())?;
         let look = Look::parse(look)?;
         let world = World::practice();
-        let groups = Self::map_groups(&world, &look);
+        let groups = Self::map_groups(&world.map, &look);
         let mut g = Game {
             strings,
             glossary: crate::glossary::load(glossary),
@@ -178,9 +178,9 @@ impl Game {
         Ok(g)
     }
 
-    fn map_groups(world: &World, look: &Look) -> Vec<Group> {
+    pub(crate) fn map_groups(map: &crate::map::Map, look: &Look) -> Vec<Group> {
         let p = &look.palette;
-        world.map.groups(
+        map.groups(
             |s| {
                 rgb(match s {
                     Surface::Floor => p.floor,
@@ -516,7 +516,7 @@ impl Game {
         let rebuilt = shown != self.scene_map;
         if rebuilt {
             self.scene_map = shown;
-            self.groups = Self::map_groups(self.view_world(), &self.look);
+            self.groups = Self::map_groups(&self.view_world().map, &self.look);
         }
         let cam = self.camera();
         let origin = render::origin_for(cam.eye);

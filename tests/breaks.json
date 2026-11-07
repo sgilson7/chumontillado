@@ -1955,15 +1955,15 @@
   {
     "name": "T28 no floor behind the Plaza's stands",
     "file": "crates/core/src/maps.rs",
-    "find": "            v3(ONE * 28 / 10, 0, int(22)),\n            Surface::Floor,",
-    "replace": "            v3(ONE * 28 / 10, 0, int(29)),\n            Surface::Floor,",
+    "find": "    let mut bs = vec![disc(int(27), -ONE, 0, Surface::Floor)];",
+    "replace": "    let mut bs = vec![disc(int(29), -ONE, 0, Surface::Floor)];",
     "test": "over_the_top_of_the_plazas_stands_is_a_fall_off_the_map"
   },
   {
     "name": "T28 the Plaza's floor reaches the stands' foot",
     "file": "crates/core/src/maps.rs",
-    "find": "            v3(-(ONE * 28 / 10), -ONE, int(14)),\n            v3(ONE * 28 / 10, 0, int(22)),",
-    "replace": "            v3(-(ONE * 28 / 10), -ONE, int(14)),\n            v3(ONE * 28 / 10, 0, int(19)),",
+    "find": "    let mut bs = vec![disc(int(27), -ONE, 0, Surface::Floor)];",
+    "replace": "    let mut bs = vec![disc(int(20), -ONE, 0, Surface::Floor)];",
     "test": "over_the_top_of_the_plazas_stands_is_a_fall_off_the_map"
   },
   {
@@ -1986,5 +1986,61 @@
     "find": "        floors.fold((self.brushes[0].mins, self.brushes[0].maxs), |(lo, hi), b| {",
     "replace": "        floors.take(1).fold((self.brushes[0].mins, self.brushes[0].maxs), |(lo, hi), b| {",
     "test": "behind_the_plazas_stands_no_cell_is_open"
+  },
+  {
+    "name": "T28b map surfaces alike in one plane fight (their rims show)",
+    "file": "crates/core/src/flicker.rs",
+    "find": " && si.pass != Pass::Surface {",
+    "replace": " {",
+    "test": "two_map_surfaces_alike_in_one_plane_fight_and_two_plain_solids_do_not"
+  },
+  {
+    "name": "T28b the Plaza's floor is one piece, not strips over a square",
+    "file": "crates/core/src/maps.rs",
+    "find": "    let mut bs = vec![disc(int(27), -ONE, 0, Surface::Floor)];",
+    "replace": "    let mut bs = vec![disc(int(27), -ONE, 0, Surface::Floor)];\n    bs.push(b(-18, -1, -18, 18, 0, 18, Surface::Floor));",
+    "test": "no_maps_static_scene_draws_two_surfaces_in_one_plane"
+  },
+  {
+    "name": "T28b the Mercado's corner columns are built once",
+    "file": "crates/core/src/maps.rs",
+    "find": "        if k.abs() < 5 {",
+    "replace": "        if k.abs() <= 5 {",
+    "test": "no_maps_static_scene_draws_two_surfaces_in_one_plane"
+  },
+  {
+    "name": "T28b the Puerto's corner walls meet without overlapping",
+    "file": "crates/core/src/maps.rs",
+    "find": "    bs.push(b(-28, 0, -17, -17, 6, -16, Surface::Wall));",
+    "replace": "    bs.push(b(-28, 0, -17, -16, 6, -16, Surface::Wall));",
+    "test": "no_maps_static_scene_draws_two_surfaces_in_one_plane"
+  },
+  {
+    "name": "T28b the Molino's crossed sails stand apart",
+    "file": "crates/core/src/maps.rs",
+    "find": "                v3(-int(4), ONE * 77 / 10, -(ONE * 3 / 20)),\n                v3(int(4), ONE * 83 / 10, ONE * 3 / 20),",
+    "replace": "                v3(-int(4), ONE * 77 / 10, -ONE / 5),\n                v3(int(4), ONE * 83 / 10, ONE / 5),",
+    "test": "no_maps_static_scene_draws_two_surfaces_in_one_plane"
+  },
+  {
+    "name": "T28b the disc hides what is pressed on it",
+    "file": "crates/core/src/flicker.rs",
+    "find": "Mesh::Capsule | Mesh::Disc",
+    "replace": "Mesh::Capsule",
+    "test": "no_maps_static_scene_draws_two_surfaces_in_one_plane"
+  },
+  {
+    "name": "T28b inside the disc is behind all its sides",
+    "file": "crates/core/src/flicker.rs",
+    "find": "                    along < apothem\n",
+    "replace": "                    along < apothem / 2\n",
+    "test": "no_maps_static_scene_draws_two_surfaces_in_one_plane"
+  },
+  {
+    "name": "T28b the disc's faces wind outward",
+    "file": "crates/core/src/mesh.rs",
+    "find": "        let (c, d) = (at(j + 1, H), at(j, H));\n        quad(&mut o, a, b, c, d);\n        tri(&mut o, b, a, v3(0, -H, 0));",
+    "replace": "        let (c, d) = (at(j + 1, H), at(j, H));\n        quad(&mut o, a, b, c, d);\n        tri(&mut o, a, b, v3(0, -H, 0));",
+    "test": "every_new_shape_winds_its_faces_outward"
   }
 ]

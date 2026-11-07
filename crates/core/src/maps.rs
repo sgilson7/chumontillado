@@ -17,7 +17,7 @@
 
 use crate::fx::{self, int, Fx, ONE};
 use crate::geom::{v3, yaw_of, V3};
-use crate::map::{block, prism, turned, Map, Surface};
+use crate::map::{block, disc, prism, turned, Map, Surface};
 use crate::weapons::Weapon;
 
 /// The maps in the order a match plays them.
@@ -80,17 +80,9 @@ fn yard(half_x: i32, half_z: i32, high: i32) -> Vec<crate::map::Brush> {
 /// no walls round it and no floor behind the stands: over their top is a
 /// fall off the map.
 pub fn plaza() -> Map {
-    // the floor: a square 36 m across, its corners under the stands, and
-    // under each stand a strip reaching to its foot and a metre on
-    let mut bs = vec![b(-18, -1, -18, 18, 0, 18, Surface::Floor)];
-    for k in 0..32 {
-        let strip = block(
-            v3(-(ONE * 28 / 10), -ONE, int(14)),
-            v3(ONE * 28 / 10, 0, int(22)),
-            Surface::Floor,
-        );
-        bs.push(turned(strip, fx::TURN * k / 32, V3::ZERO));
-    }
+    // the floor: one disc of 32 sides, each under its stand to its back,
+    // so the stands' undersides, which overlap, lie on it
+    let mut bs = vec![disc(int(27), -ONE, 0, Surface::Floor)];
     // the stands: 32 surf ramps from 21 m out to 27, 8 m high (53°)
     for k in 0..32 {
         let a = fx::TURN * k / 32;
@@ -373,8 +365,14 @@ pub fn mercado() -> Map {
     // them to climb onto
     for k in -5..=5 {
         let t = int(k * 4);
-        for (x, z) in [(t, -int(20)), (t, int(20)), (-int(20), t), (int(20), t)] {
+        for (x, z) in [(t, -int(20)), (t, int(20))] {
             bs.push(pillar(x, z, ONE, int(6), Surface::Block));
+        }
+        // T28: the corners' columns are the rows above's ends, not twice
+        if k.abs() < 5 {
+            for (x, z) in [(-int(20), t), (int(20), t)] {
+                bs.push(pillar(x, z, ONE, int(6), Surface::Block));
+            }
         }
     }
     for side in [-1, 1] {
@@ -487,7 +485,7 @@ pub fn puerto() -> Map {
     // the shed in the north-west corner, its door facing the ship
     bs.push(b(-17, 0, -28, -16, 6, -24, Surface::Wall));
     bs.push(b(-17, 0, -21, -16, 6, -16, Surface::Wall));
-    bs.push(b(-28, 0, -17, -16, 6, -16, Surface::Wall));
+    bs.push(b(-28, 0, -17, -17, 6, -16, Surface::Wall));
     // bollards along the quays
     for z in [-26, -8, 8, 26] {
         bs.push(pillar(-int(9), int(z), ONE * 6 / 10, ONE * 8 / 10, Surface::Trim));
@@ -655,8 +653,9 @@ pub fn molino() -> Map {
         ));
         bs.push(turned(
             block(
-                v3(-int(4), ONE * 77 / 10, -ONE / 5),
-                v3(int(4), ONE * 83 / 10, ONE / 5),
+                // T28: thinner than the upright, so their faces are apart
+                v3(-int(4), ONE * 77 / 10, -(ONE * 3 / 20)),
+                v3(int(4), ONE * 83 / 10, ONE * 3 / 20),
                 Surface::Trim,
             ),
             toward,

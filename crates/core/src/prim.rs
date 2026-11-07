@@ -67,10 +67,13 @@ pub enum Mesh {
     Rod = 17,
     /// a smooth column narrowing upward, rounded rims: skirts, habits
     Bell = 18,
+    /// T28: a flat-sided column of `mesh::DISC_SIDES`, a face looking each
+    /// way the Plaza's stands do: the Plaza's floor
+    Disc = 19,
 }
 
 impl Mesh {
-    pub const ALL: [Mesh; 19] = [
+    pub const ALL: [Mesh; 20] = [
         Mesh::Cube,
         Mesh::Tri,
         Mesh::Square,
@@ -90,6 +93,7 @@ impl Mesh {
         Mesh::Round,
         Mesh::Rod,
         Mesh::Bell,
+        Mesh::Disc,
     ];
 
     /// Shapes whose faces are flat: one of them can lie in another's plane,
@@ -108,6 +112,7 @@ impl Mesh {
                 | Mesh::Taper
                 | Mesh::Tube
                 | Mesh::Pyramid
+                | Mesh::Disc
         )
     }
 }
@@ -360,6 +365,7 @@ pub fn vertices(mesh: Mesh) -> Vec<i32> {
         Mesh::Round => o = crate::mesh::round(),
         Mesh::Rod => o = crate::mesh::rod(),
         Mesh::Bell => o = crate::mesh::bell(),
+        Mesh::Disc => o = crate::mesh::disc(),
     }
     o
 }

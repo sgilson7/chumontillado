@@ -52,6 +52,9 @@ pub enum Shape {
         from: Fx,
         to: Fx,
     },
+    /// T28: a flat-sided column of `mesh::DISC_SIDES` about the vertical
+    /// through the origin, its faces `apothem` out, from `y0` up to `y1`
+    Disc { apothem: Fx, y0: Fx, y1: Fx },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -204,6 +207,52 @@ pub fn prism(corners: [(Fx, Fx); 3], along_z: bool, from: Fx, to: Fx, surface: S
     }
 }
 
+/// How far out the disc's corners lie.
+fn disc_reach(shape: &Shape) -> Fx {
+    match *shape {
+        Shape::Disc { apothem, .. } => {
+            let half_side = fx::HALF_TURN / crate::mesh::DISC_SIDES;
+            fx::div(apothem, fx::cos(half_side))
+        }
+        _ => 0,
+    }
+}
+
+fn disc_corners(shape: &Shape) -> Vec<(Fx, Fx)> {
+    let r = disc_reach(shape);
+    (0..crate::mesh::DISC_SIDES)
+        .map(|j| crate::mesh::disc_corner(j, r))
+        .collect()
+}
+
+/// T28: a flat-sided column of `mesh::DISC_SIDES` round the vertical
+/// through the origin, a face `apothem` out each way (sin, cos) of a whole
+/// number of sides, as the Plaza's stands stand: the Plaza's floor, one
+/// brush, so no two pieces of floor lie in one plane.
+pub fn disc(apothem: Fx, y0: Fx, y1: Fx, surface: Surface) -> Brush {
+    let shape = Shape::Disc { apothem, y0, y1 };
+    let mut planes: Vec<Plane> = (0..crate::mesh::DISC_SIDES)
+        .map(|k| {
+            let a = fx::TURN * k / crate::mesh::DISC_SIDES;
+            let n = v3(fx::sin(a), 0, fx::cos(a));
+            plane(n, n.scale(apothem))
+        })
+        .collect();
+    let corners = disc_corners(&shape);
+    let reach = |f: fn(&(Fx, Fx)) -> Fx| corners.iter().map(f).max().unwrap_or(0);
+    let (rx, rz) = (reach(|c| c.0), reach(|c| c.1));
+    let (mins, maxs) = (v3(-rx, y0, -rz), v3(rx, y1, rz));
+    planes.extend(box_planes(mins, maxs));
+    Brush {
+        planes,
+        mins,
+        maxs,
+        surface,
+        shape,
+        turn: Affine::IDENTITY,
+    }
+}
+
 /// M5: a brush built about the origin, turned `yaw` about the vertical and
 /// moved to `to`: the bullring's stands and shields. Every plane
 /// turns with it; the box round the turned corners is added as bevels, as
@@ -228,6 +277,10 @@ pub fn turned(b: Brush, yaw: i32, to: V3) -> Brush {
         } => corners
             .iter()
             .flat_map(|c| [place(along_z, c.0, c.1, from), place(along_z, c.0, c.1, to)])
+            .collect(),
+        Shape::Disc { y0, y1, .. } => disc_corners(&b.shape)
+            .iter()
+            .flat_map(|&(x, z)| [v3(x, y0, z), v3(x, y1, z)])
             .collect(),
     };
     // (a brush turned before is carried from where it was built)
@@ -319,6 +372,15 @@ impl Brush {
                 let (c0, c1) = (br.sub(bl), top.sub(base_mid));
                 let c2 = if c0.dot(c1.cross(c2)) < 0 { c2.neg() } else { c2 };
                 (Mesh::Wedge, Affine { c0, c1, c2, t })
+            }
+            Shape::Disc { y0, y1, .. } => {
+                // the unit disc's corners lie a half out
+                let across = disc_reach(&self.shape) * 2;
+                let size = v3(across, y1 - y0, across);
+                (
+                    Mesh::Disc,
+                    Affine::translate(v3(0, (y0 + y1) / 2, 0)).then(&Affine::scale(size)),
+                )
             }
         }
     }

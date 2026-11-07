@@ -10,7 +10,8 @@
 //! A face is one triangle of a flat-sided mesh (`prim::MeshTable::flat_faced`)
 //! drawn as an opaque solid, placed. Two faces fight when they face the same
 //! way, overlap by more than `MIN_AREA`, differ in colour, value or pass
-//! (same-coloured faces in one plane fight invisibly), and their planes are
+//! (same-coloured faces in one plane fight invisibly, except a map
+//! surface's, whose rim shows through: T28), and their planes are
 //! within `PLANE_TOL` of each other, or further apart than that but too near
 //! for the depth buffer to tell apart from the nearest place a camera comes.
 //! And only where it can be seen: no closed box presses on the fight from in
@@ -29,7 +30,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::fx::{Fx, ONE};
+use crate::fx::{self, Fx, ONE};
 use crate::geom::{v3, Affine, V3};
 use crate::look::Rgb;
 use crate::prim::{self, Mesh, MeshId, MeshTable};
@@ -135,7 +136,7 @@ fn closed(s: &Inst) -> bool {
     solid(s)
         && matches!(
             s.mesh.prim(),
-            Some(Mesh::Cube | Mesh::Cyl | Mesh::Sphere | Mesh::Blob | Mesh::Capsule)
+            Some(Mesh::Cube | Mesh::Cyl | Mesh::Sphere | Mesh::Blob | Mesh::Capsule | Mesh::Disc)
         )
 }
 
@@ -204,6 +205,17 @@ fn inside(s: &Inst, p: P3) -> bool {
     match s.mesh.prim() {
         Some(Mesh::Cube) => local.iter().all(|l| l.abs() < half),
         Some(Mesh::Cyl) => local[1].abs() < half && local[0] * local[0] + local[2] * local[2] < quarter,
+        // T28: behind each of its sides
+        Some(Mesh::Disc) => {
+            let n = crate::mesh::DISC_SIDES;
+            let apothem = half * fx::cos(fx::HALF_TURN / n) as i128 / ONE as i128;
+            local[1].abs() < half
+                && (0..n).all(|k| {
+                    let a = fx::TURN * k / n;
+                    let along = (local[0] * fx::sin(a) as i128 + local[2] * fx::cos(a) as i128) / ONE as i128;
+                    along < apothem
+                })
+        }
         _ => local.iter().map(|l| l * l).sum::<i128>() < quarter,
     }
 }
@@ -428,7 +440,9 @@ fn sweep(
                 continue;
             }
             let (si, sj) = (&insts[f.inst], &insts[g.inst]);
-            if si.rgb == sj.rgb && si.value == sj.value && si.pass == sj.pass {
+            // T28: a map surface draws a dark rim round each face (T4), so
+            // two of one colour in one plane still show each other's edges
+            if si.rgb == sj.rgb && si.value == sj.value && si.pass == sj.pass && si.pass != Pass::Surface {
                 continue;
             }
             let dot = (f.n[0] as i128 * g.n[0] as i128
@@ -713,5 +727,63 @@ mod tests {
         let f: Vec<Fight> = fights(&insts, &g.meshes, &seen);
         let report: Vec<String> = f.iter().take(8).map(|x| describe(&insts, x)).collect();
         assert!(f.is_empty(), "{} pairs fight:\n{}", f.len(), report.join("\n"));
+    }
+
+    /// T28: two map surfaces of one colour and material, flush, fight: each
+    /// draws its rim across the other. Two plain solids alike do not.
+    #[test]
+    fn two_map_surfaces_alike_in_one_plane_fight_and_two_plain_solids_do_not() {
+        let floor = cube(v3(0, -ONE / 2, 0), v3(int(4), ONE, int(4)), [ONE, 0, 0]);
+        let strip = cube(v3(int(2), -ONE / 2, 0), v3(int(4), ONE, ONE), [ONE, 0, 0]);
+        let none = fights(
+            &[floor.clone(), strip.clone()],
+            &MeshTable::default(),
+            &Seen::near(),
+        );
+        assert!(none.is_empty(), "{none:?}");
+        let surface = |s: Inst| Inst {
+            pass: Pass::Surface,
+            value: ONE,
+            ..s
+        };
+        let f = fights(
+            &[surface(floor), surface(strip)],
+            &MeshTable::default(),
+            &Seen::near(),
+        );
+        assert!(!f.is_empty(), "map surfaces alike, flush, fight");
+    }
+
+    /// T28: Sam, "the plaza map has a bunch of overlapping textures now".
+    /// Every map's static scene, seen from across its floors: no two
+    /// surfaces in one plane.
+    #[test]
+    fn no_maps_static_scene_draws_two_surfaces_in_one_plane() {
+        let g = crate::game::tests::game();
+        let mut bad = Vec::new();
+        for m in crate::maps::all() {
+            let (lo, hi) = m.floors();
+            let mut eyes = Vec::new();
+            for kx in 0..3 {
+                for kz in 0..3 {
+                    let x = lo.x + (hi.x - lo.x) * (2 * kx + 1) / 6;
+                    let z = lo.z + (hi.z - lo.z) * (2 * kz + 1) / 6;
+                    eyes.push(v3(x, int(2), z));
+                }
+            }
+            let groups = crate::game::Game::map_groups(&m, &g.look);
+            let scene = Scene::build(&groups, render::origin_for(V3::ZERO), 1);
+            let insts = instances(&scene);
+            let seen = Seen {
+                bottom: m.lowest(),
+                eyes,
+                far: render::FAR,
+            };
+            let f: Vec<Fight> = fights(&insts, &g.meshes, &seen);
+            for x in f.iter().take(4) {
+                bad.push(format!("{}: {}", m.name, describe(&insts, x)));
+            }
+        }
+        assert!(bad.is_empty(), "pairs fight:\n{}", bad.join("\n"));
     }
 }
