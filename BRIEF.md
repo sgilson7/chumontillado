@@ -35,6 +35,10 @@ For M1: the practice room, playable in a browser, where every move above can be 
 - How the movement and every weapon feel: the numbers are starting points to tune by play.
 - The skins' and weapons' names (CS-Q19: A, as drawn).
 
+## Storage
+
+Allowed by Sam on 2026-11-07 (T32), asked "Allow it?" and answering "Allow it": the page keeps the map playlists and the choices a match is planned from (the playlist, its order, the weapons) in this browser between visits. Nothing else is stored, and nothing leaves the browser.
+
 ## Accessibility
 
 The HUD's speed, wall jumps and state are text. Settings change the field of view and the look speed. No information is carried by colour alone.

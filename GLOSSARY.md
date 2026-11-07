@@ -234,6 +234,12 @@ The painted rifle. It charges while the button is held, fires when let go, passe
 
 Not: railgun, brush gun
 
+### Playlist
+
+Maps in the order a match plays them, built on the Playlists screen and kept in this browser. Every map, in turn, is the first playlist.
+
+Not: rotation, map pool
+
 ### Plaza
 
 The bullring: an open ring, its stands a ring of surf ramps, standing in the sky with nothing behind them.

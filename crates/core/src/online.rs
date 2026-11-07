@@ -118,6 +118,9 @@ pub enum Msg {
         /// T20: the bots' skill (`pilot::SKILLS` by number)
         #[serde(default = "normal_skill")]
         skill: u8,
+        /// T32: the maps in order and the weapons' draw
+        #[serde(default)]
+        plan: crate::plan::Plan,
     },
     /// one seat's record for one tick
     Input {
@@ -206,6 +209,8 @@ pub struct Net {
     pub chosen: u8,
     /// T20: the bots' skill: the host's setting, sent with the start
     pub skill: u8,
+    /// T32: the host's plan for the match, or the one it sent
+    pub plan: crate::plan::Plan,
     /// the match has begun
     pub started: bool,
     /// T24: the match's number in this room, from 0
@@ -258,6 +263,7 @@ impl Net {
             skins: [0, 1, 2, 3],
             chosen: 0,
             skill: normal_skill(),
+            plan: crate::plan::Plan::default(),
             started: false,
             game: 0,
             mine: BTreeMap::new(),
@@ -451,12 +457,14 @@ impl Net {
         let skins = self.starting_skins();
         self.skins = skins;
         let skill = self.skill;
+        let plan = self.plan.clone();
         self.broadcast(
             &Msg::Start {
                 seats,
                 empty,
                 skins,
                 skill,
+                plan,
             },
             None,
         );
@@ -598,6 +606,7 @@ impl Net {
                 empty,
                 skins,
                 skill,
+                plan,
             } if o.host && !self.host => {
                 if self.started || self.seat.is_none_or(|s| !holds(seats, s)) {
                     return None;
@@ -606,6 +615,7 @@ impl Net {
                 self.empty = empty;
                 self.skins = skins;
                 self.skill = skill;
+                self.plan = plan;
                 self.started = true;
                 self.status = PLAYING;
                 Some(Event::Start {
@@ -744,6 +754,10 @@ pub(crate) mod tests {
                 empty: 0b1000,
                 skins: [0, 1, 2, 3],
                 skill: 2,
+                plan: crate::plan::Plan {
+                    maps: vec![11, 0],
+                    weapons: 5,
+                },
             },
             Msg::Input {
                 seat: 3,

@@ -2175,5 +2175,96 @@
     "find": "                let t = mid(top, base_mid);\n                let c2 = if c0.dot(c1.cross(c2)) < 0 { c2.neg() } else { c2 };",
     "replace": "                let t = mid(top, base_mid);\n                let c2 = c2;",
     "test": "every_drawn_brush_keeps_its_handedness_so_none_draws_inside_out"
+  },
+  {
+    "name": "T32 a plan plays its own maps, not every map",
+    "file": "crates/core/src/plan.rs",
+    "find": "            Some(&m) => m as usize % crate::maps::COUNT,",
+    "replace": "            Some(_) => k % crate::maps::COUNT,",
+    "test": "a_bots_match_plays_the_chosen_playlist_in_turn_or_shuffled_with_its_weapons_placed_or_random"
+  },
+  {
+    "name": "T32 a shuffled plan is shuffled",
+    "file": "crates/core/src/plan.rs",
+    "find": "                maps.swap(i, j);",
+    "replace": "                let _ = (i, j);",
+    "test": "shuffled_it_keeps_every_map_once_and_the_seed_gives_one_order"
+  },
+  {
+    "name": "T32 random weapons are drawn",
+    "file": "crates/core/src/plan.rs",
+    "find": "        if self.weapons == 0 {\n            return placed.to_vec();",
+    "replace": "        if self.weapons < u32::MAX {\n            return placed.to_vec();",
+    "test": "a_bots_match_plays_the_chosen_playlist_in_turn_or_shuffled_with_its_weapons_placed_or_random"
+  },
+  {
+    "name": "T32 random weapons are never the pistol or navaja",
+    "file": "crates/core/src/plan.rs",
+    "find": "            .filter(|&g| g != Weapon::Pistol && g != Weapon::Navaja)",
+    "replace": "            .filter(|&g| g != Weapon::Navaja)",
+    "test": "random_weapons_differ_round_to_round_and_never_are_the_ones_everyone_holds"
+  },
+  {
+    "name": "T32 a guest keeps the plan the host sent",
+    "file": "crates/core/src/online.rs",
+    "find": "                self.plan = plan;\n",
+    "replace": "                let _ = plan;\n",
+    "test": "online_the_hosts_plan_goes_with_its_start_and_the_guest_plays_it"
+  },
+  {
+    "name": "T32 a match begins on the plan its links hold",
+    "file": "crates/core/src/versus.rs",
+    "find": "        world.plan = links.plan.clone();\n",
+    "replace": "",
+    "test": "online_the_hosts_plan_goes_with_its_start_and_the_guest_plays_it"
+  },
+  {
+    "name": "T32 the host plans before it starts",
+    "file": "crates/core/src/game.rs",
+    "find": "                if let Some(x) = self.versus.as_mut() {\n                    x.set_plan(plan);\n                }",
+    "replace": "                let _ = plan;",
+    "test": "online_the_hosts_plan_goes_with_its_start_and_the_guest_plays_it"
+  },
+  {
+    "name": "T32 a bots match plays the plan drawn",
+    "file": "crates/core/src/game.rs",
+    "find": "        self.world.plan = self.plan();\n        self.world.start_round(0);",
+    "replace": "        self.world.start_round(0);",
+    "test": "a_bots_match_plays_the_chosen_playlist_in_turn_or_shuffled_with_its_weapons_placed_or_random"
+  },
+  {
+    "name": "T32 a place moves up its playlist",
+    "file": "crates/core/src/game.rs",
+    "find": "                    \"playlist.up\" if at > 0 => list.swap(at, at - 1),",
+    "replace": "                    \"playlist.up\" if at > 0 => {}",
+    "test": "a_playlist_is_built_from_the_maps_on_the_right_and_ordered_and_trimmed"
+  },
+  {
+    "name": "T32 deleting a playlist keeps the one chosen",
+    "file": "crates/core/src/game.rs",
+    "find": "                        k if k > gone => k - 1,",
+    "replace": "                        k if k > gone => k,",
+    "test": "a_playlist_is_built_from_the_maps_on_the_right_and_ordered_and_trimmed"
+  },
+  {
+    "name": "T32 kept playlists come back",
+    "file": "crates/core/src/game.rs",
+    "find": "            self.playlists = lists\n",
+    "replace": "            let _ = &lists;\n            self.playlists = Vec::<Vec<u8>>::new()\n",
+    "test": "the_playlists_and_choices_are_kept_for_the_next_visit"
+  },
+  {
+    "name": "T32 a kept map that does not exist is let go",
+    "file": "crates/core/src/game.rs",
+    "find": "                .map(|l| l.into_iter().filter(|&m| (m as usize) < crate::maps::COUNT).collect())",
+    "replace": "                .map(|l| l.into_iter().collect())",
+    "test": "the_playlists_and_choices_are_kept_for_the_next_visit"
+  },
+  {
+    "name": "T32 only the host plans in the lobby",
+    "file": "crates/core/src/api.rs",
+    "find": "    // T32: the host plans the match's maps and weapons\n    if v.host {",
+    "replace": "    // T32: the host plans the match's maps and weapons\n    if v.host || true {",
+    "test": "online_the_hosts_plan_goes_with_its_start_and_the_guest_plays_it"
   }
 ]

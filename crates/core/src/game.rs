@@ -40,6 +40,8 @@ pub enum Screen {
     Settings,
     /// M4: hosting or joining, the lobby, or a match that has ended
     Online,
+    /// T32: building playlists of maps
+    Playlists,
 }
 
 impl Screen {
@@ -51,9 +53,14 @@ impl Screen {
             Screen::Paused => "paused",
             Screen::Settings => "settings",
             Screen::Online => "online",
+            Screen::Playlists => "playlists",
         }
     }
 }
+
+/// T32: mixed into the page's seed for the match plans' draws, so they do
+/// not follow the room codes'.
+const PLAN_SALT: u64 = 0x504c_414e;
 
 pub struct Game {
     pub strings: Strings,
@@ -119,6 +126,19 @@ pub struct Game {
     pub shake: bool,
     /// T20: how good the bots are, a setting, Normal to start (CS-Q26: A)
     pub skill: crate::pilot::Skill,
+    /// T32: this browser's playlists, each its maps by number in order
+    pub playlists: Vec<Vec<u8>>,
+    /// the playlist a match plays: 0 every map in turn, k the k-th of
+    /// `playlists`
+    pub playlist: usize,
+    /// the playlist's maps shuffled for each match
+    pub shuffle: bool,
+    /// each round's weapons drawn at random rather than as the map places
+    pub random_weapons: bool,
+    /// the playlist the Playlists screen shows
+    pub editing: usize,
+    /// draws each match's shuffle and weapons
+    rng: crate::rng::Rng,
     /// the volume, percent (a setting)
     pub sounds: Vec<crate::sound::Play>,
     pub volume_pct: i32,
@@ -173,6 +193,12 @@ impl Game {
             filter: false,
             shake: true,
             skill: crate::pilot::Skill::Normal,
+            playlists: Vec::new(),
+            playlist: 0,
+            shuffle: false,
+            random_weapons: false,
+            editing: 0,
+            rng: crate::rng::Rng::new(seed as u64 ^ PLAN_SALT),
         };
         g.draw();
         Ok(g)
@@ -389,7 +415,7 @@ impl Game {
             };
             return camera::eye_view(eye, aim, camera::vertical_fov(self.fov, self.aspect));
         }
-        if matches!(self.screen, Screen::Title | Screen::Menu)
+        if matches!(self.screen, Screen::Title | Screen::Menu | Screen::Playlists)
             || self.screen == Screen::Settings && self.settings_from == Screen::Menu
         {
             // the title and the menu look slowly round the room from above
@@ -583,9 +609,65 @@ impl Game {
         }
         self.world = World::online(0b1, 0, skins);
         self.world.skill = self.skill;
+        self.world.plan = self.plan();
+        self.world.start_round(0);
         self.matched = true;
         self.clock.rest();
         self.show(Screen::Play);
+    }
+
+    /// T32: the maps of the playlist chosen, by number: every map in turn
+    /// for the first, or for a playlist left empty.
+    pub fn playlist_maps(&self, k: usize) -> Vec<u8> {
+        match k.checked_sub(1).and_then(|j| self.playlists.get(j)) {
+            Some(list) if !list.is_empty() => list.clone(),
+            _ => (0..crate::maps::COUNT as u8).collect(),
+        }
+    }
+
+    /// T32: a match's plan, drawn afresh from the choices for each match.
+    pub fn plan(&mut self) -> crate::plan::Plan {
+        let maps = self.playlist_maps(self.playlist);
+        crate::plan::Plan::draw(&maps, self.shuffle, self.random_weapons, &mut self.rng)
+    }
+
+    /// T32: the choices the page keeps between visits, as one string.
+    pub fn saved(&self) -> String {
+        serde_json::json!({
+            "playlists": self.playlists,
+            "playlist": self.playlist,
+            "shuffle": self.shuffle,
+            "random_weapons": self.random_weapons,
+        })
+        .to_string()
+    }
+
+    /// T32: the choices kept from the last visit; anything not understood
+    /// is left as it is.
+    fn load_saved(&mut self, text: &str) {
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(text) else {
+            return;
+        };
+        if let Ok(lists) = serde_json::from_value::<Vec<Vec<u8>>>(v["playlists"].clone()) {
+            self.playlists = lists
+                .into_iter()
+                .map(|l| {
+                    l.into_iter()
+                        .filter(|&m| (m as usize) < crate::maps::COUNT)
+                        .collect()
+                })
+                .collect();
+        }
+        if let Some(k) = v["playlist"].as_u64() {
+            self.playlist = (k as usize).min(self.playlists.len());
+        }
+        if let Some(b) = v["shuffle"].as_bool() {
+            self.shuffle = b;
+        }
+        if let Some(b) = v["random_weapons"].as_bool() {
+            self.random_weapons = b;
+        }
+        self.editing = 0;
     }
 
     /// The practice room from its start, its bot moving only or shooting.
@@ -765,6 +847,10 @@ impl Game {
                 self.open_room(false, &code);
             }
             "online.start" => {
+                let plan = self.plan();
+                if let Some(x) = self.versus.as_mut() {
+                    x.set_plan(plan);
+                }
                 let started = self.versus.as_mut().is_some_and(|x| x.start());
                 if !started {
                     return Err(self.strings.get("online.not_host"));
@@ -804,12 +890,94 @@ impl Game {
                 self.show(Screen::Settings);
             }
             "settings.back" => self.show(self.settings_from),
+            // T32: the playlists, and the choices a match is planned from
+            "screen.playlists" => {
+                self.editing = self.editing.min(self.playlists.len().saturating_sub(1));
+                self.show(Screen::Playlists);
+            }
+            "playlists.back" => self.show(Screen::Menu),
+            "plan.playlist" => {
+                let step: i32 = v.parse().map_err(|_| format!("\"{value}\" is not a step."))?;
+                let n = self.playlists.len() as i32 + 1;
+                self.playlist = (self.playlist as i32 + step).rem_euclid(n) as usize;
+                self.ui_version += 1;
+            }
+            "plan.order" => {
+                let step: i32 = v.parse().map_err(|_| format!("\"{value}\" is not a step."))?;
+                self.shuffle = step > 0;
+                self.ui_version += 1;
+            }
+            "plan.weapons" => {
+                let step: i32 = v.parse().map_err(|_| format!("\"{value}\" is not a step."))?;
+                self.random_weapons = step > 0;
+                self.ui_version += 1;
+            }
+            "playlist.new" => {
+                self.playlists.push(Vec::new());
+                self.editing = self.playlists.len() - 1;
+                self.ui_version += 1;
+            }
+            "playlist.delete" => {
+                if self.editing < self.playlists.len() {
+                    self.playlists.remove(self.editing);
+                    let gone = self.editing + 1;
+                    self.playlist = match self.playlist {
+                        k if k == gone => 0,
+                        k if k > gone => k - 1,
+                        k => k,
+                    };
+                    self.editing = self.editing.min(self.playlists.len().saturating_sub(1));
+                }
+                self.ui_version += 1;
+            }
+            "playlist.step" => {
+                let step: i32 = v.parse().map_err(|_| format!("\"{value}\" is not a step."))?;
+                let n = self.playlists.len().max(1) as i32;
+                self.editing = (self.editing as i32 + step).rem_euclid(n) as usize;
+                self.ui_version += 1;
+            }
+            "playlist.add" => {
+                let k: usize = v.parse().map_err(|_| format!("\"{value}\" is not a map."))?;
+                if k >= crate::maps::COUNT {
+                    return Err(format!("\"{value}\" is not a map."));
+                }
+                if self.playlists.is_empty() {
+                    self.playlists.push(Vec::new());
+                    self.editing = 0;
+                }
+                self.playlists[self.editing].push(k as u8);
+                self.ui_version += 1;
+            }
+            "playlist.up" | "playlist.down" | "playlist.remove" => {
+                let at: usize = v.parse().map_err(|_| format!("\"{value}\" is not a place."))?;
+                let Some(list) = self.playlists.get_mut(self.editing) else {
+                    return Err(format!("\"{value}\" is not a place."));
+                };
+                if at >= list.len() {
+                    return Err(format!("\"{value}\" is not a place."));
+                }
+                match name {
+                    "playlist.up" if at > 0 => list.swap(at, at - 1),
+                    "playlist.down" if at + 1 < list.len() => list.swap(at, at + 1),
+                    "playlist.remove" => {
+                        list.remove(at);
+                    }
+                    _ => {}
+                }
+                self.ui_version += 1;
+            }
+            // T32: what the page kept from the last visit (`saved`)
+            "prefs.load" => {
+                self.load_saved(v);
+                self.ui_version += 1;
+            }
             // Esc, a lost pointer or a hidden tab pause the room; Esc again
             // goes back
             "key.escape" => match self.screen {
                 Screen::Play => self.show(Screen::Paused),
                 Screen::Paused => self.show(Screen::Play),
                 Screen::Settings => self.show(self.settings_from),
+                Screen::Playlists => self.show(Screen::Menu),
                 Screen::Online if self.versus.is_none() => self.show(Screen::Menu),
                 _ => {}
             },
@@ -1672,5 +1840,156 @@ pub(crate) mod tests {
             g.versus.as_ref().unwrap().notice(g.now_us),
             Some(crate::versus::Notice::Looking { secs: 0 })
         );
+    }
+
+    /// T32: Sam, "a list of maps on the RHS you can select from and order
+    /// to build a map playlist". A click on a map adds it to the playlist
+    /// shown (the first click makes one); each place moves up, down or out;
+    /// playlists are made, stepped through and deleted.
+    #[test]
+    fn a_playlist_is_built_from_the_maps_on_the_right_and_ordered_and_trimmed() {
+        let mut g = game();
+        g.act("title.begin", "").unwrap();
+        g.act("screen.playlists", "").unwrap();
+        assert_eq!(g.screen, Screen::Playlists);
+        let ui = crate::api::ui(&g);
+        let maps = ui.panels.iter().find(|p| p.id == "maps").unwrap();
+        assert_eq!(maps.actions.len(), crate::maps::COUNT, "every map, to add");
+        for k in ["11", "0", "8"] {
+            g.act("playlist.add", k).unwrap();
+        }
+        assert_eq!(g.playlists, vec![vec![11, 0, 8]]);
+        g.act("playlist.up", "2").unwrap();
+        assert_eq!(g.playlists[0], [11, 8, 0]);
+        g.act("playlist.down", "0").unwrap();
+        assert_eq!(g.playlists[0], [8, 11, 0]);
+        g.act("playlist.remove", "1").unwrap();
+        assert_eq!(g.playlists[0], [8, 0]);
+        assert!(g.act("playlist.remove", "5").is_err());
+        assert!(g.act("playlist.add", "12").is_err(), "no such map");
+        // its rows name the maps in order
+        let ui = crate::api::ui(&g);
+        let list = ui.panels.iter().find(|p| p.id == "playlist").unwrap();
+        let names: Vec<&str> = list.settings.iter().map(|r| r.value.as_str()).collect();
+        assert_eq!(names, ["the Dehesa", "the Plaza"]);
+        g.act("playlist.new", "").unwrap();
+        g.act("playlist.add", "3").unwrap();
+        assert_eq!(g.playlists, vec![vec![8, 0], vec![3]]);
+        g.act("playlist.step", "1").unwrap();
+        assert_eq!(g.editing, 0);
+        // choosing the second, then deleting the first, keeps it chosen
+        g.act("plan.playlist", "1").unwrap();
+        g.act("plan.playlist", "1").unwrap();
+        assert_eq!(g.playlist, 2);
+        g.act("playlist.delete", "").unwrap();
+        assert_eq!((g.playlists.clone(), g.playlist), (vec![vec![3]], 1));
+        g.act("playlists.back", "").unwrap();
+        assert_eq!(g.screen, Screen::Menu);
+    }
+
+    /// T32: a match against bots plays the playlist chosen, from its first
+    /// map, in turn or shuffled, its weapons placed or at random.
+    #[test]
+    fn a_bots_match_plays_the_chosen_playlist_in_turn_or_shuffled_with_its_weapons_placed_or_random() {
+        let mut g = game();
+        for k in ["11", "0", "8"] {
+            g.act("playlist.add", k).unwrap();
+        }
+        g.act("plan.playlist", "1").unwrap();
+        g.act("menu.bots", "").unwrap();
+        assert_eq!(g.world.plan.maps, [11, 0, 8]);
+        assert_eq!(g.world.map.name, "map_tobogan", "it starts on the first");
+        let placed: Vec<_> = crate::maps::tobogan().pickups.iter().map(|p| p.1).collect();
+        let lying: Vec<_> = g.world.pickups.iter().map(|p| p.weapon).collect();
+        assert_eq!(lying, placed);
+        // the next round, the next map
+        g.world.start_round(1);
+        assert_eq!(g.world.map.name, "map_plaza");
+
+        g.act("plan.order", "1").unwrap();
+        g.act("plan.weapons", "1").unwrap();
+        let mut orders = std::collections::BTreeSet::new();
+        let mut random = false;
+        for _ in 0..8 {
+            g.act("menu.bots", "").unwrap();
+            let mut maps = g.world.plan.maps.clone();
+            orders.insert(maps.clone());
+            maps.sort();
+            assert_eq!(maps, [0, 8, 11], "the playlist's maps, each once");
+            let lying: Vec<_> = g.world.pickups.iter().map(|p| p.weapon).collect();
+            let m = crate::maps::map(g.world.plan.maps[0] as usize);
+            random |= lying != m.pickups.iter().map(|p| p.1).collect::<Vec<_>>();
+        }
+        assert!(orders.len() > 1, "shuffled afresh each match: {orders:?}");
+        assert!(random, "weapons drawn at random");
+    }
+
+    /// T32: the host's plan goes with its start, so its guest plays the
+    /// same maps in the same order with the same weapons.
+    #[test]
+    fn online_the_hosts_plan_goes_with_its_start_and_the_guest_plays_it() {
+        let (mut h, mut g) = (game(), game());
+        for k in ["9", "2"] {
+            h.act("playlist.add", k).unwrap();
+        }
+        h.act("plan.playlist", "1").unwrap();
+        h.act("plan.order", "1").unwrap();
+        h.act("plan.weapons", "1").unwrap();
+        h.act("online.host", "").unwrap();
+        let ui = crate::api::ui(&h);
+        let lobby = ui.panels.iter().find(|p| p.id == "online").unwrap();
+        let rows: Vec<&str> = lobby.settings.iter().map(|r| r.id.as_str()).collect();
+        assert_eq!(
+            rows,
+            ["playlist", "order", "weapons"],
+            "the host plans in its lobby"
+        );
+        let code = h.versus.as_ref().unwrap().code.clone();
+        g.act("online.room", &code).unwrap();
+        h.online_connected(2);
+        g.online_connected(1);
+        pump(&mut h, &mut g);
+        let ui = crate::api::ui(&g);
+        let lobby = ui.panels.iter().find(|p| p.id == "online").unwrap();
+        assert!(lobby.settings.is_empty(), "a guest does not");
+        h.act("online.start", "").unwrap();
+        pump(&mut h, &mut g);
+        let world = |p: &Game| p.versus.as_ref().unwrap().session().unwrap().world.clone();
+        let (wh, wg) = (world(&h), world(&g));
+        assert_eq!(wh.plan, wg.plan);
+        let mut maps = wh.plan.maps.clone();
+        maps.sort();
+        assert_eq!(maps, [2, 9]);
+        assert_ne!(wh.plan.weapons, 0);
+        assert_eq!(wh.map.name, wg.map.name);
+        assert_eq!(crate::maps::map(wh.plan.maps[0] as usize).name, wh.map.name);
+        let lying = |w: &World| w.pickups.iter().map(|p| p.weapon).collect::<Vec<_>>();
+        assert_eq!(lying(&wh), lying(&wg));
+    }
+
+    /// T32: the playlists and the choices are kept: the page stores the
+    /// core's string and hands it back on the next visit.
+    #[test]
+    fn the_playlists_and_choices_are_kept_for_the_next_visit() {
+        let mut g = game();
+        for k in ["4", "4", "10"] {
+            g.act("playlist.add", k).unwrap();
+        }
+        g.act("plan.playlist", "1").unwrap();
+        g.act("plan.weapons", "1").unwrap();
+        let kept = crate::api::ui(&g).saved;
+        let mut next = game();
+        next.act("prefs.load", &kept).unwrap();
+        assert_eq!(next.playlists, vec![vec![4, 4, 10]]);
+        assert_eq!(
+            (next.playlist, next.shuffle, next.random_weapons),
+            (1, false, true)
+        );
+        // a kept string it cannot read, or a map it does not know, is let be
+        next.act("prefs.load", "{not json").unwrap();
+        assert_eq!(next.playlists.len(), 1);
+        next.act("prefs.load", r#"{"playlists": [[1, 99]], "playlist": 5}"#)
+            .unwrap();
+        assert_eq!((next.playlists.clone(), next.playlist), (vec![vec![1]], 1));
     }
 }

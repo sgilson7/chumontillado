@@ -184,6 +184,9 @@ pub struct Ui {
     pub no_webgl: String,
     /// M4
     pub online: OnlineView,
+    /// T32: what the page keeps for the next visit and hands back with
+    /// `prefs.load`; the page reads nothing in it
+    pub saved: String,
 }
 
 fn action(g: &Game, name: &str, value: &str, label_key: &str, engage: bool) -> Action {
@@ -327,8 +330,129 @@ fn online_panel(g: &Game) -> Panel {
         ));
     }
     p.actions.push(leave);
+    // T32: the host plans the match's maps and weapons
+    if v.host {
+        p.settings = plan_settings(g);
+    }
     p.cards = cards(g, v);
     p
+}
+
+/// T32: a playlist's name: every map, or the k-th of this browser's.
+fn playlist_name(g: &Game, k: usize) -> String {
+    if k == 0 {
+        g.strings.get("playlist_all")
+    } else {
+        g.strings.get("playlist_n").replace("{n}", &k.to_string())
+    }
+}
+
+/// T32: the three choices a match is planned from: the playlist, its
+/// order, and the weapons.
+fn plan_settings(g: &Game) -> Vec<Setting> {
+    let step = |name: &str, minus: &str, plus: &str| {
+        vec![
+            action(g, name, "-1", minus, false),
+            action(g, name, "1", plus, false),
+        ]
+    };
+    vec![
+        Setting {
+            id: "playlist".into(),
+            label: g.strings.get("setting_playlist"),
+            value: playlist_name(g, g.playlist),
+            actions: step("plan.playlist", "skin_prev", "skin_next"),
+        },
+        Setting {
+            id: "order".into(),
+            label: g.strings.get("setting_order"),
+            value: g
+                .strings
+                .get(if g.shuffle { "order_shuffled" } else { "order_turn" }),
+            actions: step("plan.order", "order_turn", "order_shuffled"),
+        },
+        Setting {
+            id: "weapons".into(),
+            label: g.strings.get("setting_weapons"),
+            value: g.strings.get(if g.random_weapons {
+                "weapons_random"
+            } else {
+                "weapons_placed"
+            }),
+            actions: step("plan.weapons", "weapons_placed", "weapons_random"),
+        },
+    ]
+}
+
+/// T32: the Playlists screen: the playlist shown, its maps in order with
+/// buttons to move or take each out; and on the right every map, a click
+/// adding it to the playlist's end.
+fn playlist_panels(g: &Game) -> Vec<Panel> {
+    let s = &g.strings;
+    let mut left = panel("playlist");
+    let list = g.playlists.get(g.editing);
+    match list {
+        None => {
+            left.heading = s.get("playlists");
+            left.text = s.get("no_playlists");
+        }
+        Some(maps) => {
+            left.heading = playlist_name(g, g.editing + 1);
+            left.text = s.get(if maps.is_empty() {
+                "playlist_empty"
+            } else {
+                "playlist_text"
+            });
+            let last = maps.len().saturating_sub(1);
+            left.settings = maps
+                .iter()
+                .enumerate()
+                .map(|(i, &m)| {
+                    let at = i.to_string();
+                    let button = |name: &str, label: &str, enabled: bool| Action {
+                        enabled,
+                        ..action(g, name, &at, label, false)
+                    };
+                    Setting {
+                        id: format!("place-{i}"),
+                        label: s.get("place_n").replace("{n}", &(i + 1).to_string()),
+                        value: s.get(crate::maps::map(m as usize).name),
+                        actions: vec![
+                            button("playlist.up", "map_up", i > 0),
+                            button("playlist.down", "map_down", i < last),
+                            button("playlist.remove", "map_remove", true),
+                        ],
+                    }
+                })
+                .collect();
+        }
+    }
+    let many = g.playlists.len() > 1;
+    left.actions = vec![
+        Action {
+            enabled: many,
+            small: true,
+            ..action(g, "playlist.step", "-1", "playlist_prev", false)
+        },
+        Action {
+            enabled: many,
+            small: true,
+            ..action(g, "playlist.step", "1", "playlist_next", false)
+        },
+        action(g, "playlist.new", "", "playlist_new", false),
+        Action {
+            enabled: list.is_some(),
+            ..action(g, "playlist.delete", "", "playlist_delete", false)
+        },
+        action(g, "playlists.back", "", "back", false),
+    ];
+    let mut right = panel("maps");
+    right.heading = s.get("maps_heading");
+    right.text = s.get("maps_text");
+    right.actions = (0..crate::maps::COUNT)
+        .map(|k| action(g, "playlist.add", &k.to_string(), crate::maps::map(k).name, false))
+        .collect();
+    vec![left, right]
 }
 
 /// T25: the lobby's four seats, each a card round its figure: who holds
@@ -782,6 +906,7 @@ pub fn ui(g: &Game) -> Ui {
                 action(g, "menu.bots", "", "bots_match", true),
                 action(g, "online.host", "", "host_match", false),
                 action(g, "online.join", "", "join_match", false),
+                action(g, "screen.playlists", "", "playlists", false),
                 action(g, "screen.settings", "", "settings", false),
             ];
             panels.push(p);
@@ -816,9 +941,11 @@ pub fn ui(g: &Game) -> Ui {
             let mut p = panel("settings");
             p.heading = g.strings.get("settings");
             p.settings = settings(g);
+            p.settings.extend(plan_settings(g));
             p.actions = vec![action(g, "settings.back", "", "back", false)];
             panels.push(p);
         }
+        Screen::Playlists => panels.extend(playlist_panels(g)),
         Screen::Online => {
             panels.push(online_panel(g));
             // CS-Q22: A, and after an online match
@@ -845,6 +972,7 @@ pub fn ui(g: &Game) -> Ui {
             })
             .collect(),
         no_webgl: g.strings.get("no_webgl"),
+        saved: g.saved(),
         online: OnlineView {
             cmds: g.cmds.clone(),
             status: g.versus.as_ref().map(|v| v.status()).unwrap_or("").into(),

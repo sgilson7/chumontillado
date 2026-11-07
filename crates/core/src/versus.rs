@@ -249,6 +249,13 @@ impl Versus {
 
     /// T20: the bots' skill the host will start the match with; a
     /// guest's is replaced by the host's when the match starts.
+    /// T32: the host's plan for the next match it starts.
+    pub fn set_plan(&mut self, plan: crate::plan::Plan) {
+        if let Stage::Lobby(n) = &mut self.stage {
+            n.plan = plan;
+        }
+    }
+
     pub fn set_skill(&mut self, skill: crate::pilot::Skill) {
         if let Stage::Lobby(n) = &mut self.stage {
             n.skill = skill as u8;
@@ -372,6 +379,10 @@ impl Versus {
         // T20: the host's skill for the bots, as it sent it
         let mut world = World::online(seats, empty, skins);
         world.skill = crate::pilot::Skill::of(links.skill);
+        // T32: the maps and weapons the host planned, round one again on
+        // the first of them
+        world.plan = links.plan.clone();
+        world.start_round(0);
         self.stage = Stage::Match(Box::new(Rollback::new(links, seat, seats, world)));
     }
 

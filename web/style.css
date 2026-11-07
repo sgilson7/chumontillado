@@ -180,3 +180,28 @@ body:not([data-screen="play"]) #hud { display: none; }
   #title h1, #menu h1 { font-size: 44px; }
   table.controls td { padding: 1px 0; }
 }
+
+/* T32: the Playlists screen: the playlist on the left, every map on the right */
+body[data-screen="playlists"] #overlay { gap: 24px; align-items: stretch; padding: 4vh 4vw; }
+#playlist { flex: 1 1 460px; max-width: 560px; }
+#maps { flex: 0 1 360px; }
+#maps button { padding: 9px 16px; font-size: 15px; text-align: left; }
+#maps button + button { margin-top: 6px; }
+#playlist .setting output { min-width: 0; flex: 3; text-align: left; color: inherit; }
+#playlist .setting .label { flex: 0 0 32px; color: var(--ink-soft); }
+#playlist .setting button:disabled { opacity: 0.35; cursor: default; }
+#playlist > button { margin-top: 10px; }
+@media (max-width: 760px) {
+  body[data-screen="playlists"] #overlay { flex-direction: column; overflow: auto; }
+}
+/* T32: in the lobby, the host's plan for the match beside the room code */
+#online.lobby .plan { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 28px; width: 100%; }
+#online.lobby .plan .setting { gap: 8px; padding: 0; border: none; font-size: 14px; }
+#online.lobby .plan .setting output { min-width: 0; font-size: 14px; }
+#online.lobby .plan .setting button { min-width: 0; padding: 4px 10px; font-size: 12px; }
+#playlist .pair { display: flex; gap: 10px; }
+#playlist .pair button { margin-top: 0; padding: 9px 12px; font-size: 14px; }
+@media (max-width: 760px) {
+  #playlist .setting { flex-wrap: wrap; }
+  #playlist .setting output { flex: 1 1 60%; }
+}

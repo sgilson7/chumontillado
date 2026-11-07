@@ -316,6 +316,9 @@ pub struct World {
     /// shared, not copied, by rollback's copies of the world (M4): it
     /// never changes in a match
     pub map: Rc<Map>,
+    /// T32: the maps a match plays in order, and its weapons placed or at
+    /// random
+    pub plan: crate::plan::Plan,
     pub players: Vec<Player>,
     pub dummies: Vec<Dummy>,
     pub trails: Vec<Trail>,
@@ -434,6 +437,7 @@ impl World {
             online: false,
             rounds: None,
             pickups: Vec::new(),
+            plan: crate::plan::Plan::default(),
             heard: Vec::new(),
             nav: None,
             skill: pilot::Skill::Normal,
@@ -467,15 +471,22 @@ impl World {
         w
     }
 
-    /// M5: a round's start on map `map`: every seat in the match whole at
+    /// M5: a round's start at place `k` in the plan's order (T32; with
+    /// the plan of every map, map `k`): every seat in the match whole at
     /// its spawn with the pistol and navaja, the weapons back on the map,
-    /// and nothing left in the air.
-    pub fn start_round(&mut self, map: usize) {
-        let m = crate::maps::map(map);
+    /// as it places them or drawn at random, and nothing left in the air.
+    pub fn start_round(&mut self, k: usize) {
+        let m = crate::maps::map(self.plan.map(k));
+        let placed: Vec<Weapon> = m.pickups.iter().map(|p| p.1).collect();
+        let round = self.rounds.map_or(0, |r| r.round.max(0) as usize);
+        let weapons = self
+            .plan
+            .weapons_at(&placed, k.wrapping_mul(1000).wrapping_add(round));
         self.pickups = m
             .pickups
             .iter()
-            .map(|&(at, weapon)| Pickup {
+            .zip(weapons)
+            .map(|(&(at, _), weapon)| Pickup {
                 at,
                 weapon,
                 taken: false,
@@ -860,7 +871,7 @@ impl World {
             .collect();
         let alone = (alive.len() == 1).then(|| alive[0]);
         let before = r;
-        let next = crate::rounds::tick(&mut r, alive.len(), alone, present, crate::maps::COUNT);
+        let next = crate::rounds::tick(&mut r, alive.len(), alone, present, self.plan.len());
         self.rounds = Some(r);
         // M6: the count's three beats, its go, and a round's end, heard by all
         use crate::rounds::Phase;

@@ -253,12 +253,16 @@ async function main() {
     }
     if (p.heading) intro.append(make("h1", p.heading));
     if (p.text) intro.append(make("p", p.text));
+    // T32: in the lobby, the host's plan runs across the foot, over the
+    // match's buttons
+    const plan = lobby ? make("div", undefined, "plan") : box;
+    if (lobby && p.settings && p.settings.length > 0) bar.append(plan);
     (p.settings || []).forEach((s) => {
       const row = make("div", undefined, "setting");
       row.id = `setting-${s.id}`;
       const value = make("output", s.value);
       row.append(make("span", s.label, "label"), value, ...s.actions.map(button));
-      box.append(row);
+      plan.append(row);
     });
     (p.fields || []).forEach((f) => room.append(field(f)));
     // small buttons that follow one another sit together, two to a row
@@ -290,6 +294,9 @@ async function main() {
 
   // Builds the screen from the core's view model.
   let shownPanels = "";
+  // T32: where the core's kept string lives in this browser, and the last kept
+  const SAVED = "chumontillado.saved";
+  let savedShown = null;
   function show(u) {
     const changed = !ui || ui.screen !== u.screen;
     ui = u;
@@ -309,6 +316,15 @@ async function main() {
       });
     }
     el("overlay").hidden = u.panels.length === 0;
+    // T32: the core's string to keep for the next visit, whenever it changes
+    if (u.saved !== savedShown) {
+      savedShown = u.saved;
+      try {
+        localStorage.setItem(SAVED, u.saved);
+      } catch (e) {
+        // storage refused: kept for this visit only
+      }
+    }
     follow(u.online);
     for (const item of u.hud) {
       let node = el(`hud-${item.id}`);
@@ -368,6 +384,14 @@ async function main() {
   // any act
   const lookSpeed = params.get("look");
   if (lookSpeed) act("look.speed", lookSpeed);
+  // T32: what the core asked kept from the last visit, handed back as it
+  // was; a browser that keeps nothing starts afresh
+  try {
+    const kept = localStorage.getItem(SAVED);
+    if (kept) act("prefs.load", kept);
+  } catch (e) {
+    // storage refused: nothing kept
+  }
   for (const asked of params.getAll("act")) {
     const [name, value] = asked.split(":");
     act(name, value || "");

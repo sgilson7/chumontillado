@@ -34,6 +34,7 @@ pub mod nav;
 pub mod online;
 pub mod page;
 pub mod pilot;
+pub mod plan;
 pub mod prim;
 pub mod render;
 pub mod rng;
