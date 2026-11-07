@@ -2207,14 +2207,14 @@
   {
     "name": "T32 a guest keeps the plan the host sent",
     "file": "crates/core/src/online.rs",
-    "find": "                self.plan = plan;\n",
+    "find": "                *self.plan = plan;\n",
     "replace": "                let _ = plan;\n",
     "test": "online_the_hosts_plan_goes_with_its_start_and_the_guest_plays_it"
   },
   {
     "name": "T32 a match begins on the plan its links hold",
     "file": "crates/core/src/versus.rs",
-    "find": "        world.plan = links.plan.clone();\n",
+    "find": "        world.plan = (*links.plan).clone();\n",
     "replace": "",
     "test": "online_the_hosts_plan_goes_with_its_start_and_the_guest_plays_it"
   },
@@ -2256,8 +2256,8 @@
   {
     "name": "T32 a kept map that does not exist is let go",
     "file": "crates/core/src/game.rs",
-    "find": "                .map(|l| l.into_iter().filter(|&m| (m as usize) < crate::maps::COUNT).collect())",
-    "replace": "                .map(|l| l.into_iter().collect())",
+    "find": "                        .filter(|&m| (m as usize) < crate::maps::COUNT)\n",
+    "replace": "",
     "test": "the_playlists_and_choices_are_kept_for_the_next_visit"
   },
   {

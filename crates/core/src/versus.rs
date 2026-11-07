@@ -252,7 +252,7 @@ impl Versus {
     /// T32: the host's plan for the next match it starts.
     pub fn set_plan(&mut self, plan: crate::plan::Plan) {
         if let Stage::Lobby(n) = &mut self.stage {
-            n.plan = plan;
+            *n.plan = plan;
         }
     }
 
@@ -381,7 +381,7 @@ impl Versus {
         world.skill = crate::pilot::Skill::of(links.skill);
         // T32: the maps and weapons the host planned, round one again on
         // the first of them
-        world.plan = links.plan.clone();
+        world.plan = (*links.plan).clone();
         world.start_round(0);
         self.stage = Stage::Match(Box::new(Rollback::new(links, seat, seats, world)));
     }

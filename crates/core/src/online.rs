@@ -210,7 +210,7 @@ pub struct Net {
     /// T20: the bots' skill: the host's setting, sent with the start
     pub skill: u8,
     /// T32: the host's plan for the match, or the one it sent
-    pub plan: crate::plan::Plan,
+    pub plan: Box<crate::plan::Plan>,
     /// the match has begun
     pub started: bool,
     /// T24: the match's number in this room, from 0
@@ -263,7 +263,7 @@ impl Net {
             skins: [0, 1, 2, 3],
             chosen: 0,
             skill: normal_skill(),
-            plan: crate::plan::Plan::default(),
+            plan: Box::default(),
             started: false,
             game: 0,
             mine: BTreeMap::new(),
@@ -457,7 +457,7 @@ impl Net {
         let skins = self.starting_skins();
         self.skins = skins;
         let skill = self.skill;
-        let plan = self.plan.clone();
+        let plan = (*self.plan).clone();
         self.broadcast(
             &Msg::Start {
                 seats,
@@ -615,7 +615,7 @@ impl Net {
                 self.empty = empty;
                 self.skins = skins;
                 self.skill = skill;
-                self.plan = plan;
+                *self.plan = plan;
                 self.started = true;
                 self.status = PLAYING;
                 Some(Event::Start {
