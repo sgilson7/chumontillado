@@ -76,6 +76,16 @@ impl Game {
         self.inner.frame.draws.clone()
     }
 
+    /// T34: the lifelike figures' records (`numbers().actor`).
+    pub fn actors(&self) -> Vec<f32> {
+        floats(self.inner.frame.actors.clone())
+    }
+
+    /// T34: the skins whose lifelike models the page should load, a bit each.
+    pub fn wanted(&self) -> u32 {
+        self.inner.wanted() as u32
+    }
+
     pub fn static_values(&self) -> Vec<f32> {
         floats(self.inner.scene.values.clone())
     }

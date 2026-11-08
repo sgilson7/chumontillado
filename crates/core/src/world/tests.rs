@@ -790,6 +790,9 @@ fn every_skin_and_the_straw_target_stay_inside_the_hit_envelope() {
                     on_ground: ground,
                     moment,
                     arms: None,
+                    sliding: false,
+                    hanging: false,
+                    lifelike: false,
                 };
                 draw(&mut shapes, &f, &look);
                 let widest = check(&shapes, &format!("{skin:?} pitch {pitch} at {moment}"));
@@ -1420,7 +1423,7 @@ fn a_headshot_leaves_an_x_on_the_head_for_the_shooter_and_the_kick_never_moves_t
 
 /// A match of one person (seat 1) and three bots, every seat in its skin.
 fn a_match() -> World {
-    World::online(0b1, 0, [0, 1, 2, 3])
+    World::online(0b1, 0, [0, 1, 2, 3], 0)
 }
 
 #[test]
@@ -1516,7 +1519,7 @@ fn walking_over_a_weapon_takes_it_into_your_hands_full_and_it_is_gone_for_the_ro
 #[test]
 fn in_a_match_the_bots_fight_each_other_too() {
     // four bots and nobody else: within a minute of play someone is hurt
-    let mut w = World::online(0, 0, [0, 1, 2, 3]);
+    let mut w = World::online(0, 0, [0, 1, 2, 3], 0);
     let mut hurt = false;
     for _ in 0..3600 {
         w.step(&[]);
@@ -1631,7 +1634,7 @@ fn on_every_map_a_round_with_bots_is_decided_inside_a_minute() {
     let mut slow = Vec::new();
     for (map, skill) in (0..crate::maps::COUNT).flat_map(|m| crate::pilot::SKILLS.map(|s| (m, s))) {
         for (person, from) in [(0, 0), (0, 37), (0, 101), (1, 0), (1, 37), (1, 101)] {
-            let mut w = World::online(person, 0, [0, 1, 2, 3]);
+            let mut w = World::online(person, 0, [0, 1, 2, 3], 0);
             w.skill = skill;
             w.tick = from;
             w.start_round(map);
@@ -1658,7 +1661,7 @@ fn a_lone_bot_finds_and_fells_a_person_standing_still_on_every_map() {
     let mut missed = Vec::new();
     for (map, from) in (0..crate::maps::COUNT).flat_map(|m| [(m, 0), (m, 53), (m, 140)]) {
         // seat 1 a person, seat 2 a bot, seats 3 and 4 left empty
-        let mut w = World::online(0b0001, 0b1100, [0, 1, 2, 3]);
+        let mut w = World::online(0b0001, 0b1100, [0, 1, 2, 3], 0);
         w.tick = from;
         w.start_round(map);
         for _ in 0..crate::rounds::COUNT_TICKS + crate::rounds::XRAY_TICKS {
@@ -1681,7 +1684,7 @@ fn a_harder_bot_fells_a_person_sooner() {
     let took = |skill: crate::pilot::Skill| -> i64 {
         let mut ticks = 0;
         for (map, from) in (0..crate::maps::COUNT).flat_map(|m| [(m, 0), (m, 53), (m, 140)]) {
-            let mut w = World::online(0b0001, 0b1100, [0, 1, 2, 3]);
+            let mut w = World::online(0b0001, 0b1100, [0, 1, 2, 3], 0);
             w.skill = skill;
             w.tick = from;
             w.start_round(map);
@@ -1711,7 +1714,7 @@ fn a_bot_hit_sees_its_shooter_and_low_a_spawn_out_of_its_sight() {
     let mut sc = Scratch::default();
     let mut covered = 0;
     for map in 0..crate::maps::COUNT {
-        let mut w = World::online(0, 0, [0, 1, 2, 3]);
+        let mut w = World::online(0, 0, [0, 1, 2, 3], 0);
         w.start_round(map);
         for k in [2, 3] {
             w.players[k].dead = DOWN_FOR_ROUND;
@@ -1738,7 +1741,7 @@ fn a_bot_hit_sees_its_shooter_and_low_a_spawn_out_of_its_sight() {
 /// not; in the practice room it keeps its loop.
 #[test]
 fn in_a_match_a_bot_hunts_the_nearest_other_seat_standing() {
-    let mut w = World::online(0, 0, [0, 1, 2, 3]);
+    let mut w = World::online(0, 0, [0, 1, 2, 3], 0);
     w.start_round(2);
     let mut sc = Scratch::default();
     let me = w.players[1].body.origin;
@@ -1765,7 +1768,7 @@ fn a_player_fallen_twenty_metres_below_the_map_is_felled_and_one_above_is_not() 
         assert!(m.lowest() >= -int(1), "{}: {}", m.name, m.lowest());
     }
     for depth in [19, 21] {
-        let mut w = World::online(0b1, 0, [0, 1, 2, 3]);
+        let mut w = World::online(0b1, 0, [0, 1, 2, 3], 0);
         let low = w.map.lowest() - int(depth);
         for p in &mut w.players[..2] {
             p.body = body_at(v3(p.body.origin.x, low, p.body.origin.z));
@@ -1820,7 +1823,7 @@ fn every_maps_walls_stand_at_the_edge_of_its_inside() {
 fn a_player_flung_over_a_wall_comes_down_inside_it() {
     for m in 0..crate::maps::COUNT {
         // alone: no bot to shoot you on the way down
-        let mut w = World::online(0b1, 0b1110, [0, 1, 2, 3]);
+        let mut w = World::online(0b1, 0b1110, [0, 1, 2, 3], 0);
         w.start_round(m);
         let Some((lo, hi)) = w.map.inside() else { continue };
         let high = w.map.brushes.iter().map(|b| b.maxs.y).max().unwrap();
@@ -1872,7 +1875,7 @@ fn over_the_top_of_the_plazas_stands_is_a_fall_off_the_map() {
         assert!(t.hit() && t.end.y.abs() < ONE / 100, "{deg}°: no floor at 20.9 m");
     }
     // alone: no bot to shoot you on the way
-    let mut w = World::online(0b1, 0b1110, [0, 1, 2, 3]);
+    let mut w = World::online(0b1, 0b1110, [0, 1, 2, 3], 0);
     w.start_round(0);
     assert_eq!(w.map.name, "map_plaza");
     let p = &mut w.players[0];
@@ -1934,7 +1937,7 @@ fn down_the_toboga_n_and_over_its_jump_you_land_in_the_arena_and_off_its_side_yo
         .unwrap();
     let start = |at: V3, push: V3| {
         // alone: no bot to shoot you on the way
-        let mut w = World::online(0b1, 0b1110, [0, 1, 2, 3]);
+        let mut w = World::online(0b1, 0b1110, [0, 1, 2, 3], 0);
         w.start_round(tobogan);
         run(&mut w, Input::default(), crate::rounds::COUNT_TICKS as usize + 1);
         let p = &mut w.players[0];
@@ -1973,7 +1976,7 @@ fn at_a_vine() -> (World, crate::map::Vine) {
     let selva = (0..crate::maps::COUNT)
         .find(|&k| crate::maps::map(k).name == "map_selva")
         .unwrap();
-    let mut w = World::online(0b1, 0b1110, [0, 1, 2, 3]);
+    let mut w = World::online(0b1, 0b1110, [0, 1, 2, 3], 0);
     w.start_round(selva);
     run(&mut w, Input::default(), crate::rounds::COUNT_TICKS as usize + 1);
     let v = w.map.vines[0];
@@ -2076,4 +2079,144 @@ fn a_bot_does_not_take_hold_of_a_vine() {
     w.players[0].pilot = Some(crate::pilot::Pilot::default());
     run(&mut w, Input::default(), 30);
     assert!(w.players[0].vine.is_none());
+}
+
+/// T34: the lifelike skins inside the hit envelope (CS-5), from the reach the
+/// bake measured (`data/skins_reach.json`): every piece of every lifelike
+/// body, in every lower clip with the aim, the reload and the raise on top,
+/// no further than `BODY_R` from the upright line and no higher than the
+/// head's top, standing or (ducked and sliding) ducked. A cut and a thrust
+/// carry the hands out with the weapon, as the painted figure's are, and are
+/// not held to it.
+///
+/// The person decided two pieces keep their form past it, "they can be very
+/// realistic and keep their current form" (2026-11-08): the Hidalgo's hat
+/// (2.07 m in Style Lab's rest pose) and the Infanta's farthingale with its
+/// hoops (0.98 m across). The rest of `REACHES` is what the bake measured
+/// where a lifelike body still reaches past the envelope (the knights'
+/// helms, shoes at the front of the stride, knees and hats in a squat, El
+/// Sordo's cloak): each awaits the person (SECOND-ORDER R23.6). Any piece
+/// not listed that reaches past the envelope fails, and so does a listed one
+/// reaching further than its measured reach, rounded up to the centimetre.
+#[test]
+fn every_lifelike_body_stays_inside_the_hit_envelope_but_what_it_is_allowed() {
+    use crate::weapons::{BODY_R, HEAD_R};
+    #[derive(PartialEq)]
+    enum Reach {
+        Out,
+        Up,
+        UpDucked,
+    }
+    use Reach::*;
+    const REACHES: &[(&str, &str, Reach, i32)] = &[
+        ("hidalgo", "body", Up, 198),
+        ("hidalgo", "body", UpDucked, 135),
+        ("hidalgo", "hat", Up, 209),
+        ("hidalgo", "hat", UpDucked, 146),
+        ("hidalgo", "hatband", Up, 198),
+        ("hidalgo", "hatband", UpDucked, 133),
+        ("hidalgo", "hose", Out, 51),
+        ("hidalgo", "shoe_l", Out, 53),
+        ("hidalgo", "shoe_r", Out, 53),
+        ("infanta", "band_1", Out, 49),
+        ("infanta", "band_2", Out, 50),
+        ("infanta", "band_3", Out, 51),
+        ("infanta", "farthingale", Out, 51),
+        ("harlequin", "bicorne", UpDucked, 131),
+        ("harlequin", "body", UpDucked, 126),
+        ("harlequin", "cockade", UpDucked, 128),
+        ("harlequin", "tights_l", Out, 51),
+        ("harlequin", "tights_r", Out, 51),
+        ("sordo", "cloak", Out, 67),
+        ("sordo", "coat_skirt", Out, 64),
+        ("fraile", "body", Out, 57),
+        ("fraile", "body", UpDucked, 125),
+        ("fraile", "hood", UpDucked, 131),
+        ("torero", "breeches", Out, 49),
+        ("torero", "montera_lobes", UpDucked, 126),
+        ("torero", "tassel_l", Out, 50),
+        ("torero", "tassel_r", Out, 50),
+        ("knight_a", "body", Up, 194),
+        ("knight_a", "body", UpDucked, 131),
+        ("knight_a", "cloak", Out, 57),
+        ("knight_a", "gauntlet_l", Out, 49),
+        ("knight_a", "greave_l", Out, 49),
+        ("knight_a", "greave_l_edge", Out, 50),
+        ("knight_a", "greave_r", Out, 49),
+        ("knight_a", "greave_r_edge", Out, 50),
+        ("knight_a", "helm", Up, 203),
+        ("knight_a", "helm", UpDucked, 137),
+        ("knight_a", "mail_leg_l", Out, 52),
+        ("knight_a", "mail_leg_r", Out, 53),
+        ("knight_a", "poleyn_l", Out, 54),
+        ("knight_a", "poleyn_r", Out, 55),
+        ("knight_a", "ridge", Out, 49),
+        ("knight_a", "ridge", Up, 205),
+        ("knight_a", "ridge", UpDucked, 139),
+        ("knight_a", "sabaton_l", Out, 53),
+        ("knight_a", "sabaton_r", Out, 53),
+        ("knight_b", "body", Up, 194),
+        ("knight_b", "body", UpDucked, 131),
+        ("knight_b", "crown_band", Up, 198),
+        ("knight_b", "crown_band", UpDucked, 132),
+        ("knight_b", "crown_spikes", Out, 54),
+        ("knight_b", "crown_spikes", Up, 212),
+        ("knight_b", "crown_spikes", UpDucked, 147),
+        ("knight_b", "embers", Out, 50),
+        ("knight_b", "gauntlet_l", Out, 49),
+        ("knight_b", "greave_l", Out, 49),
+        ("knight_b", "greave_l_edge", Out, 50),
+        ("knight_b", "greave_r", Out, 49),
+        ("knight_b", "greave_r_edge", Out, 50),
+        ("knight_b", "helm", Up, 202),
+        ("knight_b", "helm", UpDucked, 138),
+        ("knight_b", "lame_4", Out, 51),
+        ("knight_b", "lame_4_edge", Out, 51),
+        ("knight_b", "mail_leg_l", Out, 52),
+        ("knight_b", "mail_leg_r", Out, 53),
+        ("knight_b", "poleyn_l", Out, 54),
+        ("knight_b", "poleyn_r", Out, 55),
+        ("knight_b", "sabaton_l", Out, 53),
+        ("knight_b", "sabaton_r", Out, 53),
+        ("knight_b", "tabard", Out, 49),
+    ];
+    let reach: serde_json::Value =
+        serde_json::from_str(include_str!("../../../../data/skins_reach.json")).unwrap();
+    let top = crate::movement::EYE_STAND + HEAD_R;
+    let ducked_top = crate::movement::EYE_DUCK + HEAD_R;
+    let allowed = |skin: &str, piece: &str, kind: Reach| -> Option<Fx> {
+        REACHES
+            .iter()
+            .find(|(s, p, k, _)| *s == skin && *p == piece && *k == kind)
+            .map(|r| r.3 * ONE / 100)
+    };
+    let mut checked = 0;
+    for skin in crate::skins::SKINS {
+        let pairs = reach["skins"][skin.model()]
+            .as_object()
+            .unwrap_or_else(|| panic!("{} has no reach", skin.model()));
+        for (pair, pieces) in pairs {
+            let (lower, upper) = pair.split_once('+').unwrap();
+            if matches!(upper, "slash" | "thrust") {
+                continue;
+            }
+            let ducked = matches!(lower, "duck" | "slide");
+            for (piece, r) in pieces.as_object().unwrap() {
+                let (out, up) = (r[0].as_i64().unwrap() as Fx, r[1].as_i64().unwrap() as Fx);
+                let what = format!("{} {piece} in {pair}", skin.model());
+                let most_out = allowed(skin.model(), piece, Out).unwrap_or(BODY_R);
+                assert!(out <= most_out, "{what} reaches {} m out", fx::decimal(out, 3));
+                let (most_up, kind) = if ducked { (ducked_top, UpDucked) } else { (top, Up) };
+                let most_up = allowed(skin.model(), piece, kind).unwrap_or(most_up);
+                assert!(up <= most_up, "{what} reaches {} m up", fx::decimal(up, 3));
+                checked += 1;
+            }
+        }
+    }
+    assert!(checked > 1000, "only {checked} pieces checked");
+    // the person's two, as they decided them: the hat to 2.07 m standing
+    // (the bake's 2.09 with the stride's bob), the farthingale's hoops to
+    // half of 0.98 m across, and 2 cm for the hoop bands round it
+    assert!(allowed("hidalgo", "hat", Up).unwrap() <= ONE * 209 / 100);
+    assert!(allowed("infanta", "farthingale", Out).unwrap() <= ONE * 51 / 100);
 }

@@ -112,6 +112,10 @@ pub struct Game {
     pub copied: String,
     /// M5: the skin this player wears (a setting), by `skins::SKINS` number
     pub skin: u8,
+    /// T34: and its style, lifelike or painted (a setting, painted to start)
+    pub lifelike: bool,
+    /// T34: the skins whose lifelike models the page has loaded, a bit each
+    pub ready: u16,
     /// a match against bots is under way (not the practice room)
     pub matched: bool,
     /// the map the static scene was built from
@@ -185,6 +189,8 @@ impl Game {
             outbox_left: Vec::new(),
             copied: String::new(),
             skin: 0,
+            lifelike: false,
+            ready: 0,
             matched: false,
             scene_map: "practice",
             notice_seen: None,
@@ -496,8 +502,14 @@ impl Game {
                 fx::sin(phase.wrapping_add(k as i32 * fx::QUARTER_TURN)),
                 fx::deg(20),
             );
+            let lifelike = if v.seat() == Some(k) {
+                self.lifelike
+            } else {
+                held && crate::online::holds(n.lifelike, k)
+            };
             let figure = crate::skins::Figure {
                 skin: crate::skins::SKINS[skin as usize % crate::skins::COUNT],
+                lifelike,
                 feet: *at,
                 yaw: fx::wrap(fx::HALF_TURN.wrapping_add(sway)),
                 pitch: 0,
@@ -507,6 +519,8 @@ impl Game {
                 on_ground: true,
                 moment: 0,
                 arms: None,
+                sliding: false,
+                hanging: false,
             };
             crate::skins::draw(out, &figure, &self.look);
         }
@@ -531,6 +545,26 @@ impl Game {
         }
     }
 
+    /// T34: the skins whose lifelike models the page should load now, a
+    /// bit each: yours if you chose lifelike, and every seat's in the world
+    /// or the lobby that wears one.
+    pub fn wanted(&self) -> u16 {
+        let bit = |skin: u8| 1u16 << (skin as usize % crate::skins::COUNT);
+        let mut want = if self.lifelike { bit(self.skin) } else { 0 };
+        for p in self.view_world().players.iter().filter(|p| p.lifelike) {
+            want |= bit(p.skin);
+        }
+        if let Some(v) = self.versus.as_ref() {
+            let n = v.links();
+            for k in 0..crate::online::SEATS {
+                if crate::online::holds(n.lifelike, k) {
+                    want |= bit(n.skins[k]);
+                }
+            }
+        }
+        want
+    }
+
     /// Builds the frame the page draws next.
     pub fn draw(&mut self) {
         self.world.fov = self.fov;
@@ -549,7 +583,10 @@ impl Game {
         if rebuilt || origin != self.scene.origin || self.scene.version == 0 {
             self.scene = Scene::build(&self.groups, origin, self.scene.version + 1);
         }
-        let mut moving = Shapes::default();
+        let mut moving = Shapes {
+            ready: self.ready,
+            ..Shapes::default()
+        };
         moving.sky(cam.eye);
         let first_person = matches!(self.screen, Screen::Play | Screen::Paused)
             || self.screen == Screen::Settings && self.settings_from == Screen::Paused;
@@ -570,6 +607,7 @@ impl Game {
             let turn = (self.title_ticks as i64 * fx::deg(1) as i64 / 2) as i32;
             let figure = crate::skins::Figure {
                 skin: crate::skins::SKINS[self.skin as usize % crate::skins::COUNT],
+                lifelike: self.lifelike,
                 feet: v3(fx::ONE * 55 / 10, 0, fx::ONE * 95 / 10),
                 yaw: fx::wrap(fx::HALF_TURN.wrapping_add(turn)),
                 pitch: 0,
@@ -579,6 +617,8 @@ impl Game {
                 on_ground: true,
                 moment: 0,
                 arms: None,
+                sliding: false,
+                hanging: false,
             };
             crate::skins::draw(&mut moving, &figure, &self.look);
         }
@@ -607,7 +647,7 @@ impl Game {
         for s in skins.iter_mut().skip(1) {
             *s = free.next().unwrap_or(0);
         }
-        self.world = World::online(0b1, 0, skins);
+        self.world = World::online(0b1, 0, skins, self.lifelike as crate::online::Seats);
         self.world.skill = self.skill;
         self.world.plan = self.plan();
         self.world.start_round(0);
@@ -677,8 +717,11 @@ impl Game {
         self.world = World::room(bot);
         self.world.skill = self.skill;
         self.world.players[0].skin = self.skin;
+        self.world.players[0].lifelike = self.lifelike;
+        // T34: the practice room's bot wears your style, so you can see it
         if let Some(b) = self.world.players.get_mut(1) {
             b.skin = (self.skin + 1) % crate::skins::COUNT as u8;
+            b.lifelike = self.lifelike;
         }
         for p in &mut self.world.players {
             p.aim.pct = self.look_pct;
@@ -689,7 +732,7 @@ impl Game {
 
     /// M4: a room to host or join: the transport is told to open it.
     fn open_room(&mut self, host: bool, code: &str) {
-        let mut v = Versus::new(host, code, &self.build, self.skin);
+        let mut v = Versus::new(host, code, &self.build, self.skin, self.lifelike);
         v.set_skill(self.skill);
         v.opened_us = Some(self.now_us);
         self.versus = Some(v);
@@ -792,15 +835,34 @@ impl Game {
                     }
                 }
             }
-            // M5: your skin, a setting: the six in turn (T16); in a lobby the
-            // others are told
+            // M5: your skin, a setting: the eight in turn (T16, T34); in a
+            // lobby the others are told
             "skin.step" => {
                 let step: i32 = v.parse().map_err(|_| format!("\"{value}\" is not a step."))?;
                 self.skin = (self.skin as i32 + step).rem_euclid(crate::skins::COUNT as i32) as u8;
                 if let Some(x) = self.versus.as_mut() {
-                    x.choose_skin(self.skin);
+                    x.choose_skin(self.skin, self.lifelike);
                 }
                 self.ui_version += 1;
+            }
+            // T34: the skin's style: −1 painted, 1 lifelike; in a lobby the
+            // others are told
+            "style.set" => {
+                let step: i32 = v.parse().map_err(|_| format!("\"{value}\" is not a step."))?;
+                self.lifelike = step > 0;
+                if let Some(x) = self.versus.as_mut() {
+                    x.choose_skin(self.skin, self.lifelike);
+                }
+                self.ui_version += 1;
+                self.draw();
+            }
+            // T34: the page has loaded skin k's lifelike model
+            "mesh.ready" => {
+                let k: usize = v.parse().map_err(|_| format!("\"{value}\" is not a skin."))?;
+                if k < crate::skins::COUNT {
+                    self.ready |= 1 << k;
+                }
+                self.draw();
             }
             "screen.menu" => {
                 self.leave_online();
@@ -1064,6 +1126,11 @@ impl Game {
                     crate::weapons::Weapon::Punal,
                     crate::weapons::Weapon::Pincel,
                 ];
+                // T34: "k" starts the row at skin k, so the knights show too;
+                // "k duck" has them ducked
+                let mut words = v.split_whitespace();
+                let from: usize = words.next().and_then(|w| w.parse().ok()).unwrap_or(0);
+                let ducked = words.next() == Some("duck");
                 for (k, g) in held.iter().enumerate() {
                     // 1.6 m apart, so the six fit between the room's slope and wall
                     let at = spawn
@@ -1071,7 +1138,9 @@ impl Game {
                         .add(v3(fx::ONE * (k as i32 * 16 - 28) / 10, 0, -fx::int(5)));
                     let mut p = crate::world::Player::at((at, fx::HALF_TURN));
                     p.arms.weapon = *g;
-                    p.skin = k as u8;
+                    p.skin = ((from + k) % crate::skins::COUNT) as u8;
+                    p.body.ducked = ducked;
+                    p.lifelike = self.lifelike;
                     w.players.push(p);
                 }
                 self.draw();
@@ -1617,7 +1686,7 @@ pub(crate) mod tests {
         }
     }
 
-    /// T26: your card in the lobby clicks through all six skins, back and
+    /// T26: your card in the lobby clicks through all eight skins, back and
     /// on, and says which of them it shows.
     #[test]
     fn your_lobby_card_clicks_through_every_skin_both_ways() {
@@ -1625,7 +1694,7 @@ pub(crate) mod tests {
         g.act("online.host", "").unwrap();
         let mine = |g: &Game| crate::api::ui(g).panels[0].cards[0].clone();
         let c = mine(&g);
-        assert_eq!((c.skin.as_str(), c.picked.as_str()), ("The Hidalgo", "1 of 6"));
+        assert_eq!((c.skin.as_str(), c.picked.as_str()), ("The Hidalgo", "1 of 8"));
         let steps: Vec<(&str, &str)> = c
             .pick
             .iter()
@@ -1634,7 +1703,10 @@ pub(crate) mod tests {
         assert_eq!(steps, [("skin.step", "-1"), ("skin.step", "1")]);
         g.act("skin.step", &c.pick[0].value).unwrap();
         let c = mine(&g);
-        assert_eq!((c.skin.as_str(), c.picked.as_str()), ("The Torero", "6 of 6"));
+        assert_eq!(
+            (c.skin.as_str(), c.picked.as_str()),
+            ("The Ivory Knight", "8 of 8")
+        );
         for _ in 0..2 {
             g.act("skin.step", &c.pick[1].value).unwrap();
         }
@@ -1721,7 +1793,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn the_skin_setting_steps_round_the_six_and_shows_its_name() {
+    fn the_skin_setting_steps_round_the_eight_and_shows_its_name() {
         let mut g = game();
         let name = |g: &Game| {
             crate::api::settings(g)
@@ -1730,14 +1802,14 @@ pub(crate) mod tests {
                 .unwrap()
                 .value
         };
-        // back from the Hidalgo is the last of the six (T16)
+        // back from the Hidalgo is the last of the eight (T16, T34)
         g.act("skin.step", "-1").unwrap();
-        assert_eq!(g.skin, 5);
+        assert_eq!(g.skin, 7);
+        assert_eq!(name(&g), "The Ivory Knight");
+        g.act("skin.step", "-1").unwrap();
+        assert_eq!(name(&g), "The Black Knight");
+        g.act("skin.step", "-1").unwrap();
         assert_eq!(name(&g), "The Torero");
-        g.act("skin.step", "-1").unwrap();
-        assert_eq!(name(&g), "The Friar");
-        g.act("skin.step", "-1").unwrap();
-        assert_eq!(name(&g), "El Sordo");
         g.act("skin.step", "3").unwrap();
         assert_eq!(g.skin, 0);
     }
@@ -1782,8 +1854,8 @@ pub(crate) mod tests {
 
     #[test]
     fn a_guests_skin_reaches_the_host_and_the_match_on_both_browsers() {
-        let mut host = crate::versus::Versus::new(true, "KQXRT", "b", 1);
-        let mut guest = crate::versus::Versus::new(false, "KQXRT", "b", 3);
+        let mut host = crate::versus::Versus::new(true, "KQXRT", "b", 1, false);
+        let mut guest = crate::versus::Versus::new(false, "KQXRT", "b", 3, false);
         host.connected(1, 0);
         guest.connected(2, 0);
         let trade = |h: &mut crate::versus::Versus, gu: &mut crate::versus::Versus| {
@@ -1800,7 +1872,7 @@ pub(crate) mod tests {
         assert_eq!(host.links().skins[..2], [1, 3]);
         // the guest changes its mind in the lobby, to the last skin (T16:
         // the host once held a guest's choice to the first four)
-        guest.choose_skin(5);
+        guest.choose_skin(5, false);
         trade(&mut host, &mut guest);
         assert_eq!(host.links().skins[1], 5);
         host.start();
@@ -1817,6 +1889,118 @@ pub(crate) mod tests {
         };
         assert_eq!(skins(&host), vec![1, 5, 0, 2]);
         assert_eq!(skins(&guest), skins(&host));
+    }
+
+    /// T34: the style setting turns your skin lifelike and back; the core
+    /// asks the page for that skin's model, and draws the practice room's
+    /// bot lifelike once the page has it (painted until then).
+    #[test]
+    fn the_style_setting_wears_your_skin_lifelike_and_asks_for_its_model() {
+        let mut g = game();
+        let style = |g: &Game| {
+            crate::api::settings(g)
+                .into_iter()
+                .find(|r| r.id == "style")
+                .unwrap()
+                .value
+        };
+        assert_eq!(style(&g), "Painted");
+        assert_eq!(g.wanted(), 0);
+        g.act("skin.step", "6").unwrap();
+        g.act("style.set", "1").unwrap();
+        assert_eq!(style(&g), "Lifelike");
+        // the Black Knight's bit, 1 << 6
+        assert_eq!(g.wanted(), 64);
+        g.act("menu.practice", "").unwrap();
+        // the practice bot wears the next skin, the Ivory Knight, lifelike too
+        assert_eq!(g.wanted(), 64 | 128);
+        assert!(g.frame.actors.is_empty(), "painted until the models arrive");
+        g.act("mesh.ready", "7").unwrap();
+        assert_eq!(g.frame.actors.len(), crate::lifelike::VALUES);
+        g.act("style.set", "-1").unwrap();
+        assert_eq!(style(&g), "Painted");
+    }
+
+    /// T34: a guest's lifelike style reaches the host and the match on both
+    /// browsers; the bots wear theirs painted; it lasts into the next round;
+    /// and what a guest says is held to a real skin and real seats.
+    #[test]
+    fn a_guests_lifelike_style_reaches_the_match_on_both_browsers_and_lasts_the_rounds() {
+        let mut host = crate::versus::Versus::new(true, "KQXRT", "b", 0, false);
+        let mut guest = crate::versus::Versus::new(false, "KQXRT", "b", 6, false);
+        host.connected(1, 0);
+        guest.connected(2, 0);
+        let trade = |h: &mut crate::versus::Versus, gu: &mut crate::versus::Versus| {
+            for _ in 0..3 {
+                for (_, t) in gu.take_outbox() {
+                    h.message(1, &t, 0);
+                }
+                for (_, t) in h.take_outbox() {
+                    gu.message(2, &t, 0);
+                }
+            }
+        };
+        trade(&mut host, &mut guest);
+        assert_eq!(host.links().lifelike, 0);
+        // the guest (seat 1, the Black Knight) picks lifelike in the lobby
+        guest.choose_skin(6, true);
+        trade(&mut host, &mut guest);
+        assert_eq!(host.links().lifelike, 0b0010);
+        host.start();
+        trade(&mut host, &mut guest);
+        let styles = |v: &crate::versus::Versus| -> Vec<bool> {
+            v.session()
+                .unwrap()
+                .world
+                .players
+                .iter()
+                .map(|p| p.lifelike)
+                .collect()
+        };
+        // seat 1 lifelike, the host painted, the two bots painted
+        assert_eq!(styles(&host), vec![false, true, false, false]);
+        assert_eq!(styles(&guest), styles(&host));
+        // and still so after the round ends and the next begins
+        let mut w = host.session().unwrap().world.clone();
+        w.start_round(1);
+        assert!(w.players[1].lifelike && !w.players[2].lifelike);
+        // a guest who chose lifelike and left the lobby: the bot taking its
+        // seat wears its skin painted
+        let mut host = crate::versus::Versus::new(true, "KQXRT", "b", 0, false);
+        let mut guest = crate::versus::Versus::new(false, "KQXRT", "b", 6, true);
+        host.connected(1, 0);
+        guest.connected(2, 0);
+        trade(&mut host, &mut guest);
+        assert_eq!(host.links().lifelike, 0b0010);
+        host.left(1);
+        host.start();
+        assert_eq!(styles(&host), vec![false, false, false, false]);
+        // a guest's word is held to the eight skins and the four seats
+        let mut n = crate::online::Net::new(true, "b");
+        n.connected(9);
+        n.message(
+            9,
+            r#"{"t":"hello","protocol":PROTO,"build":"b","host":false,"skin":200,"lifelike":true}"#
+                .replace("PROTO", &crate::online::PROTOCOL.to_string())
+                .as_str(),
+        );
+        let seat = n.others[&9].seat.unwrap();
+        assert_eq!(n.skins[seat], 7);
+        assert_eq!(n.lifelike, 1 << seat);
+        let mut g = crate::online::Net::new(false, "b");
+        g.connected(3);
+        g.message(
+            3,
+            &format!(
+                r#"{{"t":"hello","protocol":{},"build":"b","host":true,"skin":0}}"#,
+                crate::online::PROTOCOL
+            ),
+        );
+        g.message(
+            3,
+            r#"{"t":"roster","seats":1,"empty":0,"skins":[0,1,2,3],"lifelike":255}"#,
+        );
+        assert_eq!(g.lifelike, 0b1111);
     }
 
     #[test]

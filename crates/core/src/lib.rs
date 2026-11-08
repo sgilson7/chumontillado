@@ -25,6 +25,7 @@ pub mod glossary;
 pub mod hands;
 pub mod hurt;
 pub mod input;
+pub mod lifelike;
 pub mod look;
 pub mod map;
 pub mod maps;

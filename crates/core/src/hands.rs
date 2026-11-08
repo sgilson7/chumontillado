@@ -145,37 +145,19 @@ pub struct Pose {
 pub fn pose(a: &Arms, swing: Option<Swinging>, speed: Fx, on_ground: bool, moment: Fx) -> Pose {
     let cm = |c: i32| c * ONE / 100;
     let st = a.weapon.stats();
-    let mut p = Pose::default();
-    // the kick: back and up, settling over the kick's ticks
-    let (back, up, _) = KICK[a.weapon as usize];
-    let k = ONE * a.recoil / RECOIL;
-    p.shift = v3(0, 0, fx::mul(cm(back), k));
-    p.pitch = fx::mul(fx::deg(up), k);
-    p.flash = a.recoil > RECOIL - 2;
-    // between shots: the lever and the pump work through the middle of the
-    // interval; the clapper swings out and back
-    if st.interval > 0 && a.cooldown > 0 {
-        let t = st.interval - a.cooldown;
-        p.work = hump(along(t, st.interval / 5, st.interval * 4 / 5));
-    }
+    let mut p = held_pose(a);
     // a reload: down and rolled over, the magazine out and back in, up again
     if a.reloading > 0 && st.reload > 0 {
-        let t = along(st.reload - a.reloading, 0, st.reload);
-        let low = hump(t);
+        let low = reload_low(a);
         p.shift = p.shift.add(v3(0, -fx::mul(cm(10), low), 0));
         p.roll += fx::mul(fx::deg(35), low);
         p.pitch += fx::mul(fx::deg(10), low);
-        p.mag = hump(along(st.reload - a.reloading, st.reload / 5, st.reload * 4 / 5));
     }
     // raised from below after a switch
     if a.raise > 0 {
         let t = ONE * a.raise / RAISE;
         p.shift = p.shift.add(v3(0, -fx::mul(cm(22), t), 0));
         p.pitch -= fx::mul(fx::deg(30), t);
-    }
-    // the Pincel's charge
-    if st.charge > 0 {
-        p.charge = ONE * a.charge / st.charge;
     }
     // a bob in step with a run, none in the air
     if on_ground && speed > 0 {
@@ -194,28 +176,13 @@ pub fn pose(a: &Arms, swing: Option<Swinging>, speed: Fx, on_ground: bool, momen
         let sw = s.weapon.swing().expect("a swing is a melee weapon's");
         if s.lunge {
             p.shift = p.shift.add(v3(-cm(10), cm(4), -cm(20)));
-        } else if let Some(c) = s.cut {
-            // T23: wound back past the start, driven through the strike,
-            // carried on past the end, and back to rest
-            let half = sw.half_arc.min(DRAWN_ARC);
-            let wound = -half - weapons::WIND;
-            let (follow, rest) = (
-                sw.until + weapons::FOLLOW_TICKS,
-                sw.until + weapons::FOLLOW_TICKS + weapons::RECOVER_TICKS,
-            );
-            let at = if s.age < sw.from {
-                fx::mul(wound, ease(along(s.age, 0, sw.from)))
-            } else if s.age <= sw.until {
-                wound + fx::mul(half - wound, ease(along(s.age, sw.from, sw.until)))
-            } else if s.age <= follow {
-                half + fx::mul(weapons::FOLLOW, ease(along(s.age, sw.until, follow)))
-            } else {
-                fx::mul(half + weapons::FOLLOW, ONE - ease(along(s.age, follow, rest)))
-            };
+        } else if let (Some(c), Some(at)) = (s.cut, cut_turn(&s)) {
             p.cut = Some((c, at));
             // the hands come in before the body for the cut and go back to
             // the side after it; they go with the blade across, and reach
             // out through the strike
+            let follow = sw.until + weapons::FOLLOW_TICKS;
+            let rest = follow + weapons::RECOVER_TICKS;
             let into = if s.age <= follow {
                 ease(along(s.age, 0, sw.from.max(2)))
             } else {
@@ -230,11 +197,80 @@ pub fn pose(a: &Arms, swing: Option<Swinging>, speed: Fx, on_ground: bool, momen
             ));
         } else {
             // a knife's thrust
-            let t = hump(along(s.age, 0, sw.until + 2));
-            p.shift = p.shift.add(v3(-cm(6), cm(2), -fx::mul(cm(22), t)));
+            p.shift = p.shift.add(v3(-cm(6), cm(2), -fx::mul(cm(22), thrust_reach(&s))));
         }
     }
     p
+}
+
+/// T34: the pose a weapon keeps whoever holds it: the kick, the lever or
+/// pump between shots, the magazine through a reload, the Pincel's charge
+/// and the flash. A lifelike figure's hand carries the rest (`lifelike.rs`).
+pub fn held_pose(a: &Arms) -> Pose {
+    let cm = |c: i32| c * ONE / 100;
+    let st = a.weapon.stats();
+    let mut p = Pose::default();
+    // the kick: back and up, settling over the kick's ticks
+    let (back, up, _) = KICK[a.weapon as usize];
+    let k = ONE * a.recoil / RECOIL;
+    p.shift = v3(0, 0, fx::mul(cm(back), k));
+    p.pitch = fx::mul(fx::deg(up), k);
+    p.flash = a.recoil > RECOIL - 2;
+    // between shots: the lever and the pump work through the middle of the
+    // interval; the clapper swings out and back
+    if st.interval > 0 && a.cooldown > 0 {
+        let t = st.interval - a.cooldown;
+        p.work = hump(along(t, st.interval / 5, st.interval * 4 / 5));
+    }
+    if a.reloading > 0 && st.reload > 0 {
+        p.mag = hump(along(st.reload - a.reloading, st.reload / 5, st.reload * 4 / 5));
+    }
+    // the Pincel's charge
+    if st.charge > 0 {
+        p.charge = ONE * a.charge / st.charge;
+    }
+    p
+}
+
+/// T34: how low a reload has the weapon, 0 to `ONE` and back.
+pub fn reload_low(a: &Arms) -> Fx {
+    let st = a.weapon.stats();
+    if a.reloading <= 0 || st.reload <= 0 {
+        return 0;
+    }
+    hump(along(st.reload - a.reloading, 0, st.reload))
+}
+
+/// T34: a cut's turn (T23): wound back past the start, driven through the
+/// strike, carried on past the end, and back to rest. None for a thrust.
+pub fn cut_turn(s: &Swinging) -> Option<i32> {
+    let sw = s.weapon.swing()?;
+    s.cut.filter(|_| !s.lunge)?;
+    let half = sw.half_arc.min(DRAWN_ARC);
+    let wound = -half - weapons::WIND;
+    let (follow, rest) = (
+        sw.until + weapons::FOLLOW_TICKS,
+        sw.until + weapons::FOLLOW_TICKS + weapons::RECOVER_TICKS,
+    );
+    Some(if s.age < sw.from {
+        fx::mul(wound, ease(along(s.age, 0, sw.from)))
+    } else if s.age <= sw.until {
+        wound + fx::mul(half - wound, ease(along(s.age, sw.from, sw.until)))
+    } else if s.age <= follow {
+        half + fx::mul(weapons::FOLLOW, ease(along(s.age, sw.until, follow)))
+    } else {
+        fx::mul(half + weapons::FOLLOW, ONE - ease(along(s.age, follow, rest)))
+    })
+}
+
+/// T34: how far out a thrust is, 0 to `ONE` and back; a lunge is all the
+/// way out.
+pub fn thrust_reach(s: &Swinging) -> Fx {
+    match s.weapon.swing() {
+        Some(_) if s.lunge => ONE,
+        Some(sw) => hump(along(s.age, 0, sw.until + 2)),
+        None => 0,
+    }
 }
 
 /// The weapon's own frame in `hold` (the hands' frame), posed.

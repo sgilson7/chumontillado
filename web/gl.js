@@ -12,6 +12,10 @@
 // T15: when the core says the painted filter is on, the scene is drawn into
 // a picture the size of the canvas, and that picture is drawn to the screen
 // through the filter (data/shaders/post.frag).
+//
+// T34: the lifelike figures (web/skin.js) are drawn at the end of each layer
+// the core names for them, before that layer's depth is cleared.
+import { makeSkin } from "./skin.js";
 
 function compile(gl, type, source) {
   const shader = gl.createShader(type);
@@ -47,7 +51,7 @@ function setList(gl, program, list, values) {
 }
 
 // Returns null when the browser has no WebGL 2; the page then says so.
-export function makeRenderer(canvas, N, shaders, meshList, meshData) {
+export function makeRenderer(canvas, N, shaders, meshList, meshData, onSkinReady) {
   const gl = canvas.getContext("webgl2", { antialias: true, alpha: false, powerPreference: "high-performance", preserveDrawingBuffer: true });
   if (!gl) return null;
 
@@ -123,6 +127,10 @@ export function makeRenderer(canvas, N, shaders, meshList, meshData) {
     return { buffer, vertices: m.vertices };
   });
 
+  const skin = makeSkin(gl, N, { vertex: shaders.skinVertex, fragment: shaders.skinFragment }, onSkinReady);
+  gl.bindVertexArray(vao);
+  gl.useProgram(program);
+
   const buffers = [gl.createBuffer(), gl.createBuffer()];
   const passes = [];
   for (const p of N.passes) passes[p.id] = p;
@@ -155,7 +163,12 @@ export function makeRenderer(canvas, N, shaders, meshList, meshData) {
     // The light, the sky and the dither: uploaded once.
     setUniforms(values, clearColor) {
       setList(gl, program, N.uniforms, values);
+      skin.setUniforms(values);
       clear = clearColor;
+    },
+    // T34: the skins whose lifelike models the core wants, a bit each
+    want(mask) {
+      skin.want(mask);
     },
     // What never moves: uploaded again only when the core's origin moves.
     setStatic(values) {
@@ -166,7 +179,7 @@ export function makeRenderer(canvas, N, shaders, meshList, meshData) {
       canvas.width = width;
       canvas.height = height;
     },
-    frame(view, values, draws, filtered) {
+    frame(view, values, draws, filtered, actors) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, filtered ? pictureFor(canvas.width, canvas.height) : null);
       gl.bindBuffer(gl.ARRAY_BUFFER, buffers[N.buffers.dynamic]);
       gl.bufferData(gl.ARRAY_BUFFER, values, gl.STREAM_DRAW);
@@ -179,9 +192,14 @@ export function makeRenderer(canvas, N, shaders, meshList, meshData) {
       gl.uniform3fv(uOrigin, view.subarray(...N.view.origin));
       let layer = -1;
       let pass = -1;
+      // T34: the lifelike figures, once at the end of each of their layers
+      const figures = (l) => {
+        if (N.actor.layers.includes(l)) skin.draw(view.subarray(...N.view.layers[l]), view.subarray(...N.view.eye), actors);
+      };
       for (let i = 0; i < draws.length; i += N.draw_values) {
         const [buffer, meshId, byteOffset, count, drawPass, drawLayer] = draws.subarray(i, i + N.draw_values);
         if (drawLayer !== layer) {
+          if (layer !== -1) figures(layer);
           if (layer !== -1) {
             gl.depthMask(true);
             gl.clear(gl.DEPTH_BUFFER_BIT);
@@ -205,6 +223,7 @@ export function makeRenderer(canvas, N, shaders, meshList, meshData) {
         }
         gl.drawArraysInstanced(gl.TRIANGLES, 0, mesh.vertices, count);
       }
+      if (layer !== -1) figures(layer);
       gl.depthMask(true);
       if (filtered) {
         // T15: the picture to the screen, through the filter

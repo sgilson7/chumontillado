@@ -72,6 +72,9 @@ pub type Peer = u32;
 /// Which seats people hold, one bit a seat.
 pub type Seats = u8;
 
+/// T34: every seat's bit.
+pub const ALL_SEATS: Seats = (1 << SEATS) - 1;
+
 pub fn holds(seats: Seats, seat: usize) -> bool {
     seat < SEATS && seats & (1 << seat) != 0
 }
@@ -87,10 +90,16 @@ pub enum Msg {
         /// M5: the skin this browser's player wears
         #[serde(default)]
         skin: u8,
+        /// T34: and whether lifelike
+        #[serde(default)]
+        lifelike: bool,
     },
     /// M5: a guest to the host, in the lobby: its player's skin now
     Skin {
         skin: u8,
+        /// T34: and whether lifelike
+        #[serde(default)]
+        lifelike: bool,
     },
     /// host to a guest: the seat it holds
     Welcome {
@@ -105,6 +114,9 @@ pub enum Msg {
         /// M5: each seat's skin
         #[serde(default)]
         skins: [u8; SEATS],
+        /// T34: which seats wear theirs lifelike
+        #[serde(default)]
+        lifelike: Seats,
     },
     /// host to everyone: the match begins, these seats held by people and
     /// these left empty; bots play the others
@@ -115,6 +127,9 @@ pub enum Msg {
         /// M5: each seat's skin, bots' too
         #[serde(default)]
         skins: [u8; SEATS],
+        /// T34: which seats wear theirs lifelike (bots never do)
+        #[serde(default)]
+        lifelike: Seats,
         /// T20: the bots' skill (`pilot::SKILLS` by number)
         #[serde(default = "normal_skill")]
         skill: u8,
@@ -207,6 +222,9 @@ pub struct Net {
     pub skins: [u8; SEATS],
     /// this browser's player's own choice of skin
     pub chosen: u8,
+    /// T34: which seats wear their skin lifelike, and this browser's own choice
+    pub lifelike: Seats,
+    pub chosen_lifelike: bool,
     /// T20: the bots' skill: the host's setting, sent with the start
     pub skill: u8,
     /// T32: the host's plan for the match, or the one it sent
@@ -262,6 +280,8 @@ impl Net {
             empty: 0,
             skins: [0, 1, 2, 3],
             chosen: 0,
+            lifelike: 0,
+            chosen_lifelike: false,
             skill: normal_skill(),
             plan: Box::default(),
             started: false,
@@ -321,6 +341,7 @@ impl Net {
             build: self.build.clone(),
             host: self.host,
             skin: self.my_skin(),
+            lifelike: self.chosen_lifelike,
         };
         self.send(peer, &hello);
     }
@@ -391,8 +412,16 @@ impl Net {
     fn send_roster(&mut self) {
         // a seat a guest takes is no longer empty
         self.empty &= !self.seats;
-        let (seats, empty, skins) = (self.seats, self.empty, self.skins);
-        self.broadcast(&Msg::Roster { seats, empty, skins }, None);
+        let (seats, empty, skins, lifelike) = (self.seats, self.empty, self.skins, self.lifelike);
+        self.broadcast(
+            &Msg::Roster {
+                seats,
+                empty,
+                skins,
+                lifelike,
+            },
+            None,
+        );
     }
 
     /// This browser's own skin.
@@ -400,21 +429,29 @@ impl Net {
         self.chosen
     }
 
-    /// M5: this browser's player chooses a skin. A guest tells the host,
-    /// which tells everyone; the host tells everyone itself. Only in the
-    /// lobby.
-    pub fn choose_skin(&mut self, skin: u8) {
+    /// M5: this browser's player chooses a skin, and (T34) whether to wear
+    /// it lifelike. A guest tells the host, which tells everyone; the host
+    /// tells everyone itself. Only in the lobby.
+    pub fn choose_skin(&mut self, skin: u8, lifelike: bool) {
         if self.started {
             return;
         }
         self.chosen = skin;
+        self.chosen_lifelike = lifelike;
         if let Some(seat) = self.seat {
             self.skins[seat] = skin;
+            self.set_lifelike(seat, lifelike);
         }
         if self.host {
             self.send_roster();
         } else if let Some(h) = self.host_peer() {
-            self.send(h, &Msg::Skin { skin });
+            self.send(h, &Msg::Skin { skin, lifelike });
+        }
+    }
+
+    fn set_lifelike(&mut self, seat: usize, on: bool) {
+        if seat < SEATS {
+            self.lifelike = self.lifelike & !(1 << seat) | (on as Seats) << seat;
         }
     }
 
@@ -456,6 +493,9 @@ impl Net {
         let (seats, empty) = (self.seats, self.empty & !self.seats);
         let skins = self.starting_skins();
         self.skins = skins;
+        // T34: the bots wear theirs painted
+        self.lifelike &= seats;
+        let lifelike = self.lifelike;
         let skill = self.skill;
         let plan = (*self.plan).clone();
         self.broadcast(
@@ -463,6 +503,7 @@ impl Net {
                 seats,
                 empty,
                 skins,
+                lifelike,
                 skill,
                 plan,
             },
@@ -497,6 +538,7 @@ impl Net {
         self.agreed = None;
         if let Some(s) = self.seat {
             self.skins[s] = self.chosen;
+            self.set_lifelike(s, self.chosen_lifelike);
         }
     }
 
@@ -515,6 +557,7 @@ impl Net {
                 build,
                 host,
                 skin,
+                lifelike,
             } => {
                 if o.said {
                     return None;
@@ -543,7 +586,8 @@ impl Net {
                 if self.host {
                     self.seat_guest(from);
                     if let Some(seat) = self.others.get(&from).and_then(|o| o.seat) {
-                        self.skins[seat] = skin;
+                        self.skins[seat] = skin.min(crate::skins::COUNT as u8 - 1);
+                        self.set_lifelike(seat, lifelike);
                         self.send_roster();
                     }
                     if self.status == WAITING {
@@ -584,19 +628,27 @@ impl Net {
                 self.status = LOBBY;
                 None
             }
-            Msg::Roster { seats, empty, skins } if o.host && !self.host => {
+            Msg::Roster {
+                seats,
+                empty,
+                skins,
+                lifelike,
+            } if o.host && !self.host => {
                 // this browser's own choice stands until the host has it
                 self.seats = seats;
                 self.empty = empty;
                 self.skins = skins;
+                self.lifelike = lifelike & ALL_SEATS;
                 if let Some(s) = self.seat {
                     self.skins[s] = self.chosen;
+                    self.set_lifelike(s, self.chosen_lifelike);
                 }
                 None
             }
-            Msg::Skin { skin } if self.host && !self.started => {
+            Msg::Skin { skin, lifelike } if self.host && !self.started => {
                 if let Some(seat) = o.seat {
                     self.skins[seat] = skin.min(crate::skins::COUNT as u8 - 1);
+                    self.set_lifelike(seat, lifelike);
                     self.send_roster();
                 }
                 None
@@ -605,6 +657,7 @@ impl Net {
                 seats,
                 empty,
                 skins,
+                lifelike,
                 skill,
                 plan,
             } if o.host && !self.host => {
@@ -614,6 +667,8 @@ impl Net {
                 self.seats = seats;
                 self.empty = empty;
                 self.skins = skins;
+                // T34: a seat a person does not hold is a bot's, painted
+                self.lifelike = lifelike & seats & ALL_SEATS;
                 self.skill = skill;
                 *self.plan = plan;
                 self.started = true;
@@ -741,18 +796,24 @@ pub(crate) mod tests {
                 build: "b".into(),
                 host: true,
                 skin: 2,
+                lifelike: true,
             },
-            Msg::Skin { skin: 1 },
+            Msg::Skin {
+                skin: 1,
+                lifelike: true,
+            },
             Msg::Welcome { seat: 2 },
             Msg::Roster {
                 seats: 0b1011,
                 empty: 0b0100,
                 skins: [3, 0, 1, 2],
+                lifelike: 0b0010,
             },
             Msg::Start {
                 seats: 0b11,
                 empty: 0b1000,
                 skins: [0, 1, 2, 3],
+                lifelike: 0b0001,
                 skill: 2,
                 plan: crate::plan::Plan {
                     maps: vec![11, 0],

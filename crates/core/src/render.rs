@@ -165,6 +165,12 @@ pub struct Shape {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Shapes {
     pub list: Vec<Shape>,
+    /// T34: the lifelike figures' records (`lifelike::VALUES` each), in
+    /// the world
+    pub actors: Vec<i32>,
+    /// T34: which skins' lifelike models the page has loaded, a bit each by
+    /// `skins::SKINS` order; the others are drawn painted
+    pub ready: u16,
 }
 
 impl Shapes {
@@ -547,6 +553,9 @@ pub struct Frame {
     pub view: Vec<i32>,
     pub instances: Vec<i32>,
     pub draws: Vec<u32>,
+    /// T34: the lifelike figures' records, placed relative to the origin;
+    /// the page draws them in the far and near layers
+    pub actors: Vec<i32>,
 }
 
 /// Each layer's matrix, the eye (relative to the origin), and (T6) the
@@ -632,10 +641,18 @@ impl Frame {
                 }
             }
         }
+        let mut actors = moving.actors.clone();
+        for rec in actors.chunks_mut(crate::lifelike::VALUES) {
+            let t = crate::lifelike::TRANSLATION;
+            rec[t] -= origin.x;
+            rec[t + 1] -= origin.y;
+            rec[t + 2] -= origin.z;
+        }
         Frame {
             view,
             instances,
             draws,
+            actors,
         }
     }
 }

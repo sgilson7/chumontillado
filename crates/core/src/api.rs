@@ -598,6 +598,17 @@ pub fn settings(g: &Game) -> Vec<Setting> {
             value: skin_name(g, g.skin),
             actions: step("skin.step", "skin_prev", "skin_next"),
         },
+        // T34: the skin's style, painted or lifelike
+        Setting {
+            id: "style".into(),
+            label: g.strings.get("setting_style"),
+            value: g.strings.get(if g.lifelike {
+                "style_lifelike"
+            } else {
+                "style_painted"
+            }),
+            actions: step("style.set", "style_painted", "style_lifelike"),
+        },
         Setting {
             id: "volume".into(),
             label: g.strings.get("setting_volume"),
@@ -1021,6 +1032,20 @@ pub fn numbers() -> String {
         "passes": render::pass_states(),
         "uniforms": look::UNIFORMS.iter().chain(crate::sky::UNIFORMS).map(|(n, call, len)| serde_json::json!([n, call, len, call.contains("Matrix")])).collect::<Vec<_>>(),
         "view": { "layers": [[0, 16], [16, 32], [32, 48]], "eye": [48, 51], "origin": [51, 54] },
+        // T34: a lifelike figure's record (lifelike.rs), and each skin's
+        // model by `skins::SKINS` order
+        "actor": {
+            "values": crate::lifelike::VALUES,
+            "model": 0,
+            "lower": [1, 2, 3],
+            "upper": [4, 5, 6],
+            "matrix": [crate::lifelike::MATRIX, crate::lifelike::MATRIX + 12],
+            "flash": crate::lifelike::FLASH,
+            "flash_rgb": [crate::lifelike::FLASH + 1, crate::lifelike::FLASH + 4],
+            "models": crate::skins::SKINS.iter().map(|s| s.model()).collect::<Vec<_>>(),
+            // drawn in the far and near layers, never the eye's
+            "layers": [render::Layer::Far as u32, render::Layer::Near as u32],
+        },
         // T15: the painted filter, drawn over the whole screen from the scene
         // as a picture: two triangles' corners, and the filter's uniforms
         "post": {

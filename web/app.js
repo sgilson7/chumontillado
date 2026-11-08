@@ -65,7 +65,7 @@ async function main() {
   };
   window.addEventListener("error", (e) => fail(e.error || e.message));
   window.addEventListener("unhandledrejection", (e) => fail(e.reason));
-  const [glossary, look, controls, display, vertex, fragment, recipes, postVertex, postFragment] = await Promise.all([
+  const [glossary, look, controls, display, vertex, fragment, recipes, postVertex, postFragment, skinVertex, skinFragment] = await Promise.all([
     fetch("data/glossary.md").then((r) => r.text()),
     fetch("data/look.json").then((r) => r.text()),
     fetch("data/controls.json").then((r) => r.json()),
@@ -75,6 +75,8 @@ async function main() {
     fetch("data/sounds.json").then((r) => r.json()),
     fetch("data/shaders/post.vert").then((r) => r.text()),
     fetch("data/shaders/post.frag").then((r) => r.text()),
+    fetch("data/shaders/skin.vert").then((r) => r.text()),
+    fetch("data/shaders/skin.frag").then((r) => r.text()),
   ]);
   await init();
   const N = JSON.parse(numbers());
@@ -98,7 +100,10 @@ async function main() {
 
   const canvas = el("view");
   const meshes = JSON.parse(game.meshes());
-  const draw = () => makeRenderer(canvas, N, { vertex, fragment, postVertex, postFragment, software: display.software }, meshes, (id) => game.mesh(id));
+  // T34: a lifelike model uploaded: the core may draw that skin lifelike now
+  const skinReady = (k) => game.act("mesh.ready", String(k));
+  const draw = () =>
+    makeRenderer(canvas, N, { vertex, fragment, postVertex, postFragment, skinVertex, skinFragment, software: display.software }, meshes, (id) => game.mesh(id), skinReady);
   let renderer = draw();
   if (!renderer) {
     body.dataset.webgl = "none";
@@ -432,7 +437,8 @@ async function main() {
       staticVersion = game.static_version();
       renderer.setStatic(game.static_values());
     }
-    if (!lost) renderer.frame(game.view(), game.instances(), game.draws(), game.filter());
+    if (!lost) renderer.want(game.wanted());
+    if (!lost) renderer.frame(game.view(), game.instances(), game.draws(), game.filter(), game.actors());
     // M6: this frame's sounds
     sound.play(JSON.parse(game.sounds()));
     // M4: what this frame's ticks left for the other browsers

@@ -140,11 +140,13 @@ pub const DROPPED_TICKS: u32 = 240;
 pub const AGAIN_TICKS: i32 = 300;
 
 impl Versus {
-    pub fn new(host: bool, code: &str, build: &str, skin: u8) -> Versus {
+    pub fn new(host: bool, code: &str, build: &str, skin: u8, lifelike: bool) -> Versus {
         let mut links = Net::new(host, build);
         links.chosen = skin;
+        links.chosen_lifelike = lifelike;
         if host {
             links.skins[0] = skin;
+            links.lifelike = lifelike as Seats;
         }
         Versus {
             host,
@@ -241,9 +243,9 @@ impl Versus {
     }
 
     /// M5: this browser's player chooses a skin, in the lobby.
-    pub fn choose_skin(&mut self, skin: u8) {
+    pub fn choose_skin(&mut self, skin: u8, lifelike: bool) {
         if let Stage::Lobby(n) = &mut self.stage {
-            n.choose_skin(skin);
+            n.choose_skin(skin, lifelike);
         }
     }
 
@@ -377,7 +379,7 @@ impl Versus {
         };
         let Some(seat) = links.seat else { return };
         // T20: the host's skill for the bots, as it sent it
-        let mut world = World::online(seats, empty, skins);
+        let mut world = World::online(seats, empty, skins, links.lifelike);
         world.skill = crate::pilot::Skill::of(links.skill);
         // T32: the maps and weapons the host planned, round one again on
         // the first of them
@@ -449,8 +451,8 @@ mod tests {
 
     #[test]
     fn a_guest_that_hears_nothing_from_the_host_for_ten_seconds_has_lost_it() {
-        let mut host = Versus::new(true, "KQXRT", "b", 0);
-        let mut guest = Versus::new(false, "KQXRT", "b", 1);
+        let mut host = Versus::new(true, "KQXRT", "b", 0, false);
+        let mut guest = Versus::new(false, "KQXRT", "b", 1, false);
         host.connected(1, 0);
         guest.connected(2, 0);
         for (_, t) in guest.take_outbox() {
@@ -468,8 +470,8 @@ mod tests {
 
     #[test]
     fn the_host_starting_starts_every_guest_on_the_same_seats() {
-        let mut host = Versus::new(true, "KQXRT", "b", 0);
-        let mut guest = Versus::new(false, "KQXRT", "b", 1);
+        let mut host = Versus::new(true, "KQXRT", "b", 0, false);
+        let mut guest = Versus::new(false, "KQXRT", "b", 1, false);
         host.connected(1, 0);
         guest.connected(2, 0);
         for _ in 0..3 {
@@ -492,8 +494,8 @@ mod tests {
     #[test]
     fn the_hosts_bot_skill_reaches_the_guest_and_a_guests_own_does_not() {
         use crate::pilot::Skill;
-        let mut host = Versus::new(true, "KQXRT", "b", 0);
-        let mut guest = Versus::new(false, "KQXRT", "b", 1);
+        let mut host = Versus::new(true, "KQXRT", "b", 0, false);
+        let mut guest = Versus::new(false, "KQXRT", "b", 1, false);
         host.set_skill(Skill::Hard);
         guest.set_skill(Skill::Easy);
         host.connected(1, 0);
@@ -517,7 +519,7 @@ mod tests {
 
     #[test]
     fn a_guest_that_finds_nobody_is_told_at_twenty_seconds_and_counts_up_before() {
-        let mut guest = Versus::new(false, "KQXRT", "b", 0);
+        let mut guest = Versus::new(false, "KQXRT", "b", 0, false);
         guest.opened_us = Some(0);
         assert_eq!(guest.notice(5_000_000), Some(Notice::Looking { secs: 5 }));
         assert_eq!(
@@ -529,7 +531,7 @@ mod tests {
             Some(Notice::StillLooking { secs: 20 })
         );
         // once the host's hello is in, nothing to say
-        let mut host = Versus::new(true, "KQXRT", "b", 1);
+        let mut host = Versus::new(true, "KQXRT", "b", 1, false);
         host.connected(1, 0);
         guest.connected(2, 0);
         for _ in 0..2 {
@@ -545,12 +547,12 @@ mod tests {
 
     #[test]
     fn the_host_hears_after_ten_seconds_of_someone_stuck_short_of_joining() {
-        let mut host = Versus::new(true, "KQXRT", "b", 0);
+        let mut host = Versus::new(true, "KQXRT", "b", 0, false);
         host.connected(7, 1_000_000);
         assert_eq!(host.notice(1_000_000 + KNOCKING_US - 1), None);
         assert_eq!(host.notice(1_000_000 + KNOCKING_US), Some(Notice::Knocking));
         // their hello arrives: they are in, and the note goes
-        let mut guest = Versus::new(false, "KQXRT", "b", 1);
+        let mut guest = Versus::new(false, "KQXRT", "b", 1, false);
         guest.connected(2, 0);
         for (_, t) in guest.take_outbox() {
             host.message(7, &t, 0);

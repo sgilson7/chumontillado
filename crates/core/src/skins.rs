@@ -31,10 +31,13 @@ pub enum Skin {
     // T16: two more, asked for on 2026-11-04
     Fraile,
     Torero,
+    // T34: Chumworld Arena's two knights, asked for on 2026-11-08
+    BlackKnight,
+    IvoryKnight,
 }
 
 /// How many skins there are to choose from.
-pub const COUNT: usize = 6;
+pub const COUNT: usize = 8;
 
 /// The skins in the order the setting steps through them; by default seat
 /// 1 wears the Hidalgo, then the Infanta, the Harlequin and El Sordo.
@@ -45,6 +48,8 @@ pub const SKINS: [Skin; COUNT] = [
     Skin::Sordo,
     Skin::Fraile,
     Skin::Torero,
+    Skin::BlackKnight,
+    Skin::IvoryKnight,
 ];
 
 impl Skin {
@@ -57,6 +62,17 @@ impl Skin {
             Skin::Sordo => "sordo",
             Skin::Fraile => "fraile",
             Skin::Torero => "torero",
+            Skin::BlackKnight => "black_knight",
+            Skin::IvoryKnight => "ivory_knight",
+        }
+    }
+
+    /// T34: its lifelike model's name, as Style Lab made it (`data/skins.json`).
+    pub fn model(self) -> &'static str {
+        match self {
+            Skin::BlackKnight => "knight_a",
+            Skin::IvoryKnight => "knight_b",
+            s => s.key(),
         }
     }
 
@@ -289,6 +305,57 @@ pub fn parts(skin: Skin) -> Vec<Part> {
             p(Sphere, [-9, 185, 2], [20, 12, 24], "black"),
             p(Sphere, [9, 185, 2], [20, 12, 24], "black"),
         ],
+        // T34: after Chumworld Arena's first knight: blackened plate, a
+        // flat-topped bucket helm with an eye slit, three-lame pauldrons
+        // wider than the hips, a fauld, and a torn dark cloak behind
+        Skin::BlackKnight => vec![
+            leg(p(Rod, [-11, 46, 0], [19, 92, 19], "plate"), LegL),
+            leg(p(Rod, [11, 46, 0], [19, 92, 19], "plate"), LegR),
+            leg(p(Sphere, [-11, 50, -6], [14, 12, 10], "frame"), LegL),
+            leg(p(Sphere, [11, 50, -6], [14, 12, 10], "frame"), LegR),
+            leg(p(Round, [-11, 5, -4], [16, 10, 26], "frame"), LegL),
+            leg(p(Round, [11, 5, -4], [16, 10, 26], "frame"), LegR),
+            p(Bell, [0, 92, 0], [56, 22, 40], "mail"),
+            turned(p(Bell, [0, 124, 0], [52, 46, 36], "plate"), 180, 0),
+            p(Rod, [0, 140, 0], [62, 6, 40], "frame"),
+            p(Sphere, [-29, 142, 0], [28, 18, 30], "plate"),
+            p(Sphere, [29, 142, 0], [28, 18, 30], "plate"),
+            p(Sphere, [-31, 134, 0], [26, 10, 28], "frame"),
+            p(Sphere, [31, 134, 0], [26, 10, 28], "frame"),
+            p(Rod, [0, 153, 0], [24, 8, 24], "mail"),
+            p(Rod, [0, 170, 0], [30, 30, 32], "plate"),
+            p(Rod, [0, 172, -16], [24, 3, 2], "frame"),
+            p(Rod, [0, 162, -16], [3, 8, 2], "frame"),
+            p(Rod, [0, 186, 0], [26, 2, 28], "frame"),
+            turned(p(Round, [0, 100, 20], [50, 100, 4], "cloth"), 4, 90),
+            turned(p(Round, [0, 92, -21], [16, 40, 3], "cloth"), -4, 90),
+        ],
+        // T34: after Chumworld Arena's second knight: pale plate with gilt,
+        // a rounded helm under a crown of spikes, a fur mantle over round
+        // pauldrons, a gilt belt and a skirt of plate widening to the knee
+        Skin::IvoryKnight => vec![
+            leg(p(Rod, [-11, 30, 0], [18, 60, 18], "plate"), LegL),
+            leg(p(Rod, [11, 30, 0], [18, 60, 18], "plate"), LegR),
+            leg(p(Round, [-11, 5, -4], [16, 10, 26], "frame"), LegL),
+            leg(p(Round, [11, 5, -4], [16, 10, 26], "frame"), LegR),
+            p(Bell, [0, 76, 0], [72, 54, 52], "plate"),
+            p(Rod, [0, 52, 0], [70, 4, 50], "scorch"),
+            p(Rod, [0, 102, 0], [48, 6, 36], "gilt"),
+            turned(p(Bell, [0, 126, 0], [50, 44, 34], "plate"), 180, 0),
+            p(Round, [0, 126, -17], [4, 36, 3], "gilt"),
+            p(Sphere, [0, 146, 2], [70, 18, 44], "fur"),
+            p(Sphere, [-30, 140, 0], [26, 22, 28], "plate"),
+            p(Sphere, [30, 140, 0], [26, 22, 28], "plate"),
+            p(Sphere, [0, 170, 0], [32, 36, 34], "plate"),
+            p(Rod, [0, 172, -16], [22, 3, 2], "frame"),
+            p(Rod, [0, 184, 0], [30, 3, 30], "gilt"),
+            p(Pyramid, [0, 189, -12], [6, 8, 4], "gilt"),
+            p(Pyramid, [-11, 189, -6], [6, 8, 4], "gilt"),
+            p(Pyramid, [11, 189, -6], [6, 8, 4], "gilt"),
+            p(Pyramid, [-11, 189, 7], [6, 8, 4], "gilt"),
+            p(Pyramid, [11, 189, 7], [6, 8, 4], "gilt"),
+            turned(p(Round, [0, 100, 20], [36, 70, 3], "cloth"), 3, 90),
+        ],
     }
 }
 
@@ -319,8 +386,11 @@ fn colour(look: &Look, skin: Skin, name: &str) -> Rgb {
 
 /// A figure in motion: where it stands and looks, how it moves, and what
 /// it holds.
+#[derive(Clone, Copy)]
 pub struct Figure<'a> {
     pub skin: Skin,
+    /// T34: worn lifelike (drawn as Style Lab made it), else painted
+    pub lifelike: bool,
     pub feet: V3,
     pub yaw: i32,
     pub pitch: i32,
@@ -332,6 +402,9 @@ pub struct Figure<'a> {
     pub moment: Fx,
     /// the weapon and its state, if drawn with one
     pub arms: Option<(&'a Arms, Option<Swinging>)>,
+    /// T34: sliding, and hanging from a vine (the lifelike legs' poses)
+    pub sliding: bool,
+    pub hanging: bool,
 }
 
 /// A point in the figure's frame (cm) in the world.
@@ -343,6 +416,11 @@ fn place(f: &Figure, at: [i32; 3]) -> V3 {
 }
 
 pub fn draw(out: &mut Shapes, f: &Figure, look: &Look) {
+    // T34: lifelike once the page has its model; painted until then
+    if f.lifelike && crate::lifelike::ready(out, f.skin) {
+        crate::lifelike::draw(out, f, look);
+        return;
+    }
     let cm = |c: i32| c * ONE / 100;
     let ink = look.ink();
     let flash = rgb(look.palette.flash);

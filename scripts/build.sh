@@ -39,6 +39,8 @@ mkdir -p dist/pkg dist/data
 wasm-bindgen --target web --no-typescript --out-dir dist/pkg \
   target/wasm32-unknown-unknown/release/tool_shim.wasm
 cp -R web/. dist/
+# T34: the lifelike skins' meshes and pictures (binary, so kept out of web/)
+cp -R assets/. dist/
 cp -R data/. dist/data/
 cp GLOSSARY.md dist/data/glossary.md
 

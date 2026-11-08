@@ -198,6 +198,12 @@ A rifle drawn true: slow and heavy, a headshot kills.
 
 Not: sniper, marksman rifle
 
+### Lifelike
+
+A skin's style drawn as Style Lab made it: a photographed body with its own clothes, moving as a person does. Hit the same as its painted style.
+
+Not: realistic, HD, photoreal
+
 ### Lobby
 
 Where the players of an online match wait for the host to start it, each seat a card with its figure in it. After a match, everyone still in the room comes back to it for the next.
@@ -233,6 +239,12 @@ Not: windmill map, hill
 A folding knife drawn true, quick and short. From behind it fells anyone; held, it makes you a little faster.
 
 Not: knife, switchblade, backstab knife
+
+### Painted
+
+A skin's style as the game first drew it, from the painted shapes. Every skin can be worn painted or lifelike.
+
+Not: stylized, classic, old
 
 ### Parry
 
@@ -320,15 +332,27 @@ Not: mountains, hills map
 
 ### Skin
 
-How a player looks: the Hidalgo, the Infanta, the Harlequin, El Sordo, the Friar or the Torero. Every skin is hit the same.
+How a player looks: the Hidalgo, the Infanta, the Harlequin, El Sordo, the Friar, the Torero, the Black Knight or the Ivory Knight, each painted or lifelike. Every skin is hit the same.
 
 Not: costume, outfit
+
+### Skin style
+
+Whether a skin is worn painted or lifelike: a setting beside the skin, seen by everyone in a match. Bots wear theirs painted.
+
+Not: quality, mode
 
 ### Straw target
 
 A figure on a post in the practice room. Shot down, it stands again a few seconds later.
 
 Not: dummy, mannequin
+
+### The Black Knight
+
+A knight in blackened plate under a flat-topped helm, with wide shoulders and a torn dark cloak, from Chumworld Arena.
+
+Not: dark knight, black helm
 
 ### The Friar
 
@@ -353,6 +377,12 @@ Not: nobleman
 A skin after Velázquez: a silver bell skirt, wide pale hair and a red bow.
 
 Not: princess
+
+### The Ivory Knight
+
+A knight in pale plate with gilt, a crown of spikes on the helm and a skirt of plate scorched at the hem, from Chumworld Arena.
+
+Not: white knight, ivory crown
 
 ### The Torero
 

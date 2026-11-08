@@ -254,7 +254,7 @@
       ]
     ]
   },
-  "_skins": "M6: each skin's colours by part name (crates/core/src/skins.rs), from the Roster page's drawings (tools/roster.py).",
+  "_skins": "M6: each skin's colours by part name (crates/core/src/skins.rs), from the Roster page's drawings (tools/roster.py). T34: the two knights' from Chumworld Arena's data/models.json (e78945b), knight_a and knight_b.",
   "skins": {
     "hidalgo": {
       "black": [
@@ -606,6 +606,100 @@
         184,
         150,
         118
+      ]
+    },
+    "black_knight": {
+      "plate": [
+        58,
+        61,
+        64
+      ],
+      "frame": [
+        20,
+        21,
+        22
+      ],
+      "mail": [
+        96,
+        98,
+        100
+      ],
+      "cloth": [
+        42,
+        36,
+        34
+      ],
+      "ink": [
+        12,
+        12,
+        13
+      ],
+      "arm_l": [
+        58,
+        61,
+        64
+      ],
+      "arm_r": [
+        58,
+        61,
+        64
+      ],
+      "hand": [
+        20,
+        21,
+        22
+      ]
+    },
+    "ivory_knight": {
+      "plate": [
+        168,
+        164,
+        154
+      ],
+      "gilt": [
+        176,
+        150,
+        72
+      ],
+      "frame": [
+        66,
+        58,
+        50
+      ],
+      "cloth": [
+        126,
+        116,
+        102
+      ],
+      "scorch": [
+        92,
+        82,
+        68
+      ],
+      "fur": [
+        150,
+        136,
+        112
+      ],
+      "ink": [
+        40,
+        34,
+        28
+      ],
+      "arm_l": [
+        168,
+        164,
+        154
+      ],
+      "arm_r": [
+        168,
+        164,
+        154
+      ],
+      "hand": [
+        66,
+        58,
+        50
       ]
     }
   }

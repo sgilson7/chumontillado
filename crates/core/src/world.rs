@@ -112,6 +112,8 @@ pub struct Player {
     pub since_trick: i32,
     /// M5: the skin it wears (`skins::SKINS` by number)
     pub skin: u8,
+    /// T34: and whether lifelike, else painted. Drawn only, so not summed
+    pub lifelike: bool,
 }
 
 /// CS-Q22 (the journal's Feel mockups page): a seat's shots and hits in
@@ -262,19 +264,27 @@ impl Player {
             shooting: Shooting::default(),
             since_trick: 1_000,
             skin: 0,
+            lifelike: false,
         }
     }
 
     /// Back at its spawn, as new, keeping its look speed, its pilot and its
     /// shooting's counts.
     fn respawn(&mut self) {
-        let (pct, pilot, shooting, skin, out) =
-            (self.aim.pct, self.pilot, self.shooting, self.skin, self.out);
+        let (pct, pilot, shooting, skin, out, lifelike) = (
+            self.aim.pct,
+            self.pilot,
+            self.shooting,
+            self.skin,
+            self.out,
+            self.lifelike,
+        );
         *self = Player::at(self.spawn);
         self.aim.pct = pct;
         self.pilot = pilot;
         self.shooting = shooting;
         self.skin = skin;
+        self.lifelike = lifelike;
         self.out = out;
     }
 
@@ -481,13 +491,19 @@ impl World {
     /// A match (M4, M5): four seats, those `seats` does not hold played by
     /// bots that shoot back (CS-Q17: A) unless the host left them `empty`,
     /// each in its skin; rounds on the three maps in turn, from the first.
-    pub fn online(seats: crate::online::Seats, empty: crate::online::Seats, skins: [u8; 4]) -> World {
+    pub fn online(
+        seats: crate::online::Seats,
+        empty: crate::online::Seats,
+        skins: [u8; 4],
+        lifelike: crate::online::Seats,
+    ) -> World {
         let mut w = World::room(Bot::Shoots);
         w.dummies.clear();
         w.players = (0..crate::online::SEATS)
             .map(|s| {
                 let mut p = Player::at(w.map.spawns[s]);
                 p.skin = skins[s];
+                p.lifelike = crate::online::holds(lifelike, s);
                 if crate::online::holds(empty, s) && !crate::online::holds(seats, s) {
                     p.out = true;
                 } else if !crate::online::holds(seats, s) {
@@ -1488,6 +1504,7 @@ impl World {
                 // holds it, legs in stride
                 let figure = crate::skins::Figure {
                     skin: crate::skins::SKINS[p.skin as usize % crate::skins::SKINS.len()],
+                    lifelike: p.lifelike,
                     feet: p.prev.lerp(p.body.origin, alpha),
                     yaw: p.aim.yaw,
                     pitch: p.aim.pitch,
@@ -1497,6 +1514,8 @@ impl World {
                     on_ground: p.body.on_ground,
                     moment: (self.tick as i32).wrapping_mul(ONE).wrapping_add(alpha),
                     arms: Some((&p.arms, p.swing)),
+                    sliding: p.body.sliding,
+                    hanging: p.vine.is_some(),
                 };
                 crate::skins::draw(out, &figure, look);
             }
