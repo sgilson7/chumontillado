@@ -47,6 +47,9 @@ pub const SLOT_10: u32 = 1 << 18;
 pub const MELEE: u32 = 1 << 19;
 /// T33: the minus key, for the AK-47
 pub const SLOT_11: u32 = 1 << 20;
+/// T36: F, held, takes hold of a vine in reach and hangs on; let go of it to
+/// drop off.
+pub const VINE: u32 = 1 << 21;
 pub const SLOTS: [u32; 11] = [
     SLOT_1, SLOT_2, SLOT_3, SLOT_4, SLOT_5, SLOT_6, SLOT_7, SLOT_8, SLOT_9, SLOT_10, SLOT_11,
 ];
@@ -86,6 +89,7 @@ pub const ACTIONS: &[(&str, u32)] = &[
     ("slot_10", SLOT_10),
     ("slot_11", SLOT_11),
     ("melee", MELEE),
+    ("vine", VINE),
     ("fire", FIRE << BUTTON_SHIFT),
     ("alt", ALT << BUTTON_SHIFT),
 ];
@@ -189,6 +193,17 @@ mod tests {
                 ACTIONS.iter().any(|(name, _)| name == action),
                 "{key} holds {action}, which has no bit"
             );
+        }
+    }
+
+    /// T36: and every action has a key or button that holds it, so none is
+    /// out of reach (F for the vine among them).
+    #[test]
+    fn every_action_has_a_key_that_holds_it() {
+        let keys: std::collections::BTreeMap<String, String> =
+            serde_json::from_str(include_str!("../../../data/controls.json")).unwrap();
+        for (name, _) in ACTIONS {
+            assert!(keys.values().any(|a| a == name), "nothing holds {name}");
         }
     }
 

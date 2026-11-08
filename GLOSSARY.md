@@ -410,6 +410,6 @@ Not: nail gun, blunderbuss
 
 ### Vine
 
-A rope of green hanging from a branch or a bridge. Jump into it to take hold and swing; jump again to let go, keeping the speed of the swing.
+A rope of green hanging from a branch or a bridge. Hold F as you reach it to take hold and swing; let go of F, or jump, to drop off, keeping the speed of the swing.
 
 Not: rope, liana

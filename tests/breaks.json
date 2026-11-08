@@ -2305,8 +2305,8 @@
  {
   "name": "T33 Space does not let go of a vine",
   "file": "crates/core/src/world.rs",
-  "find": "    if fresh_jump || !free {\n",
-  "replace": "    if !free {\n",
+  "find": "    if fresh_jump || !holding || !free {\n",
+  "replace": "    if !holding || !free {\n",
   "test": "a_vine_jumped_into_takes_hold_swings_you_up_past_it_and_lets_go_on_space"
  },
  {
@@ -2333,9 +2333,30 @@
  {
   "name": "T33 a bot takes hold of a vine",
   "file": "crates/core/src/world.rs",
-  "find": "    if p.vine.is_none() && free && p.pilot.is_none() {\n",
-  "replace": "    if p.vine.is_none() && free {\n",
+  "find": "    let holding = input.key(VINE);\n",
+  "replace": "    let holding = input.key(VINE) || p.pilot.is_some();\n",
   "test": "a_bot_does_not_take_hold_of_a_vine"
+ },
+ {
+  "name": "T36 a vine takes hold without F",
+  "file": "crates/core/src/world.rs",
+  "find": "    if p.vine.is_none() && free && holding {\n",
+  "replace": "    if p.vine.is_none() && free {\n",
+  "test": "a_vine_takes_hold_only_while_f_is_held_and_letting_go_of_f_drops_off"
+ },
+ {
+  "name": "T36 letting go of F keeps hold",
+  "file": "crates/core/src/world.rs",
+  "find": "    if fresh_jump || !holding || !free {\n",
+  "replace": "    if fresh_jump || !free {\n",
+  "test": "a_vine_takes_hold_only_while_f_is_held_and_letting_go_of_f_drops_off"
+ },
+ {
+  "name": "T36 F is not bound",
+  "file": "data/controls.json",
+  "find": "  \"KeyF\": \"vine\",\n",
+  "replace": "",
+  "test": "every_action_has_a_key_that_holds_it"
  },
  {
   "name": "T33 a big prism's handedness overflows",

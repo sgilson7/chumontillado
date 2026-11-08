@@ -28,5 +28,6 @@
   "Digit0": "slot_10",
   "Minus": "slot_11",
   "KeyE": "melee",
+  "KeyF": "vine",
   "KeyQ": "last"
 }

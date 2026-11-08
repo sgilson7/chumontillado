@@ -27,7 +27,7 @@ use crate::arms::{Arms, Shot};
 use crate::camera::{self, Aim};
 use crate::fx::{self, int, Fx, ONE};
 use crate::geom::{facing, right_of, v3, Affine, V3};
-use crate::input::{Input, Mouse, ALT, BACK, CROUCH, FORWARD, JUMP, LEFT, RESET, RIGHT};
+use crate::input::{Input, Mouse, ALT, BACK, CROUCH, FORWARD, JUMP, LEFT, RESET, RIGHT, VINE};
 use crate::look::{rgb, Look, Palette, Rgb};
 use crate::map::{self, Map};
 use crate::movement::{Body, Events, Mover, Tuning, TUNING};
@@ -1640,18 +1640,21 @@ fn pull(p: &mut Player, input: &Input) {
     p.hook = Some(h);
 }
 
-/// T33: a vine, before the body moves. In the air, hands that pass within
-/// `VINE_REACH` of a vine take hold of it, and the vine bears the body on a
-/// swing as long as their height under its top. The movement keys push the
-/// swing along the view; a fresh jump lets go with a little lift, keeping
-/// the swing's speed; the ground, a hook or a nail let go too. Says whether
-/// the body hangs from a vine this tick.
+/// T33: a vine, before the body moves. In the air, with the vine key held
+/// (T36), hands within `VINE_REACH` of a vine take hold of it, and the vine
+/// bears the body on a swing as long as their height under its top. The
+/// movement keys push the swing along the view; letting go of the vine key
+/// drops off keeping the swing's speed, and a fresh jump does too with a
+/// little lift; the ground, a hook or a nail let go too. Says whether the
+/// body hangs from a vine this tick.
 fn swing_on_vine(p: &mut Player, input: &Input, vines: &[map::Vine]) -> bool {
     p.vine_rest = (p.vine_rest - 1).max(0);
     let grip = p.body.origin.add(v3(0, VINE_GRIP, 0));
     let free = !p.body.on_ground && p.hook.is_none() && p.pinned == 0;
-    // a bot's route knows nothing of vines, so a bot does not take hold
-    if p.vine.is_none() && free && p.pilot.is_none() {
+    // a bot's route knows nothing of vines, and its pilot never holds the
+    // vine key, so a bot does not take hold
+    let holding = input.key(VINE);
+    if p.vine.is_none() && free && holding {
         let found = vines.iter().enumerate().find(|(k, v)| {
             let across = v3(grip.x - v.top.x, 0, grip.z - v.top.z).len();
             !(p.vine_rest > 0 && *k as u16 == p.last_vine)
@@ -1676,7 +1679,7 @@ fn swing_on_vine(p: &mut Player, input: &Input, vines: &[map::Vine]) -> bool {
     }
     let Some(c) = p.vine else { return false };
     let fresh_jump = input.key(JUMP) && !p.body.old_jump;
-    if fresh_jump || !free {
+    if fresh_jump || !holding || !free {
         p.let_go_of_vine();
         if fresh_jump {
             p.body.velocity.y += VINE_LET_GO;

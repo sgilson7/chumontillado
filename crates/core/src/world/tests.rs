@@ -5,7 +5,7 @@
 use super::*;
 use crate::fx::int;
 use crate::geom::yaw_of;
-use crate::input::{CROUCH, FORWARD, JUMP, LEFT, RIGHT};
+use crate::input::{CROUCH, FORWARD, JUMP, LEFT, RIGHT, VINE};
 use crate::movement::{Mover, TUNING};
 
 fn keys(k: u32) -> Input {
@@ -1989,15 +1989,15 @@ fn at_a_vine() -> (World, crate::map::Vine) {
     (w, v)
 }
 
-/// Sam, T33: "vines on them you can swing along". Jumped into, a vine
-/// takes hold; on it the hands stay its length from its top while the body
-/// swings past it and up; Space lets go with the swing's speed and a little
-/// lift, and that vine does not take you straight back.
+/// Sam, T33: "vines on them you can swing along". Jumped into with F held
+/// (T36), a vine takes hold; on it the hands stay its length from its top
+/// while the body swings past it and up; Space lets go with the swing's
+/// speed and a little lift, and that vine does not take you straight back.
 #[test]
 fn a_vine_jumped_into_takes_hold_swings_you_up_past_it_and_lets_go_on_space() {
     let (mut w, v) = at_a_vine();
     for _ in 0..30 {
-        w.step(&[Input::default()]);
+        w.step(&[keys(VINE)]);
         if w.players[0].vine.is_some() {
             break;
         }
@@ -2007,7 +2007,7 @@ fn a_vine_jumped_into_takes_hold_swings_you_up_past_it_and_lets_go_on_space() {
     let mut high = 0;
     let mut swing_x = Vec::new();
     for t in 0..40 {
-        w.step(&[Input::default()]);
+        w.step(&[keys(VINE)]);
         let p = &w.players[0];
         assert!(p.vine.is_some(), "still holding at {t}");
         let hands = p.body.origin.add(v3(0, VINE_GRIP, 0));
@@ -2028,7 +2028,7 @@ fn a_vine_jumped_into_takes_hold_swings_you_up_past_it_and_lets_go_on_space() {
     );
     assert!(high > int(3), "and up: {}", fx::decimal(high, 1));
     let before = w.players[0].body.velocity;
-    w.step(&[keys(JUMP)]);
+    w.step(&[keys(JUMP | VINE)]);
     let p = &w.players[0];
     assert!(p.vine.is_none(), "Space lets go");
     let after = p.body.velocity;
@@ -2040,18 +2040,49 @@ fn a_vine_jumped_into_takes_hold_swings_you_up_past_it_and_lets_go_on_space() {
     // straight back through it, the same vine does not take hold again
     w.players[0].body.origin = v3(v.top.x, int(3), v.top.z);
     w.players[0].body.velocity = v3(0, int(1), 0);
-    w.step(&[keys(JUMP)]);
+    w.step(&[keys(JUMP | VINE)]);
     assert!(w.players[0].vine.is_none(), "not again so soon");
+}
+
+/// Sam, T36: "vines should be grabbable with a different button than space
+/// / left click". Jumped into without F, a vine does not take hold; with F
+/// held it does, and letting go of F drops off keeping the swing's speed,
+/// with no lift.
+#[test]
+fn a_vine_takes_hold_only_while_f_is_held_and_letting_go_of_f_drops_off() {
+    let (mut w, _) = at_a_vine();
+    for t in 0..30 {
+        w.step(&[keys(JUMP)]);
+        // nor taken and dropped in one tick, which would leave the vine at rest
+        let p = &w.players[0];
+        assert!(p.vine.is_none() && p.vine_rest == 0, "taken without F at {t}");
+    }
+    let (mut w, _) = at_a_vine();
+    for _ in 0..30 {
+        w.step(&[keys(VINE)]);
+    }
+    assert!(w.players[0].vine.is_some(), "F takes hold");
+    let before = w.players[0].body.velocity;
+    w.step(&[Input::default()]);
+    let p = &w.players[0];
+    assert!(p.vine.is_none(), "letting go of F drops off");
+    let after = p.body.velocity;
+    assert!(near(after.x, before.x, ONE / 2), "{after:?} kept {before:?}");
+    assert!(after.y < before.y + ONE, "no lift: {after:?} from {before:?}");
 }
 
 /// T33: on a vine W pushes the swing along the view, so held toward the
 /// swing it carries higher than left alone; held jump, as when hopping in,
-/// does not let go until it is pressed afresh.
+/// does not let go until it is pressed afresh. F is held throughout (T36).
 #[test]
 fn on_a_vine_w_pumps_the_swing_higher_and_held_space_does_not_let_go() {
     let highest = |input: Input| {
         let (mut w, _) = at_a_vine();
         let mut high = 0;
+        let input = Input {
+            keys: input.keys | VINE,
+            ..input
+        };
         for _ in 0..70 {
             w.step(&[input]);
             high = high.max(w.players[0].body.origin.y);
@@ -2072,12 +2103,12 @@ fn on_a_vine_w_pumps_the_swing_higher_and_held_space_does_not_let_go() {
 }
 
 /// T33: a bot's route knows nothing of vines: it passes through one
-/// without taking hold.
+/// without taking hold, the vine key held by the person or not (T36).
 #[test]
 fn a_bot_does_not_take_hold_of_a_vine() {
     let (mut w, _) = at_a_vine();
     w.players[0].pilot = Some(crate::pilot::Pilot::default());
-    run(&mut w, Input::default(), 30);
+    run(&mut w, keys(VINE), 30);
     assert!(w.players[0].vine.is_none());
 }
 
