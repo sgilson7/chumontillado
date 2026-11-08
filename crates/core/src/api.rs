@@ -563,6 +563,7 @@ pub const CONTROLS: &[(&str, &str)] = &[
     ("key_jump", "control_jump"),
     ("key_crouch", "control_crouch"),
     ("key_wall", "control_wall"),
+    ("key_vine", "control_vine"),
     ("key_reset", "control_reset"),
     ("key_pause", "control_pause"),
 ];

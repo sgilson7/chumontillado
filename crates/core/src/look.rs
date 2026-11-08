@@ -70,6 +70,8 @@ pub struct Palette {
     pub straw: [i32; 3],
     pub figure: [i32; 3],
     pub head: [i32; 3],
+    /// T33: a vine to swing on
+    pub vine: [i32; 3],
 }
 
 /// `data/look.json`. Fields starting with `_` there are notes.

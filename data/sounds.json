@@ -57,6 +57,18 @@
       "tone_ms": 300,
       "wave": "sawtooth"
     },
+    "shot_ak": {
+      "noise": 0.8,
+      "noise_ms": 140,
+      "filter": "bandpass",
+      "filter_hz": 1800,
+      "q": 0.9,
+      "tone": 0.35,
+      "tone_hz": 220,
+      "tone_to_hz": 90,
+      "tone_ms": 90,
+      "wave": "sawtooth"
+    },
     "shot_pincel": {
       "noise": 0.3,
       "noise_ms": 250,

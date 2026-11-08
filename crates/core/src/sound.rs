@@ -52,6 +52,7 @@ impl Voice {
                 Weapon::Trabuco => "shot_trabuco",
                 Weapon::Toro => "shot_toro",
                 Weapon::Collage => "shot_collage",
+                Weapon::Ak => "shot_ak",
                 _ => "swing",
             },
             Voice::Swing => "swing",

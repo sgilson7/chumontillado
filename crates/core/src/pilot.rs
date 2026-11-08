@@ -223,7 +223,7 @@ pub struct View<'a> {
     pub health: i32,
     pub cover: Option<V3>,
     pub weapon: Weapon,
-    pub owned: u16,
+    pub owned: u32,
     pub pickups: &'a [crate::world::Pickup],
 }
 
@@ -247,12 +247,17 @@ pub fn suits(g: Weapon, d: Fx) -> i32 {
     s.damage * s.pellets.max(1)
 }
 
+/// T33: how far above or below its feet a bot goes for a weapon (m): a
+/// jump's height.
+pub const PICKUP_RISE: Fx = ONE * 17 / 10;
+
 /// The key that takes weapon `g` into the hand.
 fn key_for(g: Weapon) -> u32 {
     if g.swing().is_some() {
         MELEE
     } else {
-        SLOTS[g as usize]
+        let k = crate::weapons::GUNS.iter().position(|&h| h == g).unwrap_or(0);
+        SLOTS[k]
     }
 }
 
@@ -304,7 +309,8 @@ pub fn record(p: &mut Pilot, v: &View) -> Input {
     p.dodge = (p.dodge - 1).max(0);
     p.falling_back = (p.falling_back - 1).max(0);
     p.switched = (p.switched - 1).max(0);
-    // T20: out of a fight, a weapon it lacks lying near
+    // T20: out of a fight, a weapon it lacks lying near; T33: and within a
+    // jump of its feet, not up on a bridge or a branch it cannot climb to
     let wanted = v
         .pickups
         .iter()
@@ -313,8 +319,9 @@ pub fn record(p: &mut Pilot, v: &View) -> Input {
                 && v.hunt.is_some()
                 && target.is_none()
                 && !k.taken
-                && v.owned & (1 << k.weapon as u16) == 0
+                && v.owned & (1 << k.weapon as u32) == 0
                 && k.at.sub(v.feet).len_xz() <= DETOUR
+                && (k.at.y - v.feet.y).abs() <= PICKUP_RISE
         })
         .min_by_key(|k| k.at.sub(v.feet).len_xz())
         .map(|k| k.at);
@@ -447,7 +454,7 @@ pub fn record(p: &mut Pilot, v: &View) -> Input {
         let d = c.sub(v.eye).len();
         let best = (0..crate::weapons::COUNT)
             .map(Weapon::from_index)
-            .filter(|&g| v.owned & (1 << g as u16) != 0)
+            .filter(|&g| v.owned & (1 << g as u32) != 0)
             .max_by_key(|&g| (suits(g, d), g == v.weapon))
             .unwrap_or(v.weapon);
         if p.switched == 0 && best != v.weapon && suits(best, d) > suits(v.weapon, d) {
@@ -744,14 +751,14 @@ mod tests {
         let mut p = shooting();
         let mut v = fighting(Skill::Normal);
         v.chest = Some(v3(int(8), ONE * 165 / 100, int(-19)));
-        v.owned |= 1 << Weapon::Shotgun as u16;
+        v.owned |= 1 << Weapon::Shotgun as u32;
         let r = record(&mut p, &v);
-        assert!(r.key(SLOTS[Weapon::Shotgun as usize]), "{:b}", r.keys);
+        assert!(r.key(SLOTS[1]), "{:b}", r.keys);
         // not again at once, so the key is a fresh press when it comes
-        assert!(!record(&mut p, &v).key(SLOTS[Weapon::Shotgun as usize]));
+        assert!(!record(&mut p, &v).key(SLOTS[1]));
         // an Easy bot keeps what it holds
         v.skill = Skill::Easy;
-        assert!(!record(&mut shooting(), &v).key(SLOTS[Weapon::Shotgun as usize]));
+        assert!(!record(&mut shooting(), &v).key(SLOTS[1]));
     }
 
     #[test]
@@ -768,7 +775,22 @@ mod tests {
         let r = record(&mut shooting(), &v);
         assert!(r.key(RIGHT) && !r.key(FORWARD), "{:b}", r.keys);
         // one it owns already, it passes by
-        v.owned |= 1 << Weapon::Rifle as u16;
+        v.owned |= 1 << Weapon::Rifle as u32;
+        assert!(record(&mut shooting(), &v).key(FORWARD));
+    }
+
+    /// T33: a weapon up on a bridge or a branch, out of a jump's reach, it
+    /// leaves for the hunt.
+    #[test]
+    fn it_leaves_a_weapon_lying_higher_than_a_jump() {
+        let lying = [crate::world::Pickup {
+            at: v3(int(16), int(16), int(-16)),
+            weapon: Weapon::Rifle,
+            taken: false,
+        }];
+        let mut v = fighting(Skill::Normal);
+        v.chest = None;
+        v.pickups = &lying;
         assert!(record(&mut shooting(), &v).key(FORWARD));
     }
 

@@ -68,6 +68,12 @@ A valley whose banks are long surf ramps, crossed by an aqueduct to run along an
 
 Not: aqueduct map, canyon
 
+### AK-47
+
+A rifle drawn true that fires three rounds for each pull of the trigger, then rests a moment before the next three.
+
+Not: assault rifle, burst rifle
+
 ### Alcázar
 
 A fortress courtyard: ramparts along two sides, too high for a jump, a tower in each corner, arcades of columns, a fountain in the middle. The puñal's jump reaches the ramparts.
@@ -79,6 +85,12 @@ Not: castle map, fort
 A quarter of houses on a grid of streets, twice as wide as the first maps, with a surf ramp up a house on each side of its square.
 
 Not: town, city map
+
+### Barranco
+
+A deep ravine whose two sides are surf ramps the whole of its length, crossed by bridges hung with vines.
+
+Not: gorge, valley map
 
 ### Bot
 
@@ -288,6 +300,12 @@ One of an online match's four places. A player holds it, or a bot plays it.
 
 Not: player slot
 
+### Selva
+
+A jungle twice as wide as the first maps: rows of vines hang from branches across its middle, between two great surf ramps.
+
+Not: forest, jungle map
+
 ### Service pistol
 
 The sidearm every player starts with.
@@ -359,3 +377,9 @@ Not: rocket launcher, bazooka
 A painted blunderbuss that fires seven nails. A nail that meets a body with a wall close behind pins it there.
 
 Not: nail gun, blunderbuss
+
+### Vine
+
+A rope of green hanging from a branch or a bridge. Jump into it to take hold and swing; jump again to let go, keeping the speed of the swing.
+
+Not: rope, liana

@@ -79,6 +79,7 @@ pub const KICK: [(i32, i32, i32); COUNT] = [
     (0, 0, 0),    // guadaña
     (0, 0, 0),    // puñal
     (0, 0, 0),    // garrocha
+    (5, 6, 9),    // AK-47
 ];
 
 /// The view's tip up after a shot, angle units: the weapon's kick at the
@@ -450,6 +451,19 @@ pub fn gun_parts(g: Weapon, pal: &Palette) -> Vec<GunPart> {
             part(Mesh::Cube, [-1, -1, -28], [4, 3, 12], red, Role::Fixed),
             part(Mesh::Cube, [0, 3, -32], [2, 2, 8], bone, Role::Fixed),
             part(Mesh::Cube, [0, -6, 0], [4, 9, 5], umber, Role::Fixed),
+        ],
+        // T33: the AK-47: a blackened receiver and barrel, a wooden stock,
+        // grip and handguard, the gas tube over the barrel, and the
+        // magazine's curve in two steps forward
+        Weapon::Ak => vec![
+            part(Mesh::Cube, [0, 1, -8], [5, 7, 30], dark, Role::Fixed),
+            part(Mesh::Cube, [0, 2, -44], [2, 2, 30], steel, Role::Fixed),
+            part(Mesh::Cube, [0, 5, -34], [2, 2, 22], steel, Role::Fixed),
+            part(Mesh::Cube, [0, 1, -32], [5, 6, 18], wood, Role::Fixed),
+            part(Mesh::Cube, [0, -2, 22], [4, 8, 26], wood, Role::Fixed),
+            part(Mesh::Cube, [0, -8, 2], [3, 10, 4], wood, Role::Fixed),
+            part(Mesh::Cube, [0, -8, -12], [3, 10, 5], dark, Role::Mag),
+            part(Mesh::Cube, [0, -16, -15], [3, 8, 5], dark, Role::Mag),
         ],
         Weapon::Katana => vec![
             part(Mesh::Cube, [0, 2, -50], [1, 4, 80], steel, Role::Fixed),

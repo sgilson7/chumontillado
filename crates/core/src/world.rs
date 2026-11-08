@@ -27,7 +27,7 @@ use crate::arms::{Arms, Shot};
 use crate::camera::{self, Aim};
 use crate::fx::{self, int, Fx, ONE};
 use crate::geom::{facing, right_of, v3, Affine, V3};
-use crate::input::{Input, Mouse, ALT, RESET};
+use crate::input::{Input, Mouse, ALT, BACK, CROUCH, FORWARD, JUMP, LEFT, RESET, RIGHT};
 use crate::look::{rgb, Look, Palette, Rgb};
 use crate::map::{self, Map};
 use crate::movement::{Body, Events, Mover, Tuning, TUNING};
@@ -97,6 +97,11 @@ pub struct Player {
     pub last_cut: i32,
     /// the guadaña's line to a wall
     pub hook: Option<Hook>,
+    /// T33: the vine it hangs from; the last it let go of, and ticks until
+    /// that one takes it again
+    pub vine: Option<Clinging>,
+    pub last_vine: u16,
+    pub vine_rest: i32,
     /// ticks a nail still holds it to a wall
     pub pinned: i32,
     /// M4: a seat nobody holds and the host left empty: not in the match
@@ -128,6 +133,14 @@ pub const BAND_WALK: Fx = int(3);
 pub const BAND_TRICK_TICKS: i32 = 30;
 
 impl Player {
+    /// T33: off the vine it hangs from, which will not take it again for
+    /// `VINE_AGAIN` ticks.
+    fn let_go_of_vine(&mut self) {
+        if self.vine.take().is_some() {
+            self.vine_rest = VINE_AGAIN;
+        }
+    }
+
     /// The band a shot fired now falls in.
     pub fn band(&self) -> usize {
         let v = self.body.speed();
@@ -155,6 +168,24 @@ pub struct Swinging {
     pub cut: Option<i32>,
     pub struck: u64,
 }
+
+/// T33: a hold on a vine: which of the map's, and how far the hands are
+/// below its top.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Clinging {
+    pub vine: u16,
+    pub length: Fx,
+}
+
+/// T33: how far across from a vine the hands take hold of it (m), how high
+/// over the feet they hold (m), the push the movement keys give a swing
+/// (m/s²), the lift a let-go gives (m/s), and the ticks before the vine let
+/// go of takes you again.
+pub const VINE_REACH: Fx = ONE * 8 / 10;
+pub const VINE_GRIP: Fx = ONE * 17 / 10;
+pub const VINE_PUMP: Fx = int(6);
+pub const VINE_LET_GO: Fx = int(3);
+pub const VINE_AGAIN: i32 = 30;
 
 /// The guadaña's line: where it holds, and ticks left.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -223,6 +254,9 @@ impl Player {
             flick: (0, 0),
             last_cut: weapons::CUT_RIGHT,
             hook: None,
+            vine: None,
+            last_vine: 0,
+            vine_rest: 0,
             pinned: 0,
             out: false,
             shooting: Shooting::default(),
@@ -556,6 +590,12 @@ impl World {
             if let Some(hk) = p.hook {
                 v3s(&mut mix, hk.at);
             }
+            if let Some(c) = p.vine {
+                mix(c.vine as i64);
+                mix(c.length as i64);
+            }
+            mix(p.vine_rest as i64);
+            mix(p.arms.burst_left as i64);
         }
         for q in &self.flying {
             v3s(&mut mix, q.at);
@@ -711,6 +751,8 @@ impl World {
         // online (M4), Backspace does not stand you back at your spawn whole
         let online = self.online;
         let inside = self.map.inside();
+        let held = Rc::clone(&self.map);
+        let vines = &held.vines;
         {
             let mut mover = Mover::new(&self.map);
             for (id, (p, input)) in self.players.iter_mut().zip(&records).enumerate() {
@@ -747,6 +789,17 @@ impl World {
                 let turn = (-fx::wrap(p.aim.yaw.wrapping_sub(from)), p.aim.pitch - from_pitch);
                 p.flick = (p.flick.0 * 5 / 6 + turn.0, p.flick.1 * 5 / 6 + turn.1);
                 pull(p, input);
+                let swinging = swing_on_vine(p, input, vines);
+                // on a vine the keys pump the swing, not the mover's air
+                // control, and crouch does not slam
+                let input = &if swinging {
+                    Input {
+                        keys: input.keys & !(FORWARD | BACK | LEFT | RIGHT | CROUCH),
+                        ..*input
+                    }
+                } else {
+                    *input
+                };
                 if p.pinned > 0 {
                     // held to the wall by a nail: it aims and fires, but stays
                     p.pinned -= 1;
@@ -1215,6 +1268,7 @@ impl World {
             let along = facing(yaw, pitch).scale(weapons::LUNGE_SPEED.max(p.body.speed()));
             p.body.velocity = v3(along.x, along.y.max(weapons::LUNGE_LIFT), along.z);
             p.body.on_ground = false;
+            p.let_go_of_vine();
         } else if sw.launch > 0 {
             // T30: the garrocha flings you once wound up (`swings`)
         } else {
@@ -1287,6 +1341,7 @@ impl World {
                 };
                 p.body.velocity = v3(along.x, up, along.z);
                 p.body.on_ground = false;
+                p.let_go_of_vine();
             }
             let (from, until) = if s.lunge {
                 (1, weapons::LUNGE_TICKS)
@@ -1482,6 +1537,31 @@ impl World {
         for b in &self.bursts {
             draw_burst(out, b, pal, ink);
         }
+        // T33: each vine hangs straight down, or runs to the hands that
+        // hold it and hangs on below them
+        for (k, v) in self.map.vines.iter().enumerate() {
+            let thick = ONE * 12 / 100;
+            let held = self
+                .players
+                .iter()
+                .find(|p| p.alive() && p.vine.is_some_and(|c| c.vine as usize == k));
+            let (hands, rest) = match held.and_then(|p| p.vine.map(|c| (p, c))) {
+                Some((p, c)) => {
+                    let feet = p.prev.lerp(p.body.origin, alpha);
+                    (feet.add(v3(0, VINE_GRIP, 0)), v.length - c.length)
+                }
+                None => (v.top.sub(v3(0, v.length, 0)), 0),
+            };
+            out.solid(Mesh::Cube, bar(v.top, hands, thick), rgb(pal.vine), 0);
+            if rest > ONE / 10 {
+                out.solid(
+                    Mesh::Cube,
+                    bar(hands, hands.sub(v3(0, rest, 0)), thick),
+                    rgb(pal.vine),
+                    0,
+                );
+            }
+        }
         for (k, p) in self.players.iter().enumerate() {
             if let Some(h) = p.hook {
                 let aim = if k == me { p.aim.turned(pending) } else { p.aim };
@@ -1539,6 +1619,74 @@ fn pull(p: &mut Player, input: &Input) {
         p.body.on_ground = false;
     }
     p.hook = Some(h);
+}
+
+/// T33: a vine, before the body moves. In the air, hands that pass within
+/// `VINE_REACH` of a vine take hold of it, and the vine bears the body on a
+/// swing as long as their height under its top. The movement keys push the
+/// swing along the view; a fresh jump lets go with a little lift, keeping
+/// the swing's speed; the ground, a hook or a nail let go too. Says whether
+/// the body hangs from a vine this tick.
+fn swing_on_vine(p: &mut Player, input: &Input, vines: &[map::Vine]) -> bool {
+    p.vine_rest = (p.vine_rest - 1).max(0);
+    let grip = p.body.origin.add(v3(0, VINE_GRIP, 0));
+    let free = !p.body.on_ground && p.hook.is_none() && p.pinned == 0;
+    // a bot's route knows nothing of vines, so a bot does not take hold
+    if p.vine.is_none() && free && p.pilot.is_none() {
+        let found = vines.iter().enumerate().find(|(k, v)| {
+            let across = v3(grip.x - v.top.x, 0, grip.z - v.top.z).len();
+            !(p.vine_rest > 0 && *k as u16 == p.last_vine)
+                && grip.y <= v.top.y
+                && grip.y >= v.top.y - v.length
+                && across <= VINE_REACH
+        });
+        if let Some((k, v)) = found {
+            let out = grip.sub(v.top);
+            p.vine = Some(Clinging {
+                vine: k as u16,
+                length: out.len().clamp(ONE, v.length),
+            });
+            p.last_vine = k as u16;
+            // the vine draws taut: nothing goes on away from its top
+            let n = out.norm();
+            let away = p.body.velocity.dot(n);
+            if away > 0 {
+                p.body.velocity = p.body.velocity.sub(n.scale(away));
+            }
+        }
+    }
+    let Some(c) = p.vine else { return false };
+    let fresh_jump = input.key(JUMP) && !p.body.old_jump;
+    if fresh_jump || !free {
+        p.let_go_of_vine();
+        if fresh_jump {
+            p.body.velocity.y += VINE_LET_GO;
+        }
+        return false;
+    }
+    let top = vines[c.vine as usize].top;
+    let dt = ONE / crate::movement::HZ;
+    let (x, z) = input.walk_axes();
+    let push = facing(p.aim.yaw, 0)
+        .scale(int(-z))
+        .add(right_of(p.aim.yaw).scale(int(x)))
+        .norm();
+    let v = p.body.velocity.add(push.scale(fx::mul(VINE_PUMP, dt)));
+    // the mover takes half a tick's gravity before it moves and half after:
+    // where this tick's move would carry the hands, held to the vine's
+    // length, and the speed that carries them there
+    let half_g = v3(0, fx::mul(TUNING.gravity, dt) / 2, 0);
+    let moving = v.sub(half_g);
+    let next = grip.add(moving.scale(dt)).sub(top);
+    let held = if next.len() > c.length {
+        next.norm().scale(c.length)
+    } else {
+        next
+    };
+    let step = held.sub(grip.sub(top));
+    let along = v3(fx::div(step.x, dt), fx::div(step.y, dt), fx::div(step.z, dt));
+    p.body.velocity = along.add(half_g);
+    true
 }
 
 /// T27: a body that has moved past the walls' inner faces, over the top

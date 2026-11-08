@@ -91,6 +91,16 @@ pub struct Map {
     pub pickups: Vec<(V3, Weapon)>,
     /// M5: the loop a bot hops round, (x, z) in metres
     pub bot_loop: Vec<(i32, i32)>,
+    /// T33: the vines that hang to swing on
+    pub vines: Vec<Vine>,
+}
+
+/// T33: a vine, hanging straight down `length` m from `top` until someone
+/// takes hold of it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Vine {
+    pub top: V3,
+    pub length: Fx,
 }
 
 impl Map {
@@ -449,7 +459,7 @@ impl Brush {
                 // along x, or with its corners in the other order, runs its
                 // length the other way
                 let (c0, c1) = (br.sub(bl), top.sub(base_mid));
-                let c2 = if c0.dot(c1.cross(c2)) < 0 { c2.neg() } else { c2 };
+                let c2 = if handed(c0, c1, c2) < 0 { c2.neg() } else { c2 };
                 (Mesh::Wedge, Affine { c0, c1, c2, t })
             }
             Shape::Sheared { .. } => {
@@ -462,7 +472,7 @@ impl Brush {
                 let (c0, c1) = (br.sub(bl), top.sub(base_mid));
                 let c2 = a1.sub(a0);
                 let t = mid(top, base_mid);
-                let c2 = if c0.dot(c1.cross(c2)) < 0 { c2.neg() } else { c2 };
+                let c2 = if handed(c0, c1, c2) < 0 { c2.neg() } else { c2 };
                 (Mesh::Wedge, Affine { c0, c1, c2, t })
             }
             Shape::Disc { y0, y1, .. } => {
@@ -476,6 +486,17 @@ impl Brush {
             }
         }
     }
+}
+
+/// The sign of c0 · (c1 × c2), in 128 bits: in Q16.16 the product of three
+/// lengths overflows past 32 767 m³, and a ramp 96 m long, 22 m across and
+/// 17 m high is 35 904 (T33).
+fn handed(c0: V3, c1: V3, c2: V3) -> i32 {
+    let w = |v: V3| [v.x as i128, v.y as i128, v.z as i128];
+    let (a, b, c) = (w(c0), w(c1), w(c2));
+    let det = a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0])
+        + a[2] * (b[0] * c[1] - b[1] * c[0]);
+    det.signum() as i32
 }
 
 impl Map {
@@ -633,6 +654,7 @@ pub fn practice() -> Map {
         name: "practice",
         pickups: Vec::new(),
         bot_loop: crate::pilot::LOOP.to_vec(),
+        vines: Vec::new(),
     }
 }
 
@@ -731,9 +753,10 @@ mod tests {
         for m in std::iter::once(m).chain(crate::maps::all()) {
             for (k, b) in m.brushes.iter().enumerate() {
                 let (_, a) = b.drawn();
-                let det = (a.c0.x as i64 * (a.c1.y as i64 * a.c2.z as i64 - a.c1.z as i64 * a.c2.y as i64)
-                    - a.c0.y as i64 * (a.c1.x as i64 * a.c2.z as i64 - a.c1.z as i64 * a.c2.x as i64)
-                    + a.c0.z as i64 * (a.c1.x as i64 * a.c2.y as i64 - a.c1.y as i64 * a.c2.x as i64))
+                let det = (a.c0.x as i128
+                    * (a.c1.y as i128 * a.c2.z as i128 - a.c1.z as i128 * a.c2.y as i128)
+                    - a.c0.y as i128 * (a.c1.x as i128 * a.c2.z as i128 - a.c1.z as i128 * a.c2.x as i128)
+                    + a.c0.z as i128 * (a.c1.x as i128 * a.c2.y as i128 - a.c1.y as i128 * a.c2.x as i128))
                     .signum();
                 assert_eq!(det, 1, "{}: brush {k} ({:?}) draws inside out", m.name, b.surface);
             }

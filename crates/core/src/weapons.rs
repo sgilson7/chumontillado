@@ -40,9 +40,11 @@ pub enum Weapon {
     Punal = 13,
     // T30: the picador's pole, wound up long, that flings you along the aim
     Garrocha = 14,
+    // T33: the AK-47, a rifle that fires three rounds a pull
+    Ak = 15,
 }
 
-pub const COUNT: usize = 15;
+pub const COUNT: usize = 16;
 pub const ALL: [Weapon; COUNT] = [
     Weapon::Pistol,
     Weapon::Shotgun,
@@ -59,6 +61,22 @@ pub const ALL: [Weapon; COUNT] = [
     Weapon::Guadana,
     Weapon::Punal,
     Weapon::Garrocha,
+    Weapon::Ak,
+];
+/// The guns in the order the number keys take them: 1 to 0, then the minus
+/// key for the AK-47 (T33).
+pub const GUNS: [Weapon; 11] = [
+    Weapon::Pistol,
+    Weapon::Shotgun,
+    Weapon::MachinePistol,
+    Weapon::Rifle,
+    Weapon::Pincel,
+    Weapon::Drum,
+    Weapon::Trabuco,
+    Weapon::Toro,
+    Weapon::Campana,
+    Weapon::Collage,
+    Weapon::Ak,
 ];
 /// The guns take the number keys 1 to 0 in this order; the melee key takes
 /// the five melee weapons in turn.
@@ -185,6 +203,10 @@ pub struct Stats {
     /// a push back along the aim when fired in the air (m/s): the
     /// shotgun's jump
     pub kick: Fx,
+    /// T33: rounds one pull fires, and the ticks between them (the AK-47's
+    /// three); 1 for every other gun
+    pub burst: i32,
+    pub burst_gap: i32,
 }
 
 /// A gun that fires at once: its kind and the fields a hitscan gun leaves
@@ -204,6 +226,8 @@ const HITSCAN: Stats = Stats {
     charged_damage: 0,
     pierce: false,
     kick: 0,
+    burst: 1,
+    burst_gap: 0,
 };
 
 const FLIGHT: Flight = Flight {
@@ -507,6 +531,21 @@ pub const WEAPONS: [Stats; COUNT] = [
         }),
         damage: 100,
         interval: BEAT * 4,
+        ..HITSCAN
+    },
+    // T33: the AK-47. Sam: "an ak-47 but is 3round burst". Three rounds a
+    // pull, 4 ticks apart, then a beat before the next pull: 72 to a body
+    // if all three land
+    Stats {
+        name: "gun_ak",
+        damage: 24,
+        spread: fx::deg(1),
+        interval: BEAT,
+        magazine: 30,
+        reload: BEAT * 3,
+        range: int(150),
+        burst: 3,
+        burst_gap: 4,
         ..HITSCAN
     },
 ];

@@ -1866,7 +1866,10 @@ pub(crate) mod tests {
         g.act("playlist.remove", "1").unwrap();
         assert_eq!(g.playlists[0], [8, 0]);
         assert!(g.act("playlist.remove", "5").is_err());
-        assert!(g.act("playlist.add", "12").is_err(), "no such map");
+        assert!(
+            g.act("playlist.add", &crate::maps::COUNT.to_string()).is_err(),
+            "no such map"
+        );
         // its rows name the maps in order
         let ui = crate::api::ui(&g);
         let list = ui.panels.iter().find(|p| p.id == "playlist").unwrap();

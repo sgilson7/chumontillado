@@ -18,11 +18,14 @@
 //! Tobogán's arena, the rule is 12 m (`spacing`). The Tobogán is a slide
 //! from a platform high in the sky, a jump at its foot into an arena.
 //!
+//! T33 added two large maps with vines to swing on and big surf ramps: the
+//! Selva, a jungle, and the Barranco, a canyon whose sides are the ramps.
+//!
 //! Lengths in metres, y up. A seat's spawn faces the map's middle.
 
 use crate::fx::{self, int, Fx, ONE};
 use crate::geom::{v3, yaw_of, V3};
-use crate::map::{block, disc, prism, sheared, turned, Map, Surface};
+use crate::map::{block, disc, prism, sheared, turned, Map, Surface, Vine};
 use crate::weapons::Weapon;
 
 /// The maps in the order a match plays them.
@@ -40,15 +43,24 @@ pub fn all() -> [Map; COUNT] {
         sierra(),
         arrabal(),
         tobogan(),
+        selva(),
+        barranco(),
     ]
 }
 
 /// How many maps a match goes round.
-pub const COUNT: usize = 12;
+pub const COUNT: usize = 14;
 
 /// T31: the twice-as-wide maps and the Tobogán, where nothing to move off
-/// need be nearer than 12 m.
-pub const WIDE: [&str; 4] = ["map_dehesa", "map_sierra", "map_arrabal", "map_tobogan"];
+/// need be nearer than 12 m; T33 added the Selva and the Barranco.
+pub const WIDE: [&str; 6] = [
+    "map_dehesa",
+    "map_sierra",
+    "map_arrabal",
+    "map_tobogan",
+    "map_selva",
+    "map_barranco",
+];
 
 /// How far from something to move off a place on `m`'s floor may be (m):
 /// 6 (CS-Q24: A), or 12 on the wide maps (T31: Sam, "double the 6m to 12m
@@ -75,7 +87,9 @@ pub fn map(k: usize) -> Map {
         8 => dehesa(),
         9 => sierra(),
         10 => arrabal(),
-        _ => tobogan(),
+        11 => tobogan(),
+        12 => selva(),
+        _ => barranco(),
     }
 }
 
@@ -169,6 +183,7 @@ pub fn plaza() -> Map {
             (on(5, 11), Weapon::Punal),
         ],
         bot_loop: vec![(8, 0), (0, 8), (-8, 0), (0, -8)],
+        vines: Vec::new(),
     }
 }
 
@@ -280,6 +295,7 @@ pub fn catedral() -> Map {
             (-15, 0),
             (0, -3),
         ],
+        vines: Vec::new(),
     }
 }
 
@@ -376,6 +392,7 @@ pub fn galeria() -> Map {
             (v3(-int(9), 0, -int(8)), Weapon::Punal),
         ],
         bot_loop: vec![(-30, 0), (30, 0)],
+        vines: Vec::new(),
     }
 }
 
@@ -466,6 +483,7 @@ pub fn mercado() -> Map {
             (v3(-int(14), 0, -int(9)), Weapon::Punal),
         ],
         bot_loop: vec![(14, 0), (0, 14), (-14, 0), (0, -14)],
+        vines: Vec::new(),
     }
 }
 
@@ -543,6 +561,7 @@ pub fn puerto() -> Map {
             (v3(-int(24), 0, -int(10)), Weapon::Punal),
         ],
         bot_loop: vec![(12, -22), (12, 22), (-12, 22), (-12, -22)],
+        vines: Vec::new(),
     }
 }
 
@@ -623,6 +642,7 @@ pub fn acueducto() -> Map {
             (V3::ZERO, Weapon::Punal),
         ],
         bot_loop: vec![(0, -24), (0, 24)],
+        vines: Vec::new(),
     }
 }
 
@@ -739,6 +759,7 @@ pub fn molino() -> Map {
             (v3(int(6), 0, -int(24)), Weapon::MachinePistol),
         ],
         bot_loop: vec![(12, 0), (0, 12), (-12, 0), (0, -12)],
+        vines: Vec::new(),
     }
 }
 
@@ -843,6 +864,7 @@ pub fn alcazar() -> Map {
             (v3(int(8), 0, -int(18)), Weapon::MachinePistol),
         ],
         bot_loop: vec![(-12, -12), (12, -12), (12, 12), (-12, 12)],
+        vines: Vec::new(),
     }
 }
 
@@ -904,8 +926,10 @@ pub fn dehesa() -> Map {
             (v3(-int(48), 0, -int(16)), Weapon::Garrocha),
             (v3(int(16), 0, int(48)), Weapon::Campana),
             (v3(-int(16), 0, -int(48)), Weapon::Pincel),
+            (v3(int(48), 0, -int(16)), Weapon::Ak),
         ],
         bot_loop: vec![(16, -8), (16, 8), (-16, 8), (-16, -8)],
+        vines: Vec::new(),
     }
 }
 
@@ -955,8 +979,10 @@ pub fn sierra() -> Map {
             (v3(-int(60), 0, 0), Weapon::Garrocha),
             (v3(-int(32), 0, -int(46)), Weapon::Campana),
             (v3(int(32), 0, int(46)), Weapon::Pincel),
+            (v3(0, 0, -int(36)), Weapon::Ak),
         ],
         bot_loop: vec![(-4, 20), (4, 20), (4, -20), (-4, -20)],
+        vines: Vec::new(),
     }
 }
 
@@ -1018,8 +1044,10 @@ pub fn arrabal() -> Map {
             (v3(-int(60), 0, 0), Weapon::Garrocha),
             (v3(0, 0, int(60)), Weapon::Campana),
             (v3(0, 0, -int(60)), Weapon::Pincel),
+            (v3(int(12), 0, 0), Weapon::Ak),
         ],
         bot_loop: vec![(12, 12), (-12, 12), (-12, -12), (12, -12)],
+        vines: Vec::new(),
     }
 }
 
@@ -1103,9 +1131,171 @@ pub fn tobogan() -> Map {
             (v3(int(24), 0, -int(90)), Weapon::Collage),
             (v3(-int(24), 0, -int(120)), Weapon::MachinePistol),
             (v3(int(24), 0, -int(120)), Weapon::Pincel),
+            (on_slide(125), Weapon::Ak),
         ],
         bot_loop: vec![(-8, -60), (8, -60), (8, -80), (-8, -80)],
+        vines: Vec::new(),
     }
+}
+
+/// T33: a vine hanging from (x, top, z), `length` m long (lengths in cm).
+fn vine(x: i32, top: i32, z: i32, length: i32) -> Vine {
+    Vine {
+        top: v3(int(x), top * ONE / 100, int(z)),
+        length: length * ONE / 100,
+    }
+}
+
+/// How high the Selva's branches hang, and its vines' length (cm): their
+/// feet 2.5 m up, a jump's reach from the floor.
+const SELVA_BRANCH: i32 = 1500;
+const SELVA_VINE: i32 = 1250;
+
+/// T33: the Selva. Sam: "two new maps that are large, and have vines on
+/// them you can swing along ... and also have big surf ramps". A jungle
+/// 128 m across: five branches cross its middle 15 m up, each held by a
+/// trunk at either end, with a vine every 12 m along them, the rows
+/// staggered by 6 so a swing off one meets the next. North and south of
+/// them lie two surf ramps 96 m long and 17 m high (57°). A stump stands
+/// in the middle to circle.
+pub fn selva() -> Map {
+    let mut bs = yard(64, 64, 24);
+    let branch = SELVA_BRANCH * ONE / 100;
+    for z in [-24, -12, 0, 12, 24] {
+        bs.push(block(
+            v3(-int(58), branch, int(z) - ONE * 3 / 10),
+            v3(int(58), branch + ONE * 6 / 10, int(z) + ONE * 3 / 10),
+            Surface::Trim,
+        ));
+        for x in [-58, 58] {
+            bs.push(pillar(int(x), int(z), int(2), int(17), Surface::Block));
+        }
+    }
+    for z in [-46, 46] {
+        bs.push(prism(
+            [(int(z - 11), 0), (int(z + 11), 0), (int(z), int(17))],
+            false,
+            -int(48),
+            int(48),
+            Surface::Ramp,
+        ));
+    }
+    bs.push(pillar(0, 0, int(3), int(3), Surface::Block));
+    let mut vines = Vec::new();
+    for (row, z) in [-24, -12, 0, 12, 24].into_iter().enumerate() {
+        let first = if row % 2 == 0 { -54 } else { -48 };
+        for x in (0..10).map(|k| first + 12 * k).filter(|x| *x <= 54) {
+            vines.push(vine(x, SELVA_BRANCH, z, SELVA_VINE));
+        }
+    }
+    let on_branch = |x: i32, z: i32| v3(int(x), branch + ONE * 6 / 10, int(z));
+    Map {
+        brushes: bs,
+        spawns: vec![
+            spawn(0, 30, 0, 0),
+            spawn(56, 0, 0, 0),
+            spawn(0, -30, 0, 0),
+            spawn(-56, 0, 0, 0),
+        ],
+        name: "map_selva",
+        pickups: vec![
+            (on_branch(0, 0), Weapon::Toro),
+            (on_branch(-30, 24), Weapon::Garrocha),
+            (on_branch(30, -24), Weapon::Campana),
+            (v3(int(12), 0, int(30)), Weapon::Ak),
+            (v3(-int(12), 0, -int(30)), Weapon::Ak),
+            (v3(int(20), 0, 0), Weapon::Shotgun),
+            (v3(-int(20), 0, 0), Weapon::Drum),
+            (v3(int(40), 0, int(18)), Weapon::Rifle),
+            (v3(-int(40), 0, -int(18)), Weapon::Katana),
+            (v3(int(56), 0, int(46)), Weapon::MachinePistol),
+            (v3(-int(56), 0, -int(46)), Weapon::Collage),
+            (v3(-int(56), 0, int(46)), Weapon::Guadana),
+            (v3(int(56), 0, -int(46)), Weapon::Trabuco),
+            (v3(int(30), 0, -int(6)), Weapon::Punal),
+            (v3(-int(30), 0, int(6)), Weapon::Pincel),
+        ],
+        bot_loop: vec![(20, 30), (-20, 30), (-20, -30), (20, -30)],
+        vines,
+    }
+}
+
+/// How high the Barranco's bridges hang, and its vines' length (cm).
+const BARRANCO_BRIDGE: i32 = 1600;
+const BARRANCO_VINE: i32 = 1300;
+
+/// T33: the Barranco, a canyon 192 m long. Its two sides are surf ramps
+/// the whole way, 26 m high over 18 m (55°), the canyon's floor 44 m
+/// across between them. Seven bridges cross it 16 m up, 24 m apart, each
+/// with vines 12 m apart, staggered bridge to bridge; rocks stand down the
+/// middle between them.
+pub fn barranco() -> Map {
+    let mut bs = yard(40, 96, 30);
+    for side in [-1, 1] {
+        let (foot, top) = (int(22) * side, int(40) * side);
+        bs.push(prism(
+            [(foot, 0), (top, 0), (top, int(26))],
+            true,
+            -int(90),
+            int(90),
+            Surface::Ramp,
+        ));
+    }
+    let bridge = BARRANCO_BRIDGE * ONE / 100;
+    let mut vines = Vec::new();
+    for (k, z) in (0..7).map(|k| (k, k * 24 - 72)) {
+        bs.push(block(
+            v3(-int(28), bridge, int(z) - ONE),
+            v3(int(28), bridge + ONE / 2, int(z) + ONE),
+            Surface::Trim,
+        ));
+        let xs: &[i32] = if k % 2 == 0 {
+            &[-18, -6, 6, 18]
+        } else {
+            &[-12, 0, 12]
+        };
+        for &x in xs {
+            vines.push(vine(x, BARRANCO_BRIDGE, z, BARRANCO_VINE));
+        }
+    }
+    for z in [-84, -60, -36, -12, 12, 36, 60, 84] {
+        bs.push(pillar(0, int(z), int(3), int(4), Surface::Block));
+    }
+    Map {
+        brushes: bs,
+        spawns: vec![
+            spawn(0, 72, 0, 0),
+            spawn(12, 24, 0, 0),
+            spawn(0, -72, 0, 0),
+            spawn(-12, -24, 0, 0),
+        ],
+        name: "map_barranco",
+        pickups: vec![
+            (V3::ZERO, Weapon::Ak),
+            (v3(0, bridge + ONE / 2, -int(48)), Weapon::Toro),
+            (v3(0, bridge + ONE / 2, int(48)), Weapon::Garrocha),
+            (v3(int(10), 0, int(12)), Weapon::Shotgun),
+            (v3(-int(10), 0, -int(12)), Weapon::Drum),
+            (v3(int(10), 0, -int(60)), Weapon::Rifle),
+            (v3(-int(10), 0, int(60)), Weapon::Katana),
+            (v3(int(10), 0, int(84)), Weapon::MachinePistol),
+            (v3(-int(10), 0, -int(84)), Weapon::Collage),
+            (v3(-int(10), 0, int(36)), Weapon::Guadana),
+            (v3(int(10), 0, -int(36)), Weapon::Trabuco),
+            (v3(int(16), 0, 0), Weapon::Punal),
+            (v3(-int(16), 0, 0), Weapon::Pincel),
+            (v3(int(16), 0, -int(90)), Weapon::Campana),
+        ],
+        bot_loop: vec![(8, 30), (-8, 30), (-8, -30), (8, -30)],
+        vines,
+    }
+}
+
+/// T33: how far `p` is from vine `v`, hanging straight.
+pub fn distance_to_vine(v: &Vine, p: V3) -> Fx {
+    let foot = v.top.y - v.length;
+    let dy = (foot - p.y).max(p.y - v.top.y).max(0);
+    v3(p.x - v.top.x, dy, p.z - v.top.z).len()
 }
 
 /// How far `p` is from brush `br`: exact for a box (turned boxes are
@@ -1193,11 +1383,13 @@ mod tests {
                         continue;
                     }
                     probed += 1;
+                    // T33: a vine is something to move off too
                     let near = m
                         .brushes
                         .iter()
                         .filter(|br| br.surface != Surface::Floor)
                         .map(|br| distance_to(br, p))
+                        .chain(m.vines.iter().map(|v| distance_to_vine(v, p)))
                         .min()
                         .unwrap_or(int(999));
                     if near > int(spacing(&m)) {
@@ -1238,9 +1430,10 @@ mod tests {
     }
 
     #[test]
-    fn a_match_goes_round_the_twelve_maps_in_turn() {
+    fn a_match_goes_round_the_fourteen_maps_in_turn() {
         // T16 added the Molino and the Alcázar after the six; T31 the
-        // Dehesa, the Sierra, the Arrabal and the Tobogán
+        // Dehesa, the Sierra, the Arrabal and the Tobogán; T33 the Selva
+        // and the Barranco
         let names: Vec<&str> = all().iter().map(|m| m.name).collect();
         assert_eq!(
             names,
@@ -1256,7 +1449,9 @@ mod tests {
                 "map_dehesa",
                 "map_sierra",
                 "map_arrabal",
-                "map_tobogan"
+                "map_tobogan",
+                "map_selva",
+                "map_barranco"
             ]
         );
         for (k, n) in names.iter().enumerate() {

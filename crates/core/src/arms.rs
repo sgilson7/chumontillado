@@ -5,7 +5,7 @@
 //! `world.rs` casts, launches or swings it.
 
 use crate::input::{Input, ALT, FIRE, LAST, MELEE, RELOAD, SLOTS};
-use crate::weapons::{Alt, Weapon, COUNT, LUNGE_INTERVAL, MELEE as MELEE_WEAPONS, WEAPONS};
+use crate::weapons::{Alt, Weapon, COUNT, GUNS, LUNGE_INTERVAL, MELEE as MELEE_WEAPONS, WEAPONS};
 
 /// Ticks to raise a weapon after taking it (no shot meanwhile).
 pub const RAISE: i32 = 12;
@@ -21,7 +21,7 @@ pub struct Arms {
     /// M5: the weapons held, one bit each by `Weapon` order: every one in
     /// the practice room, the pistol and navaja at a round's start
     /// (CS-Q10: A), more as they are picked up
-    pub owned: u16,
+    pub owned: u32,
     /// the melee weapon the melee key takes first
     pub melee: Weapon,
     pub rounds: [i32; COUNT],
@@ -34,6 +34,8 @@ pub struct Arms {
     pub charge: i32,
     pub raise: i32,
     pub recoil: i32,
+    /// T33: rounds of a burst still to fire
+    pub burst_left: i32,
     old_fire: bool,
     old_alt: bool,
     old_keys: u32,
@@ -62,6 +64,7 @@ impl Default for Arms {
             charge: 0,
             raise: 0,
             recoil: 0,
+            burst_left: 0,
             old_fire: false,
             old_alt: false,
             old_keys: 0,
@@ -70,8 +73,8 @@ impl Default for Arms {
 }
 
 /// Every weapon, and what a round starts with (CS-Q10: A).
-pub const ALL_OWNED: u16 = (1 << COUNT) - 1;
-pub const ROUND_OWNED: u16 = (1 << Weapon::Pistol as u16) | (1 << Weapon::Navaja as u16);
+pub const ALL_OWNED: u32 = (1 << COUNT) - 1;
+pub const ROUND_OWNED: u32 = (1 << Weapon::Pistol as u32) | (1 << Weapon::Navaja as u32);
 
 impl Arms {
     /// A round's start: the pistol in hand and the navaja, full.
@@ -84,12 +87,12 @@ impl Arms {
     }
 
     pub fn owns(&self, g: Weapon) -> bool {
-        self.owned & (1 << g as u16) != 0
+        self.owned & (1 << g as u32) != 0
     }
 
     /// M5: a weapon picked up off the map: held from now, full, in hand.
     pub fn pick_up(&mut self, g: Weapon) {
-        self.owned |= 1 << g as u16;
+        self.owned |= 1 << g as u32;
         self.rounds[g as usize] = g.stats().magazine;
         self.take(g);
     }
@@ -104,6 +107,7 @@ impl Arms {
             self.raise = RAISE;
             self.reloading = 0;
             self.charge = 0;
+            self.burst_left = 0;
         }
         if g.swing().is_some() {
             self.melee = g;
@@ -132,7 +136,7 @@ impl Arms {
         let fresh = |bit: u32| input.keys & bit != 0 && old & bit == 0;
         for (k, bit) in SLOTS.iter().enumerate() {
             if fresh(*bit) {
-                self.take(Weapon::from_index(k));
+                self.take(GUNS[k]);
             }
         }
         if fresh(MELEE) {
@@ -209,12 +213,16 @@ impl Arms {
         if (fresh(RELOAD) && rounds < g.magazine) || (rounds == 0 && held) {
             self.reloading = g.reload;
             self.charge = 0;
+            self.burst_left = 0;
             return None;
         }
         if self.raise > 0 || self.cooldown > 0 || rounds == 0 {
             return None;
         }
-        let shoot = if g.charge > 0 {
+        // a burst under way fires its next round, held or not
+        let shoot = if self.burst_left > 0 {
+            true
+        } else if g.charge > 0 {
             // the Pincel: charge while held, fire on release
             if held {
                 self.charge = (self.charge + 1).min(g.charge);
@@ -233,7 +241,16 @@ impl Arms {
         let charged = self.charge;
         self.charge = 0;
         self.rounds[self.weapon as usize] -= 1;
-        self.cooldown = g.interval;
+        self.burst_left = if self.burst_left > 0 {
+            self.burst_left - 1
+        } else {
+            g.burst - 1
+        };
+        self.cooldown = if self.burst_left > 0 {
+            g.burst_gap
+        } else {
+            g.interval
+        };
         self.recoil = RECOIL;
         Some(Shot {
             weapon: self.weapon,
@@ -285,6 +302,43 @@ mod tests {
         // every 5 ticks: 12 in a second
         assert_eq!(shots, 12);
         assert_eq!(a.rounds[2], 30 - 12);
+    }
+
+    /// T33: a press of the AK-47 fires three rounds 4 ticks apart, held or
+    /// let go, then nothing until a beat after the third; held, it fires
+    /// no second burst.
+    #[test]
+    fn the_ak_fires_three_rounds_a_press_and_then_waits_a_beat() {
+        let mut a = Arms::default();
+        a.tick(&rec(crate::input::SLOT_11, false));
+        assert_eq!(a.weapon, Weapon::Ak);
+        for _ in 0..RAISE {
+            a.tick(&rec(0, false));
+        }
+        // one tick's press, then let go
+        let fired: Vec<usize> = (0..120).filter(|&t| a.tick(&rec(0, t == 0)).is_some()).collect();
+        assert_eq!(fired, [0, 4, 8]);
+        assert_eq!(a.rounds[Weapon::Ak as usize], 27);
+        // held for two seconds, still one burst
+        let mut b = Arms::default();
+        b.tick(&rec(crate::input::SLOT_11, false));
+        for _ in 0..RAISE {
+            b.tick(&rec(0, false));
+        }
+        let held = (0..120).filter(|_| b.tick(&rec(0, true)).is_some()).count();
+        assert_eq!(held, 3);
+        // a second press too soon after the third fires nothing; a beat
+        // after it, the next burst
+        let mut c = Arms::default();
+        c.tick(&rec(crate::input::SLOT_11, false));
+        for _ in 0..RAISE {
+            c.tick(&rec(0, false));
+        }
+        let pressed = |t: i32| t == 0 || t == 20 || t == 40;
+        let shots: Vec<i32> = (0..80)
+            .filter(|&t| c.tick(&rec(0, pressed(t))).is_some())
+            .collect();
+        assert_eq!(shots, [0, 4, 8, 40, 44, 48]);
     }
 
     #[test]

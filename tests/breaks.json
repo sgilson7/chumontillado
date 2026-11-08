@@ -205,7 +205,7 @@
   {
     "name": "R1.15 a wedge keeps its handedness",
     "file": "crates/core/src/map.rs",
-    "find": "                let (c0, c1) = (br.sub(bl), top.sub(base_mid));\n                let c2 = if c0.dot(c1.cross(c2)) < 0 { c2.neg() } else { c2 };",
+    "find": "                let (c0, c1) = (br.sub(bl), top.sub(base_mid));\n                let c2 = if handed(c0, c1, c2) < 0 { c2.neg() } else { c2 };",
     "replace": "                let (c0, c1) = (br.sub(bl), top.sub(base_mid));\n                let c2 = c2;",
     "test": "every_drawn_brush_keeps_its_handedness_so_none_draws_inside_out"
   },
@@ -520,8 +520,8 @@
   {
     "name": "M3 6 to 0 take the projectile guns",
     "file": "crates/core/src/arms.rs",
-    "find": "                self.take(Weapon::from_index(k));",
-    "replace": "                self.take(Weapon::from_index(k % 5));",
+    "find": "                self.take(GUNS[k]);",
+    "replace": "                self.take(GUNS[k % 5]);",
     "test": "six_to_zero_take_the_projectile_guns_and_e_takes_the_melee_weapons_in_turn"
   },
   {
@@ -1115,8 +1115,8 @@
   {
     "name": "M5 a round starts with the pistol and navaja",
     "file": "crates/core/src/arms.rs",
-    "find": "pub const ROUND_OWNED: u16 = (1 << Weapon::Pistol as u16) | (1 << Weapon::Navaja as u16);",
-    "replace": "pub const ROUND_OWNED: u16 = ALL_OWNED;",
+    "find": "pub const ROUND_OWNED: u32 = (1 << Weapon::Pistol as u32) | (1 << Weapon::Navaja as u32);",
+    "replace": "pub const ROUND_OWNED: u32 = ALL_OWNED;",
     "test": "a_round_starts_with_the_pistol_and_navaja_and_a_pickup_is_held_full_and_in_hand"
   },
   {
@@ -1129,7 +1129,7 @@
   {
     "name": "M5 a pickup is held from then on",
     "file": "crates/core/src/arms.rs",
-    "find": "        self.owned |= 1 << g as u16;",
+    "find": "        self.owned |= 1 << g as u32;",
     "replace": "        self.owned |= 0;",
     "test": "a_round_starts_with_the_pistol_and_navaja_and_a_pickup_is_held_full_and_in_hand"
   },
@@ -1682,7 +1682,7 @@
   {
     "name": "T20 a bot goes only for weapons it lacks",
     "file": "crates/core/src/pilot.rs",
-    "find": "                && v.owned & (1 << k.weapon as u16) == 0\n",
+    "find": "                && v.owned & (1 << k.weapon as u32) == 0\n",
     "replace": "",
     "test": "out_of_a_fight_it_goes_for_a_weapon_it_lacks"
   },
@@ -2172,7 +2172,7 @@
   {
     "name": "T31 a sheared prism keeps its handedness",
     "file": "crates/core/src/map.rs",
-    "find": "                let t = mid(top, base_mid);\n                let c2 = if c0.dot(c1.cross(c2)) < 0 { c2.neg() } else { c2 };",
+    "find": "                let t = mid(top, base_mid);\n                let c2 = if handed(c0, c1, c2) < 0 { c2.neg() } else { c2 };",
     "replace": "                let t = mid(top, base_mid);\n                let c2 = c2;",
     "test": "every_drawn_brush_keeps_its_handedness_so_none_draws_inside_out"
   },
@@ -2266,5 +2266,96 @@
     "find": "    // T32: the host plans the match's maps and weapons\n    if v.host {",
     "replace": "    // T32: the host plans the match's maps and weapons\n    if v.host || true {",
     "test": "online_the_hosts_plan_goes_with_its_start_and_the_guest_plays_it"
+  },
+  {
+    "name": "T33 the AK fires one round a pull",
+    "file": "crates/core/src/weapons.rs",
+    "find": "        burst: 3,\n",
+    "replace": "        burst: 1,\n",
+    "test": "the_ak_fires_three_rounds_a_press_and_then_waits_a_beat"
+  },
+  {
+    "name": "T33 a burst stops when the button is let go",
+    "file": "crates/core/src/arms.rs",
+    "find": "        let shoot = if self.burst_left > 0 {\n            true\n",
+    "replace": "        let shoot = if self.burst_left > 0 {\n            held\n",
+    "test": "the_ak_fires_three_rounds_a_press_and_then_waits_a_beat"
+  },
+  {
+    "name": "T33 the minus key takes no gun",
+    "file": "crates/core/src/input.rs",
+    "find": "    (\"slot_11\", SLOT_11),\n",
+    "replace": "",
+    "test": "every_action_the_controls_name_has_a_bit"
+  },
+  {
+    "name": "T33 a vine never takes hold",
+    "file": "crates/core/src/world.rs",
+    "find": "                && across <= VINE_REACH\n",
+    "replace": "                && across < 0\n",
+    "test": "a_vine_jumped_into_takes_hold_swings_you_up_past_it_and_lets_go_on_space"
+  },
+  {
+    "name": "T33 a vine is slack, never taut",
+    "file": "crates/core/src/world.rs",
+    "find": "    let held = if next.len() > c.length {\n",
+    "replace": "    let held = if next.len() > c.length * 100 {\n",
+    "test": "a_vine_jumped_into_takes_hold_swings_you_up_past_it_and_lets_go_on_space"
+  },
+  {
+    "name": "T33 Space does not let go of a vine",
+    "file": "crates/core/src/world.rs",
+    "find": "    if fresh_jump || !free {\n",
+    "replace": "    if !free {\n",
+    "test": "a_vine_jumped_into_takes_hold_swings_you_up_past_it_and_lets_go_on_space"
+  },
+  {
+    "name": "T33 a vine takes you straight back",
+    "file": "crates/core/src/world.rs",
+    "find": "            !(p.vine_rest > 0 && *k as u16 == p.last_vine)\n",
+    "replace": "            true\n",
+    "test": "a_vine_jumped_into_takes_hold_swings_you_up_past_it_and_lets_go_on_space"
+  },
+  {
+    "name": "T33 the keys do not pump a swing",
+    "file": "crates/core/src/world.rs",
+    "find": "    let v = p.body.velocity.add(push.scale(fx::mul(VINE_PUMP, dt)));\n",
+    "replace": "    let v = p.body.velocity;\n",
+    "test": "on_a_vine_w_pumps_the_swing_higher_and_held_space_does_not_let_go"
+  },
+  {
+    "name": "T33 held Space lets go",
+    "file": "crates/core/src/world.rs",
+    "find": "    let fresh_jump = input.key(JUMP) && !p.body.old_jump;\n",
+    "replace": "    let fresh_jump = input.key(JUMP);\n",
+    "test": "on_a_vine_w_pumps_the_swing_higher_and_held_space_does_not_let_go"
+  },
+  {
+    "name": "T33 a bot takes hold of a vine",
+    "file": "crates/core/src/world.rs",
+    "find": "    if p.vine.is_none() && free && p.pilot.is_none() {\n",
+    "replace": "    if p.vine.is_none() && free {\n",
+    "test": "a_bot_does_not_take_hold_of_a_vine"
+  },
+  {
+    "name": "T33 a big prism's handedness overflows",
+    "file": "crates/core/src/map.rs",
+    "find": "    det.signum() as i32\n",
+    "replace": "    let _ = det;\n    c0.dot(c1.cross(c2)).signum()\n",
+    "test": "every_drawn_brush_keeps_its_handedness_so_none_draws_inside_out"
+  },
+  {
+    "name": "T33 a bot goes for a weapon on a bridge",
+    "file": "crates/core/src/pilot.rs",
+    "find": "                && (k.at.y - v.feet.y).abs() <= PICKUP_RISE\n",
+    "replace": "",
+    "test": "it_leaves_a_weapon_lying_higher_than_a_jump"
+  },
+  {
+    "name": "T33 vines are not something to move off",
+    "file": "crates/core/src/maps.rs",
+    "find": "                        .chain(m.vines.iter().map(|v| distance_to_vine(v, p)))\n",
+    "replace": "",
+    "test": "every_place_on_every_map_has_something_to_move_off_within_six_metres"
   }
 ]

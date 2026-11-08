@@ -45,8 +45,10 @@ pub const SLOT_8: u32 = 1 << 16;
 pub const SLOT_9: u32 = 1 << 17;
 pub const SLOT_10: u32 = 1 << 18;
 pub const MELEE: u32 = 1 << 19;
-pub const SLOTS: [u32; 10] = [
-    SLOT_1, SLOT_2, SLOT_3, SLOT_4, SLOT_5, SLOT_6, SLOT_7, SLOT_8, SLOT_9, SLOT_10,
+/// T33: the minus key, for the AK-47
+pub const SLOT_11: u32 = 1 << 20;
+pub const SLOTS: [u32; 11] = [
+    SLOT_1, SLOT_2, SLOT_3, SLOT_4, SLOT_5, SLOT_6, SLOT_7, SLOT_8, SLOT_9, SLOT_10, SLOT_11,
 ];
 
 /// Buttons sit above the keys in the page's bit set.
@@ -82,6 +84,7 @@ pub const ACTIONS: &[(&str, u32)] = &[
     ("slot_8", SLOT_8),
     ("slot_9", SLOT_9),
     ("slot_10", SLOT_10),
+    ("slot_11", SLOT_11),
     ("melee", MELEE),
     ("fire", FIRE << BUTTON_SHIFT),
     ("alt", ALT << BUTTON_SHIFT),
@@ -174,6 +177,20 @@ impl Pending {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// T33: every action a key holds in `data/controls.json` has a bit, so
+    /// the page sends it (the minus key's `slot_11` among them).
+    #[test]
+    fn every_action_the_controls_name_has_a_bit() {
+        let keys: std::collections::BTreeMap<String, String> =
+            serde_json::from_str(include_str!("../../../data/controls.json")).unwrap();
+        for (key, action) in keys.iter().filter(|(k, _)| !k.starts_with('_')) {
+            assert!(
+                ACTIONS.iter().any(|(name, _)| name == action),
+                "{key} holds {action}, which has no bit"
+            );
+        }
+    }
 
     #[test]
     fn the_page_bits_split_into_keys_and_buttons() {

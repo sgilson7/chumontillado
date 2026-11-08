@@ -98,7 +98,7 @@ mod tests {
         assert_eq!(order, [11, 3, 3, 11, 3]);
         let every = Plan::default();
         assert_eq!(every.len(), crate::maps::COUNT);
-        assert_eq!(every.map(13), 1);
+        assert_eq!(every.map(crate::maps::COUNT + 1), 1);
     }
 
     #[test]

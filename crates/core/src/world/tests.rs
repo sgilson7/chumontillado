@@ -1967,3 +1967,113 @@ fn down_the_toboga_n_and_over_its_jump_you_land_in_the_arena_and_off_its_side_yo
     run(&mut w, Input::default(), 60 * 8);
     assert!(!w.players[0].alive(), "off the side, felled by the fall");
 }
+
+/// T33: the Selva alone, the round under way, and the first vine.
+fn at_a_vine() -> (World, crate::map::Vine) {
+    let selva = (0..crate::maps::COUNT)
+        .find(|&k| crate::maps::map(k).name == "map_selva")
+        .unwrap();
+    let mut w = World::online(0b1, 0b1110, [0, 1, 2, 3]);
+    w.start_round(selva);
+    run(&mut w, Input::default(), crate::rounds::COUNT_TICKS as usize + 1);
+    let v = w.map.vines[0];
+    // in the air 3 m short of it along x, going its way at a run
+    let p = &mut w.players[0];
+    p.body.origin = v3(v.top.x - int(3), int(3), v.top.z);
+    p.body.velocity = v3(int(9), int(2), 0);
+    p.body.on_ground = false;
+    p.aim.yaw = yaw_of(v3(ONE, 0, 0));
+    (w, v)
+}
+
+/// Sam, T33: "vines on them you can swing along". Jumped into, a vine
+/// takes hold; on it the hands stay its length from its top while the body
+/// swings past it and up; Space lets go with the swing's speed and a little
+/// lift, and that vine does not take you straight back.
+#[test]
+fn a_vine_jumped_into_takes_hold_swings_you_up_past_it_and_lets_go_on_space() {
+    let (mut w, v) = at_a_vine();
+    for _ in 0..30 {
+        w.step(&[Input::default()]);
+        if w.players[0].vine.is_some() {
+            break;
+        }
+    }
+    let c = w.players[0].vine.expect("the vine takes hold");
+    assert!(c.length <= v.length);
+    let mut high = 0;
+    let mut swing_x = Vec::new();
+    for t in 0..40 {
+        w.step(&[Input::default()]);
+        let p = &w.players[0];
+        assert!(p.vine.is_some(), "still holding at {t}");
+        let hands = p.body.origin.add(v3(0, VINE_GRIP, 0));
+        let off = hands.sub(v.top).len() - c.length;
+        assert!(
+            off.abs() < ONE / 20,
+            "{} cm off the vine's length at {t}",
+            off * 100 / ONE
+        );
+        high = high.max(p.body.origin.y);
+        swing_x.push(p.body.origin.x);
+    }
+    let last = *swing_x.last().unwrap();
+    assert!(
+        last > v.top.x + int(2),
+        "swung past it: {}",
+        fx::decimal(last - v.top.x, 1)
+    );
+    assert!(high > int(3), "and up: {}", fx::decimal(high, 1));
+    let before = w.players[0].body.velocity;
+    w.step(&[keys(JUMP)]);
+    let p = &w.players[0];
+    assert!(p.vine.is_none(), "Space lets go");
+    let after = p.body.velocity;
+    assert!(near(after.x, before.x, ONE / 2), "{after:?} kept {before:?}");
+    assert!(
+        after.y > before.y + int(2),
+        "with a lift: {after:?} from {before:?}"
+    );
+    // straight back through it, the same vine does not take hold again
+    w.players[0].body.origin = v3(v.top.x, int(3), v.top.z);
+    w.players[0].body.velocity = v3(0, int(1), 0);
+    w.step(&[keys(JUMP)]);
+    assert!(w.players[0].vine.is_none(), "not again so soon");
+}
+
+/// T33: on a vine W pushes the swing along the view, so held toward the
+/// swing it carries higher than left alone; held jump, as when hopping in,
+/// does not let go until it is pressed afresh.
+#[test]
+fn on_a_vine_w_pumps_the_swing_higher_and_held_space_does_not_let_go() {
+    let highest = |input: Input| {
+        let (mut w, _) = at_a_vine();
+        let mut high = 0;
+        for _ in 0..70 {
+            w.step(&[input]);
+            high = high.max(w.players[0].body.origin.y);
+        }
+        assert!(w.players[0].vine.is_some(), "{input:?} still holds");
+        high
+    };
+    let alone = highest(Input::default());
+    let pumped = highest(keys(FORWARD));
+    assert!(
+        pumped > alone + ONE / 4,
+        "{} m against {} m",
+        fx::decimal(pumped, 2),
+        fx::decimal(alone, 2)
+    );
+    let held = highest(keys(JUMP));
+    assert!(held > int(3));
+}
+
+/// T33: a bot's route knows nothing of vines: it passes through one
+/// without taking hold.
+#[test]
+fn a_bot_does_not_take_hold_of_a_vine() {
+    let (mut w, _) = at_a_vine();
+    w.players[0].pilot = Some(crate::pilot::Pilot::default());
+    run(&mut w, Input::default(), 30);
+    assert!(w.players[0].vine.is_none());
+}
