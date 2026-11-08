@@ -2497,5 +2497,26 @@
   "find": "                    self.ready |= 1 << k;\n",
   "replace": "",
   "test": "the_style_setting_wears_your_skin_lifelike_and_asks_for_its_model"
+ },
+ {
+  "name": "T34 your card has no style picker",
+  "file": "crates/core/src/api.rs",
+  "find": "                style_pick: if kind == \"you\" {",
+  "replace": "                style_pick: if kind == \"nobody\" {",
+  "test": "your_lobby_card_picks_painted_or_lifelike_and_the_others_show_theirs"
+ },
+ {
+  "name": "T34 the worn style is not pressed",
+  "file": "crates/core/src/api.rs",
+  "find": "                        enabled: !worn,\n",
+  "replace": "",
+  "test": "your_lobby_card_picks_painted_or_lifelike_and_the_others_show_theirs"
+ },
+ {
+  "name": "T34 a bot's card says lifelike",
+  "file": "crates/core/src/api.rs",
+  "find": "                \"player\" => crate::online::holds(n.lifelike, k),\n                _ => false,",
+  "replace": "                \"player\" => crate::online::holds(n.lifelike, k),\n                _ => true,",
+  "test": "your_lobby_card_picks_painted_or_lifelike_and_the_others_show_theirs"
  }
 ]

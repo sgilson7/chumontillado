@@ -74,6 +74,12 @@ pub struct Card {
     pub pick: Vec<Action>,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub picked: String,
+    /// T34: the style the seat's skin is worn in, Painted or Lifelike; and
+    /// on your own card the two to choose between, the one worn pressed
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub style: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub style_pick: Vec<Action>,
 }
 
 /// M4: a box of text: a code or link to copy (`fixed`), or a box to type
@@ -492,6 +498,12 @@ fn cards(g: &Game, v: &crate::versus::Versus) -> Vec<Card> {
                 "player" => n.skins[k],
                 _ => bots[k],
             };
+            // T34: bots wear theirs painted
+            let lifelike = match kind {
+                "you" => g.lifelike,
+                "player" => crate::online::holds(n.lifelike, k),
+                _ => false,
+            };
             let (x, feet_y) = screen(feet[k]);
             let (_, head_y) = screen(feet[k].add(v3(0, fx::ONE * 19 / 10, 0)));
             let note = match v.last {
@@ -531,6 +543,31 @@ fn cards(g: &Game, v: &crate::versus::Versus) -> Vec<Card> {
                         .replace("{of}", &crate::skins::COUNT.to_string())
                 } else {
                     String::new()
+                },
+                style: if empty {
+                    String::new()
+                } else {
+                    s.get(if lifelike {
+                        "style_lifelike"
+                    } else {
+                        "style_painted"
+                    })
+                },
+                // T34: your card also picks the style, painted or lifelike
+                style_pick: if kind == "you" {
+                    [
+                        ("-1", "style_painted", !lifelike),
+                        ("1", "style_lifelike", lifelike),
+                    ]
+                    .iter()
+                    .map(|(step, label, worn)| Action {
+                        small: true,
+                        enabled: !worn,
+                        ..action(g, "style.set", step, label, false)
+                    })
+                    .collect()
+                } else {
+                    Vec::new()
                 },
             }
         })

@@ -233,6 +233,14 @@ async function main() {
       row.append(button(back), name, button(on));
       plate.append(row);
     } else if (c.skin) plate.append(make("p", c.skin, "skin"));
+    // T34: the style the skin is worn in; on your card, Painted and
+    // Lifelike to choose between, the one worn pressed
+    const [painted, lifelike] = c.style_pick || [];
+    if (painted && lifelike) {
+      const row = make("div", undefined, "styles");
+      row.append(button(painted), button(lifelike));
+      plate.append(row);
+    } else if (c.style) plate.append(make("p", c.style, "style"));
     if (c.note) plate.append(make("p", c.note, "note"));
     if (c.action) plate.append(button(c.action));
     node.append(top, plate);

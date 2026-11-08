@@ -90,6 +90,10 @@ body[data-screen="title"] #overlay, body[data-screen="menu"] #overlay { align-it
 .card .skin { font-size: 20px; font-style: italic; font-weight: 700; line-height: 1.15; color: var(--ink); }
 .card .note { font-size: 13px; color: var(--ochre); }
 .panel .card .pair, .card .plate button.small { margin: 6px 0 0; padding: 7px 10px; font-size: 12px; letter-spacing: 0.06em; box-shadow: none; }
+/* T34: the style worn, and on your card Painted and Lifelike side by side, the one worn pressed */
+.card .style { font-size: 13px; letter-spacing: 0.06em; color: var(--ochre); }
+.card .styles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.card .styles button:disabled { opacity: 1; background: var(--ochre); color: var(--umber); }
 /* T26: your card's skin picker: Previous and Next either side of the name */
 .card .picker { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 6px 8px; }
 .card .picker .picked { grid-column: 1 / -1; grid-row: 1; min-width: 0; display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }

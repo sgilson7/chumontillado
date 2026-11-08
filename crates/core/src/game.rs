@@ -1717,6 +1717,34 @@ pub(crate) mod tests {
             .all(|c| c.pick.is_empty()));
     }
 
+    /// T34: your card in the lobby picks the style beside the skin,
+    /// Painted or Lifelike, the one worn pressed; every other card says the
+    /// style its seat wears (a bot's painted).
+    #[test]
+    fn your_lobby_card_picks_painted_or_lifelike_and_the_others_show_theirs() {
+        let mut g = game();
+        g.act("online.host", "").unwrap();
+        let mine = |g: &Game| crate::api::ui(g).panels[0].cards[0].clone();
+        let c = mine(&g);
+        assert_eq!(c.style, "Painted");
+        let pick: Vec<(&str, &str, bool)> = c
+            .style_pick
+            .iter()
+            .map(|a| (a.label.as_str(), a.value.as_str(), a.enabled))
+            .collect();
+        assert_eq!(pick, [("Painted", "-1", false), ("Lifelike", "1", true)]);
+        g.act("style.set", &c.style_pick[1].value).unwrap();
+        let c = mine(&g);
+        assert_eq!(c.style, "Lifelike");
+        assert!(c.style_pick[0].enabled && !c.style_pick[1].enabled);
+        assert!(g.lifelike);
+        // the skin picker is still there beside it
+        assert_eq!(c.pick.len(), 2);
+        // a bot's card says painted and picks nothing
+        let bot = crate::api::ui(&g).panels[0].cards[1].clone();
+        assert_eq!((bot.style.as_str(), bot.style_pick.len()), ("Painted", 0));
+    }
+
     #[test]
     fn the_hosts_lobby_has_a_switch_for_each_free_seat_and_it_flips_the_seat_to_empty() {
         let mut g = game();
