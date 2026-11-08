@@ -106,6 +106,6 @@ After T29 (one floor under the Plaza; no surfaces in one plane): `break_tests.py
 
 After T30 and T31 (the reach, the Garrocha, four maps): `break_tests.py T30 T31`: 9 of 9 and 11 of 11 caught, with five rows rotted by these changes re-pointed and caught (311 rows). Live at ac3df1e (2026-11-07): the live browser check and online check passed on their first runs.
 
-After T33 (vines, the Selva, the Barranco, the AK-47): `break_tests.py T33`: 13 of 13 caught, with the seven rows it re-pointed (u32 held weapons, `handed`, `GUNS`).
+After T33 (vines, the Selva, the Barranco, the AK-47): `break_tests.py T33`: 13 of 13 caught, with the seven rows it re-pointed (u32 held weapons, `handed`, `GUNS`). Live at 4ce094a (2026-11-08): the live browser check and the live online check passed on their first runs (338 rows).
 
 After T32 (playlists, the match plan, the kept string): `break_tests.py T32`: 13 of 13 caught; live at be8d421 (2026-11-07): the live browser check passed; the live online check failed twice just after the deploy, once on "A message from another browser made no sense" (R21.7, open), then passed in Chromium and Firefox (324 rows).
