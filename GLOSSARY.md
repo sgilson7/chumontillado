@@ -116,6 +116,12 @@ A painted gun of scraps stuck together. Its shots bounce once off a wall, so the
 
 Not: ricochet gun
 
+### Cubo
+
+A great hollow cube whose every face is a floor. Run at a wall and you turn onto it and run on up it at the same speed; run off an outer edge and you roll round onto the next face. A hole in the middle of its floor goes through to the outside, and one vine hangs from its middle toward whichever face you stand on.
+
+Not: box map, gravity room
+
 ### Cut
 
 A melee swing's path, picked by how your view turns as you swing: across a level cut, down a chop, up a rising cut. Between them it cuts on the diagonal; turning too little, the katana and guadaña cut level each way in turn and a knife thrusts.

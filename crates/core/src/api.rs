@@ -888,7 +888,7 @@ pub fn hud(g: &Game) -> Vec<Hud> {
             ..line("hurt", String::new(), playing && hurt.edge() > 0)
         },
         {
-            let bearing = hurt.bearing(p.eye(g.alpha), p.aim.yaw);
+            let bearing = p.bearing(g.alpha);
             Hud {
                 fill: Some(hurt.arc()),
                 turn: bearing,

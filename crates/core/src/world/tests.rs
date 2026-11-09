@@ -794,6 +794,7 @@ fn every_skin_and_the_straw_target_stay_inside_the_hit_envelope() {
                     sliding: false,
                     hanging: false,
                     lifelike: false,
+                    frame: crate::gravity::Turn::IDENTITY,
                 };
                 draw(&mut shapes, &f, &look);
                 let widest = check(&shapes, &format!("{skin:?} pitch {pitch} at {moment}"));
@@ -1213,6 +1214,7 @@ fn rocket_at_the_player(w: &mut World) {
         bounces: 0,
         band: 0,
         scored: false,
+        up: V3::UP,
     });
 }
 
@@ -1591,6 +1593,7 @@ fn every_thrown_weapon_flies_drawn_in_ink() {
             bounces: 0,
             band: 0,
             scored: false,
+            up: V3::UP,
         };
         let mut shapes = crate::render::Shapes::default();
         draw_projectile(&mut shapes, &q, ONE, &look.palette, look.ink());
@@ -2312,6 +2315,15 @@ fn run_into_a_cubo_wall_and_you_run_on_up_it_at_the_same_speed() {
     }
     let p = &w.players[0];
     assert!(landed, "it stands on the wall");
+    // the view, its turn done, looks where the body looks, level to the wall
+    let cam = w.camera(0, 0, Mouse::default(), ONE, false);
+    assert!(
+        cam.fwd.sub(p.look()).len() < ONE / 50,
+        "{:?} against {:?}",
+        cam.fwd,
+        p.look()
+    );
+    assert_eq!(cam.level, p.up());
     assert!(
         slowest >= before * 9 / 10,
         "{} m/s on the wall from {} on the floor",
@@ -2393,4 +2405,78 @@ fn out_in_the_open_beside_the_cubo_you_fall_back_onto_it() {
         "{:?}",
         p.body.origin
     );
+}
+
+/// T37: dropped straight down the hole, a body falls onto the nearest side
+/// of the way through, not back up it, and goes on round onto the
+/// underside, outside.
+#[test]
+fn drop_down_the_cubos_hole_and_you_come_out_on_its_underside() {
+    let mut w = in_the_cubo(v3(-int(6), 0, ONE / 2), v3(ONE, 0, 0));
+    let p = &mut w.players[0];
+    p.body.origin = v3(ONE / 2, int(2), ONE / 4);
+    p.body.velocity = v3(0, -int(6), 0);
+    p.body.on_ground = false;
+    let mut out = false;
+    for _ in 0..240 {
+        w.step(&[Input::default()]);
+        let p = &w.players[0];
+        out |= p.body.origin.y < -int(crate::maps::CUBO_WALL);
+        if p.up() == v3(0, -ONE, 0) && p.body.on_ground {
+            break;
+        }
+    }
+    let p = &w.players[0];
+    assert!(out, "it came out of the hole");
+    assert_eq!(
+        p.up(),
+        v3(0, -ONE, 0),
+        "on the underside: {:?} at {:?}",
+        p.up(),
+        p.body.origin
+    );
+    // the underside, not the ceiling inside, which faces down too
+    assert!(p.body.on_ground && near(p.body.origin.y, -int(crate::maps::CUBO_WALL), ONE / 10));
+}
+
+/// T37: a turn never leaves a body inside a brush: run into the hole close
+/// to a side of it, where rolling over the rim would put the body's box
+/// into the next side, and at every tick the box is clear in its frame.
+#[test]
+fn a_turn_on_the_cubo_never_leaves_a_body_inside_a_brush() {
+    for z in [0, ONE, ONE * 3 / 2, ONE * 17 / 10] {
+        let mut w = in_the_cubo(v3(-int(6), 0, z), v3(ONE, 0, 0));
+        for t in 0..240 {
+            w.step(&[keys(FORWARD)]);
+            let p = &w.players[0];
+            let map = &w.turned[p.frame.index() as usize];
+            let mut m = crate::movement::Mover::new(map);
+            assert!(
+                crate::gravity::clear(&mut m, &p.body, p.frame.back(p.body.origin)),
+                "at z {} tick {t}: in a brush at {:?}, up {:?}",
+                fx::decimal(z, 1),
+                p.body.origin,
+                p.up()
+            );
+        }
+    }
+}
+
+/// T37: on every other map nobody's gravity turns: run at a wall and you
+/// stop at it, the world's up still yours.
+#[test]
+fn on_every_other_map_gravity_never_turns() {
+    for m in 0..crate::maps::COUNT {
+        let mut w = World::online(0b1, 0b1110, [0, 1, 2, 3], 0);
+        w.start_round(m);
+        if w.map.cube.is_some() {
+            continue;
+        }
+        assert!(w.turned.is_empty(), "{}", w.map.name);
+        for k in 0..4 {
+            w.players[0].aim.yaw = fx::QUARTER_TURN * k;
+            run(&mut w, keys(FORWARD | JUMP), 240);
+            assert_eq!(w.players[0].frame, Turn::IDENTITY, "{}", w.map.name);
+        }
+    }
 }

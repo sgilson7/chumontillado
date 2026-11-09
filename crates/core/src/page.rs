@@ -148,6 +148,7 @@ pub const REQUIRED: &[&str] = &[
     "map_tobogan",
     "map_selva",
     "map_barranco",
+    "map_cubo",
     "playlists",
     "setting_playlist",
     "setting_order",

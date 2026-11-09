@@ -405,6 +405,8 @@ pub struct Figure<'a> {
     /// T34: sliding, and hanging from a vine (the lifelike legs' poses)
     pub sliding: bool,
     pub hanging: bool,
+    /// T37: its gravity's frame: it stands along the frame's up
+    pub frame: crate::gravity::Turn,
 }
 
 /// A point in the figure's frame (cm) in the world.
@@ -412,7 +414,10 @@ fn place(f: &Figure, at: [i32; 3]) -> V3 {
     let cm = |c: i32| c * ONE / 100;
     let k = if f.ducked { ONE * 62 / 100 } else { ONE };
     let local = v3(cm(at[0]), fx::mul(cm(at[1]), k), cm(at[2]));
-    Affine::translate(f.feet).then(&Affine::rot_y(f.yaw)).apply(local)
+    Affine::translate(f.feet)
+        .then(&f.frame.affine())
+        .then(&Affine::rot_y(f.yaw))
+        .apply(local)
 }
 
 pub fn draw(out: &mut Shapes, f: &Figure, look: &Look) {
@@ -433,6 +438,7 @@ pub fn draw(out: &mut Shapes, f: &Figure, look: &Look) {
     };
     let k = if f.ducked { ONE * 62 / 100 } else { ONE };
     let body = Affine::translate(f.feet)
+        .then(&f.frame.affine())
         .then(&Affine::rot_y(f.yaw))
         .then(&Affine::scale(v3(ONE, k, ONE)));
     // the stride: legs swing opposite ways with the pace, tuck in the air.
@@ -469,17 +475,13 @@ pub fn draw(out: &mut Shapes, f: &Figure, look: &Look) {
     // the arms, from each shoulder to its hand on the weapon, which lies
     // along the aim
     let aim = facing(f.yaw, f.pitch);
-    let hold = Affine::translate(place(f, SHOULDER)).then(&Affine::looking(aim));
+    let turn = f.frame.affine().then(&Affine::looking(aim));
+    let hold = Affine::translate(place(f, SHOULDER)).then(&turn);
     let grip = hold.apply(v3(cm(GRIP[0]), cm(GRIP[1]), cm(GRIP[2])));
     let fore = hold.apply(v3(cm(FORE[0]), cm(FORE[1]), cm(FORE[2])));
     let held = f.arms.map(|(arms, swinging)| {
         let pose = hands::pose(arms, swinging, f.speed, f.on_ground, f.moment);
-        (
-            arms,
-            swinging,
-            pose,
-            Affine::translate(grip).then(&Affine::looking(aim)),
-        )
+        (arms, swinging, pose, Affine::translate(grip).then(&turn))
     });
     // T23: through a cut both hands go with the weapon, on its grip
     let (grip_at, fore_at) = match &held {

@@ -88,6 +88,7 @@ fn four_seats_with_the_air_full_of_grenades_tick_in_well_under_a_millisecond() {
                 bounces: 10_000,
                 band: 0,
                 scored: false,
+                up: tool_core::geom::V3::UP,
             });
         }
     };

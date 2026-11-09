@@ -625,8 +625,8 @@
  {
   "name": "M3 the navaja from behind",
   "file": "crates/core/src/world.rs",
-  "find": "                    } else if sw.behind > 0 && weapons::from_behind(t.feet, facing_yaw, eye) {",
-  "replace": "                    } else if sw.behind > 0 && weapons::from_behind(t.feet, facing_yaw, eye) && false {",
+  "find": "                    } else if sw.behind > 0 && weapons::from_behind(t.feet, facing_yaw, t.local(eye)) {",
+  "replace": "                    } else if sw.behind > 0 && weapons::from_behind(t.feet, facing_yaw, t.local(eye)) && false {",
   "test": "a_navaja_from_behind_fells_a_straw_target_and_from_the_front_takes_thirty_five"
  },
  {
@@ -688,8 +688,8 @@
  {
   "name": "M3 the lunge lifts you",
   "file": "crates/core/src/world.rs",
-  "find": "            p.body.velocity = v3(along.x, along.y.max(weapons::LUNGE_LIFT), along.z);",
-  "replace": "            p.body.velocity = v3(along.x, along.y, along.z);",
+  "find": "            p.set_local_velocity(v3(along.x, along.y.max(weapons::LUNGE_LIFT), along.z));",
+  "replace": "            p.set_local_velocity(v3(along.x, along.y, along.z));",
   "test": "a_katana_lunge_flings_you_about_seven_metres_before_you_land"
  },
  {
@@ -723,8 +723,8 @@
  {
   "name": "M3 the hook lifts you as it catches",
   "file": "crates/core/src/world.rs",
-  "find": "                    p.body.velocity.y = p.body.velocity.y.max(weapons::HOOK_LIFT);",
-  "replace": "                    p.body.velocity.y = p.body.velocity.y.max(0);",
+  "find": "                    v.y = v.y.max(weapons::HOOK_LIFT);",
+  "replace": "                    v.y = v.y.max(0);",
   "test": "the_guadana_hook_pulls_you_to_a_wall_in_reach_while_held_and_lets_go_when_released"
  },
  {
@@ -1941,8 +1941,8 @@
  {
   "name": "T27 a fall below the map fells",
   "file": "crates/core/src/world.rs",
-  "find": "            if !p.out && p.alive() && p.body.origin.y < floor {",
-  "replace": "            if !p.out && p.alive() && p.body.origin.y < floor - int(5) {",
+  "find": "            None => at.y < floor,",
+  "replace": "            None => at.y < floor - int(5),",
   "test": "a_player_fallen_twenty_metres_below_the_map_is_felled_and_one_above_is_not"
  },
  {
@@ -1969,7 +1969,7 @@
  {
   "name": "T28 a map without walls has no inside to be kept in",
   "file": "crates/core/src/map.rs",
-  "find": "        if !self.brushes.iter().any(|b| b.surface == Surface::Wall) {\n            return None;\n        }\n",
+  "find": "        if self.cube.is_some() || !self.brushes.iter().any(|b| b.surface == Surface::Wall) {\n            return None;\n        }\n",
   "replace": "",
   "test": "over_the_top_of_the_plazas_stands_is_a_fall_off_the_map"
  },
@@ -2539,5 +2539,75 @@
   "find": "                \"player\" => crate::online::holds(n.lifelike, k),\n                _ => false,",
   "replace": "                \"player\" => crate::online::holds(n.lifelike, k),\n                _ => true,",
   "test": "your_lobby_card_picks_painted_or_lifelike_and_the_others_show_theirs"
+ },
+ {
+  "name": "T37 a wall does not turn your gravity",
+  "file": "crates/core/src/gravity.rs",
+  "find": "        if t.hit() && square && n.y != ONE {\n",
+  "replace": "        if false && t.hit() && square && n.y != ONE {\n",
+  "test": "run_into_a_cubo_wall_and_you_run_on_up_it_at_the_same_speed"
+ },
+ {
+  "name": "T37 a corner does not carry your view",
+  "file": "crates/core/src/gravity.rs",
+  "find": "                carry: n.y == 0,\n",
+  "replace": "                carry: false,\n",
+  "test": "run_into_a_cubo_wall_and_you_run_on_up_it_at_the_same_speed"
+ },
+ {
+  "name": "T37 a corner does not carry your speed",
+  "file": "crates/core/src/world.rs",
+  "find": "        p.body.velocity = next.apply(b.velocity);\n",
+  "replace": "        p.body.velocity = t.apply(b.velocity);\n",
+  "test": "run_into_a_cubo_wall_and_you_run_on_up_it_at_the_same_speed"
+ },
+ {
+  "name": "T37 an outer edge is not rolled round",
+  "file": "crates/core/src/gravity.rs",
+  "find": "    if was_on_ground && !b.on_ground && b.velocity.y <= 0 {\n",
+  "replace": "    if false {\n",
+  "test": "run_off_the_cubos_outer_edge_and_you_roll_round_it_onto_the_side"
+ },
+ {
+  "name": "T37 the hole is a fall, not a way round",
+  "file": "crates/core/src/gravity.rs",
+  "find": "        if let Some(n) = cube.in_hole(world).map(|n| frame.back(n)) {\n",
+  "replace": "        if let Some(n) = None::<V3> {\n",
+  "test": "drop_down_the_cubos_hole_and_you_come_out_on_its_underside"
+ },
+ {
+  "name": "T37 the open air does not pull you back",
+  "file": "crates/core/src/gravity.rs",
+  "find": "    if !b.on_ground && cube.outside(world) {\n",
+  "replace": "    if false {\n",
+  "test": "out_in_the_open_beside_the_cubo_you_fall_back_onto_it"
+ },
+ {
+  "name": "T37 a body on a wall is hit as if upright",
+  "file": "crates/core/src/weapons.rs",
+  "find": "    let (o, d, t) = (t.local(o), t.frame.back(d), &t.standing());\n",
+  "replace": "",
+  "test": "a_body_standing_on_a_wall_is_hit_along_its_own_up"
+ },
+ {
+  "name": "T37 the view stays the world's on a wall",
+  "file": "crates/core/src/world.rs",
+  "find": "        cam.fwd = p.frame.apply(cam.fwd);\n",
+  "replace": "",
+  "test": "run_into_a_cubo_wall_and_you_run_on_up_it_at_the_same_speed"
+ },
+ {
+  "name": "T37 a bot hunts through the wall",
+  "file": "crates/core/src/world.rs",
+  "find": "                    c.hole_middle()\n",
+  "replace": "                    h\n",
+  "test": "on_every_map_a_round_with_bots_is_decided_inside_a_minute"
+ },
+ {
+  "name": "T37 the Cubo is not in the turn",
+  "file": "crates/core/src/maps.rs",
+  "find": "        _ => cubo(),\n",
+  "replace": "        _ => barranco(),\n",
+  "test": "a_match_goes_round_the_fifteen_maps_in_turn"
  }
 ]

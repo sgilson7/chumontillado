@@ -1320,9 +1320,9 @@ pub const CUBO_VINE: i32 = 15;
 /// start to approach it, your gravity shifts to walk on that wall ... and in
 /// the center of the cube there is one vine"; "there should be a hole that
 /// lets you go on the outside of the cube as well". A box 36 m inside
-/// (CS-Q29: 36 m), its walls 1 m thick, standing on the ground at y = −1
+/// (CS-Q29: B), its walls 1 m thick, standing on the ground at y = −1
 /// so its inner floor is at 0. In the middle of the floor a hole 4 m square
-/// goes through to the outside (CS-Q30), lined with trim; every other face
+/// goes through to the outside (CS-Q30: A), lined with trim; every other face
 /// has a plinth 4 m square and 1.5 m deep in its middle to move off. One
 /// vine hangs from the middle of the cube, 15 m toward whichever face a
 /// body stands on, so its end is 3 m off that face: a jump's reach.
@@ -1391,6 +1391,8 @@ pub fn cubo() -> Map {
         cube: Some(crate::gravity::Cube {
             centre: v3(0, int(h), 0),
             half: int(h),
+            wall: int(w),
+            hole: int(o) - CUBO_LINING,
         }),
     }
 }

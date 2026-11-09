@@ -409,9 +409,10 @@ pub fn draw_weapon(out: &mut Shapes, hold: &Affine, g: Weapon, pose: &Pose, pal:
 pub fn draw_hands(out: &mut Shapes, eye: V3, yaw: i32, pitch: i32, p: &Player, moment: Fx, pal: &Palette) {
     let cm = |c: i32| c * ONE / 100;
     let hold = Affine::translate(eye)
+        .then(&p.frame.affine())
         .then(&Affine::looking(facing(yaw, pitch)))
         .then(&Affine::translate(v3(cm(18), -cm(16), -cm(42))));
-    let pose = pose(&p.arms, p.swing, p.body.speed(), p.body.on_ground, moment);
+    let pose = pose(&p.arms, p.swing, p.speed(), p.body.on_ground, moment);
     draw_weapon(out, &hold, p.arms.weapon, &pose, pal);
     draw_trail(out, &hold, &p.arms, p.swing, pal);
 }

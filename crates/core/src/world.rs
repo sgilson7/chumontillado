@@ -43,6 +43,8 @@ use crate::weapons::{self, Alt, Blast, Kind, Target, Weapon};
 pub const HEALTH: i32 = 100;
 /// Ticks a dead player waits before standing again at their spawn.
 pub const RESPAWN: i32 = 120;
+/// T37: how far from the Cubo's middle a body may be flung and live (m).
+pub const CUBO_FAR: Fx = int(120);
 /// T27: how far below a map's lowest point a fall fells you (20 m).
 pub const FALL_OUT: Fx = int(20);
 /// Ticks a felled straw target lies down.
@@ -151,7 +153,7 @@ impl Player {
 
     /// The band a shot fired now falls in.
     pub fn band(&self) -> usize {
-        let v = self.body.speed();
+        let v = self.speed();
         if self.since_trick < BAND_TRICK_TICKS {
             3
         } else if v >= TUNING.run {
@@ -218,6 +220,8 @@ pub struct Projectile {
     /// another body yet
     pub band: u8,
     pub scored: bool,
+    /// T37: the way it falls from: its thrower's up when thrown
+    pub up: V3,
 }
 
 /// An X on the head a shot struck: where, whose shot, ticks left.
@@ -310,6 +314,37 @@ impl Player {
     /// T37: where it looks, in the world.
     pub fn look(&self) -> V3 {
         gravity::look(&self.frame, self.aim.yaw, self.aim.pitch)
+    }
+
+    /// T37: its velocity in its own frame, and set from one.
+    pub fn local_velocity(&self) -> V3 {
+        self.frame.back(self.body.velocity)
+    }
+
+    pub fn set_local_velocity(&mut self, v: V3) {
+        self.body.velocity = self.frame.apply(v);
+    }
+
+    /// T37: the sounds `heard` as this player's own frame hears them, so a
+    /// sound to its right pans right whichever face it stands on.
+    pub fn hears(&self, heard: &[Heard]) -> Vec<Heard> {
+        heard
+            .iter()
+            .map(|h| Heard {
+                at: self.frame.back(h.at),
+                ..*h
+            })
+            .collect()
+    }
+
+    /// T37: where a hit came from, as this player's own frame sees it,
+    /// clockwise from straight ahead (`Hurt::bearing`).
+    pub fn bearing(&self, alpha: Fx) -> Option<i32> {
+        let local = crate::hurt::Hurt {
+            from: self.hurt.from.map(|f| self.frame.back(f)),
+            ..self.hurt
+        };
+        local.bearing(self.frame.back(self.eye(alpha)), self.aim.yaw)
     }
 
     /// T37: its speed across its own floor (m/s).
@@ -675,7 +710,7 @@ impl World {
     /// of bots would never end (R10.5).
     fn view(&self, id: usize, scratch: &mut Scratch) -> pilot::View<'_> {
         let me = &self.players[id];
-        let eye = me.body.origin.add(v3(0, me.body.eye(), 0));
+        let eye = me.eye_now();
         let in_match = self.rounds.is_some();
         let seen = self
             .players
@@ -684,7 +719,7 @@ impl World {
             .filter(|(k, p)| *k != id && p.alive() && (in_match || p.pilot.is_none()))
             .map(|(_, p)| {
                 (
-                    p.body.origin.add(v3(0, p.body.eye() - ONE / 4, 0)),
+                    p.body.origin.add(p.up().scale(p.body.eye() - ONE / 4)),
                     p.body.velocity,
                 )
             })
@@ -716,11 +751,23 @@ impl World {
             .filter(|(k, p)| in_match && *k != id && p.alive())
             .map(|(_, p)| p.body.origin)
             .min_by_key(|f| f.sub(me.body.origin).len());
-        pilot::View {
+        // T37: on the Cubo, what it hunts on the other side of the wall,
+        // inside or out, it goes after through the hole
+        let hunt = match self.map.cube {
+            Some(c) => hunt.map(|h| {
+                if c.inside(h) == c.inside(me.body.origin) {
+                    h
+                } else {
+                    c.hole_middle()
+                }
+            }),
+            None => hunt,
+        };
+        let view = pilot::View {
             route: &self.map.bot_loop,
             nav: self.nav.as_deref().filter(|_| in_match),
             hunt,
-            speed: me.body.velocity.len_xz(),
+            speed: me.speed(),
             frozen: self.rounds.is_some_and(|r| r.frozen()),
             reach: me.arms.weapon.swing().map(|s| s.reach),
             tick: self.tick,
@@ -738,6 +785,27 @@ impl World {
             weapon: me.arms.weapon,
             owned: me.arms.owned,
             pickups: &self.pickups,
+        };
+        // T37: on another face of the Cubo, a bot sees the world in its own
+        // frame and runs straight at what it hunts: no routes, and no
+        // weapons to fetch, which lie on the floor
+        let t = me.frame;
+        if t == Turn::IDENTITY {
+            return view;
+        }
+        let l = |p: V3| t.back(p);
+        pilot::View {
+            route: &[],
+            nav: None,
+            hunt: view.hunt.map(l),
+            feet: l(view.feet),
+            eye: l(view.eye),
+            chest: view.chest.map(l),
+            chest_velocity: l(view.chest_velocity),
+            hit_from: view.hit_from.map(l),
+            cover: view.cover.map(l),
+            pickups: &[],
+            ..view
         }
     }
 
@@ -785,10 +853,17 @@ impl World {
 
         // T27: whoever has fallen out of the map, `FALL_OUT` below its
         // lowest point, is felled by the fall, as by their own shot
+        // T37: on the Cubo, whose pull brings a body back, only flung
+        // `CUBO_FAR` from its middle
         let floor = self.map.lowest() - FALL_OUT;
+        let cube = self.map.cube;
+        let fallen = |at: V3| match cube {
+            Some(c) => at.sub(c.centre).len() > CUBO_FAR,
+            None => at.y < floor,
+        };
         for k in 0..self.players.len() {
             let p = &self.players[k];
-            if !p.out && p.alive() && p.body.origin.y < floor {
+            if !p.out && p.alive() && fallen(p.body.origin) {
                 let all = p.health;
                 self.hurt(k, k, all);
             }
@@ -811,6 +886,7 @@ impl World {
                 p.kill_mark = (p.kill_mark - 1).max(0);
                 p.flash = (p.flash - 1).max(0);
                 p.hurt.step(p.health);
+                p.turning = p.turning.filter(|t| t.2 > 1).map(|(u, f, t)| (u, f, t - 1));
                 if p.out {
                     continue;
                 }
@@ -865,13 +941,13 @@ impl World {
                         keep_inside(&mut p.body, inside);
                     }
                 }
-                p.top_speed = p.top_speed.max(p.body.speed());
+                p.top_speed = p.top_speed.max(p.speed());
                 p.since_trick = p.since_trick.saturating_add(1);
                 if p.events.wall_jumped || p.events.slid || p.events.slide_jumped {
                     p.since_trick = 0;
                 }
                 p.shooting.ticks += 1;
-                if p.body.speed() >= TUNING.run {
+                if p.speed() >= TUNING.run {
                     p.shooting.fast_ticks += 1;
                 }
                 if let Some(s) = p.arms.tick(input) {
@@ -1109,11 +1185,12 @@ impl World {
         let g = s.weapon.stats();
         let Kind::Projectile(f) = g.kind else { return };
         let p = &self.players[id];
-        let (yaw, pitch) = (p.aim.yaw, p.aim.pitch);
-        let from = muzzle(p.eye_now(), yaw, pitch);
+        let (yaw, pitch, frame) = (p.aim.yaw, p.aim.pitch, p.frame);
+        let from = muzzle(&frame, p.eye_now(), yaw, pitch);
         let p_band = p.band();
         let salt = (self.tick as u32).wrapping_mul(31).wrapping_add(id as u32);
         for d in weapons::pellets(g, yaw, pitch, salt) {
+            let d = frame.apply(d);
             if self.flying.len() >= FLYING_MOST {
                 self.flying.remove(0);
             }
@@ -1122,11 +1199,12 @@ impl World {
                 owner: id,
                 at: from,
                 prev: from,
-                velocity: d.scale(f.speed).add(v3(0, f.lift, 0)),
+                velocity: d.scale(f.speed).add(frame.up().scale(f.lift)),
                 age: 0,
                 bounces: f.bounces,
                 band: p_band as u8,
                 scored: false,
+                up: frame.up(),
             });
         }
     }
@@ -1142,7 +1220,7 @@ impl World {
             let f = q.weapon.flight().expect("only projectiles fly");
             q.prev = q.at;
             q.age += 1;
-            q.velocity.y -= fx::mul(f.gravity, dt);
+            q.velocity = q.velocity.sub(q.up.scale(fx::mul(f.gravity, dt)));
             let step = q.velocity.scale(dt);
             let len = step.len();
             let mut gone = false;
@@ -1265,15 +1343,15 @@ impl World {
                 // pushed from the burst toward the body's middle, so a burst
                 // at the feet throws it up
                 let p = &mut self.players[k];
-                let middle = p.body.origin.add(v3(0, ONE * 9 / 10, 0));
+                let middle = p.body.origin.add(p.up().scale(ONE * 9 / 10));
                 let away = middle.sub(at);
                 let dir = if away.len() > ONE / 100 {
                     away.norm()
                 } else {
-                    V3::UP
+                    p.up()
                 };
                 p.body.velocity = p.body.velocity.add(dir.scale(weapons::blast_push(b, gap)));
-                if dir.y > 0 {
+                if dir.dot(p.up()) > 0 {
                     p.body.on_ground = false;
                 }
             }
@@ -1298,9 +1376,9 @@ impl World {
     fn swing(&mut self, id: usize, s: Shot, scratch: &mut Scratch) {
         let Some(sw) = s.weapon.swing() else { return };
         let p = &self.players[id];
-        let (eye, yaw, pitch) = (p.eye_now(), p.aim.yaw, p.aim.pitch);
+        let (eye, yaw, pitch, frame) = (p.eye_now(), p.aim.yaw, p.aim.pitch, p.frame);
         if s.alt && sw.alt == Alt::Hook {
-            let d = facing(yaw, pitch);
+            let d = frame.apply(facing(yaw, pitch));
             let reach = weapons::wall_distance(&self.map, scratch, eye, d, weapons::HOOK_REACH);
             if reach < weapons::HOOK_REACH {
                 let p = &mut self.players[id];
@@ -1308,8 +1386,10 @@ impl World {
                     at: eye.add(d.scale(reach)),
                     ticks: weapons::HOOK_TICKS,
                 });
-                if p.body.on_ground && d.y > 0 {
-                    p.body.velocity.y = p.body.velocity.y.max(weapons::HOOK_LIFT);
+                if p.body.on_ground && frame.back(d).y > 0 {
+                    let mut v = p.local_velocity();
+                    v.y = v.y.max(weapons::HOOK_LIFT);
+                    p.set_local_velocity(v);
                     p.body.on_ground = false;
                 }
             }
@@ -1318,14 +1398,14 @@ impl World {
         let p = &mut self.players[id];
         let lunge = s.alt && sw.alt == Alt::Lunge;
         if lunge {
-            let along = facing(yaw, pitch).scale(weapons::LUNGE_SPEED.max(p.body.speed()));
-            p.body.velocity = v3(along.x, along.y.max(weapons::LUNGE_LIFT), along.z);
+            let along = facing(yaw, pitch).scale(weapons::LUNGE_SPEED.max(p.speed()));
+            p.set_local_velocity(v3(along.x, along.y.max(weapons::LUNGE_LIFT), along.z));
             p.body.on_ground = false;
             p.let_go_of_vine();
         } else if sw.launch > 0 {
             // T30: the garrocha flings you once wound up (`swings`)
         } else {
-            p.body.velocity = p.body.velocity.add(facing(yaw, 0).scale(sw.carry));
+            p.body.velocity = p.body.velocity.add(frame.apply(facing(yaw, 0)).scale(sw.carry));
         }
         // T23: the cut the flick picks; none, a level cut the other way
         // from the last, or a knife's thrust
@@ -1364,11 +1444,12 @@ impl World {
             s.age += 1;
             let sw = s.weapon.swing().expect("a swing is a melee weapon's");
             let p = &self.players[id];
-            let (eye, yaw, pitch) = (p.eye_now(), p.aim.yaw, p.aim.pitch);
-            let aim = facing(yaw, pitch);
+            let (eye, yaw, pitch, frame) = (p.eye_now(), p.aim.yaw, p.aim.pitch, p.frame);
+            let aim = frame.apply(facing(yaw, pitch));
             let cut = s.cut.map(|c| {
+                let (f, along, n) = weapons::cut_frame(yaw, pitch, c);
                 (
-                    weapons::cut_frame(yaw, pitch, c),
+                    (frame.apply(f), frame.apply(along), frame.apply(n)),
                     weapons::sweep(&sw, s.age - 1),
                     weapons::sweep(&sw, s.age),
                 )
@@ -1386,13 +1467,13 @@ impl World {
                 // off the ground as the lunge leaves it, or friction eats
                 // the fling within a third of a second
                 let p = &mut self.players[id];
-                let along = aim.scale(sw.launch);
+                let along = facing(yaw, pitch).scale(sw.launch);
                 let up = if p.body.on_ground {
                     along.y.max(weapons::LUNGE_LIFT)
                 } else {
                     along.y
                 };
-                p.body.velocity = v3(along.x, up, along.z);
+                p.set_local_velocity(v3(along.x, up, along.z));
                 p.body.on_ground = false;
                 p.let_go_of_vine();
             }
@@ -1422,7 +1503,7 @@ impl World {
                     };
                     let dmg = if s.lunge {
                         weapons::LUNGE_DAMAGE
-                    } else if sw.behind > 0 && weapons::from_behind(t.feet, facing_yaw, eye) {
+                    } else if sw.behind > 0 && weapons::from_behind(t.feet, facing_yaw, t.local(eye)) {
                         sw.behind
                     } else {
                         s.weapon.stats().damage
@@ -1460,16 +1541,17 @@ impl World {
     /// kick in the air.
     fn shoot(&mut self, id: usize, s: Shot, scratch: &mut Scratch) {
         let g = s.weapon.stats();
-        let (eye, yaw, pitch) = {
+        let (eye, yaw, pitch, frame) = {
             let p = &self.players[id];
-            (p.body.origin.add(v3(0, p.body.eye(), 0)), p.aim.yaw, p.aim.pitch)
+            (p.eye_now(), p.aim.yaw, p.aim.pitch, p.frame)
         };
         let mut targets = self.targets(id, false);
         let band = self.players[id].band();
         let mut landed = false;
-        let from = muzzle(eye, yaw, pitch);
+        let from = muzzle(&frame, eye, yaw, pitch);
         let salt = (self.tick as u32).wrapping_mul(31).wrapping_add(id as u32);
         for d in weapons::pellets(g, yaw, pitch, salt) {
+            let d = frame.apply(d);
             let (hits, stop) = weapons::cast(&self.map, scratch, eye, d, g.range, &targets, g.pierce);
             landed |= !hits.is_empty();
             for h in &hits {
@@ -1511,7 +1593,7 @@ impl World {
         if g.kick > 0 && !p.body.on_ground {
             // the shotgun's jump: pushed back along the aim, so a shot at the
             // floor lifts
-            p.body.velocity = p.body.velocity.sub(facing(yaw, pitch).scale(g.kick));
+            p.body.velocity = p.body.velocity.sub(frame.apply(facing(yaw, pitch)).scale(g.kick));
         }
     }
 
@@ -1527,7 +1609,26 @@ impl World {
         let (across, up) = if shake { p.hurt.shake(alpha) } else { (0, 0) };
         aim.yaw += across;
         aim.pitch = (aim.pitch + up).clamp(camera::PITCH_MIN, camera::PITCH_MAX);
-        camera::eye_view(p.eye(alpha), aim, camera::vertical_fov(self.fov, aspect))
+        let mut cam = camera::eye_view(p.eye(alpha), aim, camera::vertical_fov(self.fov, aspect));
+        // T37: in its gravity's frame, turning there from where it was
+        cam.fwd = p.frame.apply(cam.fwd);
+        cam.level = p.up();
+        if let Some((up_from, fwd_from, ticks)) = p.turning {
+            let done = gravity::TURN_TICKS - ticks;
+            let s = fx::div(done * ONE + alpha, int(gravity::TURN_TICKS)).clamp(0, ONE);
+            // eased in and out
+            let s = fx::mul(fx::mul(s, s), int(3) - 2 * s);
+            cam.fwd = fwd_from.lerp(cam.fwd, s).norm();
+            cam.level = if up_from.dot(cam.level) < 0 {
+                // a half turn: over by the side
+                let side = cam.fwd.cross(up_from).norm();
+                let a = fx::mul(s, fx::HALF_TURN);
+                up_from.scale(fx::cos(a)).add(side.scale(fx::sin(a)))
+            } else {
+                up_from.lerp(cam.level, s).norm()
+            };
+        }
+        cam
     }
 
     /// The moving things, seen by seat `me`: the other players, the straw
@@ -1547,12 +1648,13 @@ impl World {
                     pitch: p.aim.pitch,
                     ducked: p.body.ducked,
                     flashed: p.flash > 0,
-                    speed: p.body.speed(),
+                    speed: p.speed(),
                     on_ground: p.body.on_ground,
                     moment: (self.tick as i32).wrapping_mul(ONE).wrapping_add(alpha),
                     arms: Some((&p.arms, p.swing)),
                     sliding: p.body.sliding,
                     hanging: p.vine.is_some(),
+                    frame: p.frame,
                 };
                 crate::skins::draw(out, &figure, look);
             }
@@ -1594,25 +1696,31 @@ impl World {
             draw_burst(out, b, pal, ink);
         }
         // T33: each vine hangs straight down, or runs to the hands that
-        // hold it and hangs on below them
+        // hold it and hangs on below them. T37: down as `me` has it, or as
+        // the body holding it has it
+        let my_down = self.players[me].up().neg();
         for (k, v) in self.map.vines.iter().enumerate() {
             let thick = ONE * 12 / 100;
             let held = self
                 .players
                 .iter()
                 .find(|p| p.alive() && p.vine.is_some_and(|c| c.vine as usize == k));
-            let (hands, rest) = match held.and_then(|p| p.vine.map(|c| (p, c))) {
+            let (hands, rest, down) = match held.and_then(|p| p.vine.map(|c| (p, c))) {
                 Some((p, c)) => {
                     let feet = p.prev.lerp(p.body.origin, alpha);
-                    (feet.add(v3(0, VINE_GRIP, 0)), v.length - c.length)
+                    (
+                        feet.add(p.up().scale(VINE_GRIP)),
+                        v.length - c.length,
+                        p.up().neg(),
+                    )
                 }
-                None => (v.top.sub(v3(0, v.length, 0)), 0),
+                None => (v.top.add(my_down.scale(v.length)), 0, my_down),
             };
             out.solid(Mesh::Cube, bar(v.top, hands, thick), rgb(pal.vine), 0);
             if rest > ONE / 10 {
                 out.solid(
                     Mesh::Cube,
-                    bar(hands, hands.sub(v3(0, rest, 0)), thick),
+                    bar(hands, hands.add(down.scale(rest)), thick),
                     rgb(pal.vine),
                     0,
                 );
@@ -1621,7 +1729,7 @@ impl World {
         for (k, p) in self.players.iter().enumerate() {
             if let Some(h) = p.hook {
                 let aim = if k == me { p.aim.turned(pending) } else { p.aim };
-                let from = muzzle(p.eye(alpha), aim.yaw, aim.pitch);
+                let from = muzzle(&p.frame, p.eye(alpha), aim.yaw, aim.pitch);
                 out.solid(Mesh::Cube, bar(from, h.at, ONE * 2 / 100), rgb(pal.wood), 0);
             }
         }
@@ -1656,7 +1764,7 @@ impl World {
 /// weight and pulls it toward where it holds; let go when near it.
 fn pull(p: &mut Player, input: &Input) {
     let Some(mut h) = p.hook else { return };
-    let middle = p.body.origin.add(v3(0, ONE * 9 / 10, 0));
+    let middle = p.body.origin.add(p.up().scale(ONE * 9 / 10));
     let to = h.at.sub(middle);
     h.ticks -= 1;
     if !input.button(ALT) || p.arms.weapon != Weapon::Guadana || h.ticks <= 0 || to.len() < ONE * 15 / 10 {
@@ -1665,13 +1773,13 @@ fn pull(p: &mut Player, input: &Input) {
     }
     let dir = to.norm();
     let dt = ONE / crate::movement::HZ;
-    let weight = v3(0, fx::mul(TUNING.gravity, dt), 0);
+    let weight = p.up().scale(fx::mul(TUNING.gravity, dt));
     p.body.velocity = p
         .body
         .velocity
         .add(dir.scale(fx::mul(weapons::HOOK_PULL, dt)))
         .add(weight);
-    if dir.y > 0 {
+    if dir.dot(p.up()) > 0 {
         p.body.on_ground = false;
     }
     p.hook = Some(h);
@@ -1685,6 +1793,29 @@ fn pull(p: &mut Player, input: &Input) {
 /// little lift; the ground, a hook or a nail let go too. Says whether the
 /// body hangs from a vine this tick.
 fn swing_on_vine(p: &mut Player, input: &Input, vines: &[map::Vine]) -> bool {
+    let t = p.frame;
+    if t == Turn::IDENTITY {
+        return swing_in_frame(p, input, vines);
+    }
+    // T37: on the Cubo, in the body's own frame, where every vine hangs
+    // toward its floor
+    let local: Vec<map::Vine> = vines
+        .iter()
+        .map(|v| map::Vine {
+            top: t.back(v.top),
+            ..*v
+        })
+        .collect();
+    p.body.origin = t.back(p.body.origin);
+    p.body.velocity = t.back(p.body.velocity);
+    let swinging = swing_in_frame(p, input, &local);
+    p.body.origin = t.apply(p.body.origin);
+    p.body.velocity = t.apply(p.body.velocity);
+    swinging
+}
+
+/// `swing_on_vine` in the body's own frame.
+fn swing_in_frame(p: &mut Player, input: &Input, vines: &[map::Vine]) -> bool {
     p.vine_rest = (p.vine_rest - 1).max(0);
     let grip = p.body.origin.add(v3(0, VINE_GRIP, 0));
     let free = !p.body.on_ground && p.hook.is_none() && p.pinned == 0;
@@ -1762,13 +1893,9 @@ fn turn_and_move(p: &mut Player, input: &Input, from: i32, turned: &[Map], cube:
     b.origin = t.back(b.origin);
     b.velocity = t.back(b.velocity);
     p.events = m.tick(&mut b, input, from, p.aim.yaw);
-    let local_cube = gravity::Cube {
-        centre: t.back(cube.centre),
-        half: cube.half,
-    };
     let free = p.vine.is_none() && p.hook.is_none() && p.pinned == 0;
     let s = if free {
-        gravity::shift(&mut m, &b, was_on_ground, input, p.aim.yaw, &local_cube)
+        gravity::shift(&mut m, &b, was_on_ground, input, p.aim.yaw, &t, &cube)
     } else {
         None
     };
@@ -1826,9 +1953,9 @@ fn keep_inside(b: &mut crate::movement::Body, (lo, hi): (V3, V3)) {
 }
 
 /// Where a shot leaves the gun: a little right of and below the eye, ahead.
-pub fn muzzle(eye: V3, yaw: i32, pitch: i32) -> V3 {
-    let f = facing(yaw, pitch);
-    let r = right_of(yaw);
+pub fn muzzle(frame: &Turn, eye: V3, yaw: i32, pitch: i32) -> V3 {
+    let f = frame.apply(facing(yaw, pitch));
+    let r = frame.apply(right_of(yaw));
     let up = r.cross(f);
     eye.add(f.scale(ONE * 7 / 10))
         .add(r.scale(ONE * 18 / 100))

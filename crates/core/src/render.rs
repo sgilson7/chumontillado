@@ -485,6 +485,9 @@ pub struct Camera {
     /// the view's roll about `fwd`, angle units, positive to the right
     /// (the eye's tilt with a cut or a blow, `feel::tilt_at`); 0 is level
     pub roll: i32,
+    /// T37: the up the view holds level to: the world's, or on the Cubo the
+    /// face the player stands on
+    pub level: V3,
 }
 
 impl Camera {
@@ -504,10 +507,10 @@ impl Camera {
     /// `roll` toward the view's right; with no roll, the world's up exactly.
     pub fn up(&self) -> V3 {
         if self.roll == 0 {
-            return V3::UP;
+            return self.level;
         }
-        let right = self.fwd.cross(V3::UP).norm();
-        V3::UP
+        let right = self.fwd.cross(self.level).norm();
+        self.level
             .scale(fx::cos(self.roll))
             .add(right.scale(fx::sin(self.roll)))
     }
@@ -739,6 +742,7 @@ mod tests {
             fwd: facing(0, 0),
             fov: deg(60),
             roll: 0,
+            level: V3::UP,
         }
     }
 
@@ -895,6 +899,7 @@ mod tests {
             fwd: v3(0, 0, -ONE),
             fov: fx::deg(60),
             roll: 0,
+            level: V3::UP,
         };
         let origin = origin_for(c.eye);
         assert_eq!(origin, v3(int(256), 0, -int(256)));

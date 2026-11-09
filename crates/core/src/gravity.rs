@@ -180,20 +180,57 @@ impl Map {
     }
 }
 
-/// T37: a cube's middle and its half width inside (m), for the open-air
-/// rule: outside it, a body falls toward the face it is over.
+/// T37: a cube's middle, its half width inside, its walls' thickness and
+/// the half width of the way through the hole in its floor (m): outside it
+/// a body falls toward the face it is over, and in the hole toward the
+/// nearest side of it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Cube {
     pub centre: V3,
     pub half: Fx,
+    pub wall: Fx,
+    pub hole: Fx,
 }
 
 impl Cube {
-    /// Whether `p` lies outside the cube's outer faces, `wall` thick.
-    pub fn outside(&self, p: V3, wall: Fx) -> bool {
+    /// Whether `p` lies outside the cube's outer faces.
+    pub fn outside(&self, p: V3) -> bool {
         let d = p.sub(self.centre);
-        let r = self.half + wall;
+        let r = self.half + self.wall;
         d.x.abs() > r || d.y.abs() > r || d.z.abs() > r
+    }
+
+    /// Whether `p` lies within the cube's inner faces, or in its hole.
+    pub fn inside(&self, p: V3) -> bool {
+        let d = p.sub(self.centre);
+        let r = self.half;
+        d.x.abs() < r && d.z.abs() < r && d.y < r && d.y > -r - self.wall
+    }
+
+    /// Whether `p` lies in the way through the hole, between the inner floor
+    /// and the outer face; and if so, the side of the hole nearest it, as
+    /// that side's normal (into the hole).
+    pub fn in_hole(&self, p: V3) -> Option<V3> {
+        let d = p.sub(self.centre);
+        let floor = -self.half;
+        let through = d.y < floor && d.y > floor - self.wall;
+        if !through || d.x.abs() >= self.hole || d.z.abs() >= self.hole {
+            return None;
+        }
+        // the side it is nearest faces back toward the hole's middle (the
+        // middle itself, the west side)
+        let away = |c: Fx| if c > 0 { -ONE } else { ONE };
+        Some(if d.x.abs() >= d.z.abs() {
+            v3(away(d.x), 0, 0)
+        } else {
+            v3(0, 0, away(d.z))
+        })
+    }
+
+    /// The middle of the way through the hole: where a bot heads to get
+    /// in or out.
+    pub fn hole_middle(&self) -> V3 {
+        self.centre.sub(v3(0, self.half + self.wall / 2, 0))
     }
 
     /// The up of the outer face `p` is over: the axis it lies farthest along.
@@ -249,6 +286,7 @@ pub fn shift(
     was_on_ground: bool,
     input: &Input,
     yaw: i32,
+    frame: &Turn,
     cube: &Cube,
 ) -> Option<Shift> {
     let high = b.maxs().y;
@@ -298,9 +336,23 @@ pub fn shift(
             }
         }
     }
+    // falling through the hole: toward its nearest side, as it is, so a
+    // fall straight through comes down on the side and goes on round
+    let world = frame.apply(centre);
+    if !b.on_ground {
+        if let Some(n) = cube.in_hole(world).map(|n| frame.back(n)) {
+            if n.y != ONE {
+                return Some(Shift {
+                    turn: onto(n, ahead),
+                    origin: centre.sub(n.scale(high / 2)),
+                    carry: false,
+                });
+            }
+        }
+    }
     // the open air
-    if !b.on_ground && cube.outside(centre, int_of(crate::maps::CUBO_WALL)) {
-        let n = cube.up_over(centre);
+    if !b.on_ground && cube.outside(world) {
+        let n = frame.back(cube.up_over(world));
         if n.y != ONE {
             return Some(Shift {
                 turn: onto(n, ahead),

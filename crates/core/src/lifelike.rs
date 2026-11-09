@@ -271,7 +271,9 @@ fn lerp(a: &Affine, b: &Affine, t: Fx) -> Affine {
 
 /// The figure's place: at its feet, turned to its heading.
 pub fn place(f: &Figure) -> Affine {
-    Affine::translate(f.feet).then(&Affine::rot_y(f.yaw))
+    Affine::translate(f.feet)
+        .then(&f.frame.affine())
+        .then(&Affine::rot_y(f.yaw))
 }
 
 /// What one figure shows: its record's rows, and the frame the weapon is
@@ -380,6 +382,7 @@ mod tests {
             arms,
             sliding: false,
             hanging: false,
+            frame: crate::gravity::Turn::IDENTITY,
         }
     }
 

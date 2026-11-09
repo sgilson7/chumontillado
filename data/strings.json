@@ -172,6 +172,7 @@
   "map_tobogan": "the Tobogán",
   "map_selva": "the Selva",
   "map_barranco": "the Barranco",
+  "map_cubo": "the Cubo",
   "page_error": "Something went wrong, so the game stopped: {what}. Reload the page; if it happens again, send whoever gave you the link what this says.",
   "context_lost": "The graphics card stopped drawing the game. Waiting for it to come back; if it does not, reload the page.",
   "setting_volume": "Volume",

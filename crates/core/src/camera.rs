@@ -83,6 +83,7 @@ pub fn eye_view(eye: V3, look: Aim, fov: i32) -> Camera {
         fwd: facing(look.yaw, look.pitch),
         fov,
         roll: 0,
+        level: V3::UP,
     }
 }
 

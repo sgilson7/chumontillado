@@ -323,7 +323,8 @@ impl Game {
                 let heard = s.take_heard();
                 let (eyes, world) = (s.seat, &s.world);
                 let p = &world.players[world.watching_or(eyes)];
-                let plays = crate::sound::for_listener(&heard, eyes, p.eye_now(), p.aim.yaw, self.volume_pct);
+                let (heard, eye) = (p.hears(&heard), p.frame.back(p.eye_now()));
+                let plays = crate::sound::for_listener(&heard, eyes, eye, p.aim.yaw, self.volume_pct);
                 self.sounds.extend(plays);
             }
         }
@@ -352,7 +353,8 @@ impl Game {
         let eyes = self.eyes();
         let w = &self.world;
         let Some(p) = w.players.get(eyes) else { return };
-        let plays = crate::sound::for_listener(&w.heard, self.me(), p.eye_now(), p.aim.yaw, self.volume_pct);
+        let (heard, eye) = (p.hears(&w.heard), p.frame.back(p.eye_now()));
+        let plays = crate::sound::for_listener(&heard, self.me(), eye, p.aim.yaw, self.volume_pct);
         self.sounds.extend(plays);
     }
 
@@ -521,6 +523,7 @@ impl Game {
                 arms: None,
                 sliding: false,
                 hanging: false,
+                frame: crate::gravity::Turn::IDENTITY,
             };
             crate::skins::draw(out, &figure, &self.look);
         }
@@ -619,6 +622,7 @@ impl Game {
                 arms: None,
                 sliding: false,
                 hanging: false,
+                frame: crate::gravity::Turn::IDENTITY,
             };
             crate::skins::draw(&mut moving, &figure, &self.look);
         }
@@ -1232,7 +1236,7 @@ impl Game {
 
     /// The speed shown on the HUD (m/s, Q16.16).
     pub fn speed(&self) -> Fx {
-        self.view_world().players[self.me()].body.speed()
+        self.view_world().players[self.me()].speed()
     }
 
     /// Whether the page should hold the pointer.

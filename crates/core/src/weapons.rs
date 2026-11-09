@@ -621,7 +621,7 @@ impl Target {
     }
 
     /// T37: a world point as the body's own frame sees it, about its feet.
-    fn local(&self, p: V3) -> V3 {
+    pub fn local(&self, p: V3) -> V3 {
         self.feet.add(self.frame.back(p.sub(self.feet)))
     }
 
@@ -1287,5 +1287,28 @@ mod tests {
         assert!(left < right, "left at {left}, right at {right}");
         assert_eq!(sweep(&s, s.from), -s.half_arc);
         assert_eq!(sweep(&s, s.until), s.half_arc);
+    }
+
+    /// T37: a body standing on a wall of the Cubo, its up along −x, is hit
+    /// where it stands: a ray across its chest a metre and a bit out from
+    /// the wall meets it, though it passes well clear of the upright
+    /// column its feet would stand at on the floor.
+    #[test]
+    fn a_body_standing_on_a_wall_is_hit_along_its_own_up() {
+        let wall = crate::gravity::Turn::quarter(v3(0, ONE, 0), v3(-ONE, 0, 0));
+        let feet = v3(int(18), int(10), int(8));
+        let t = Target::of(feet, ONE * 165 / 100).turned(wall);
+        let chest = v3(int(18) - ONE * 12 / 10, int(10), -int(5));
+        let hit = meets(chest, v3(0, 0, ONE), &t, 0).expect("the chest is hit");
+        assert!(!hit.1 && near_m(hit.0, int(13), ONE / 2), "{hit:?}");
+        let head = v3(int(18) - ONE * 165 / 100, int(10), -int(5));
+        assert!(
+            meets(head, v3(0, 0, ONE), &t, 0).is_some_and(|h| h.1),
+            "and its head"
+        );
+    }
+
+    fn near_m(a: Fx, b: Fx, within: Fx) -> bool {
+        (a - b).abs() <= within
     }
 }
