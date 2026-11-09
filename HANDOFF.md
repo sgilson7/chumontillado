@@ -116,4 +116,6 @@ T34 and T35 merged into main and live at d3028ac (2026-11-08): the live browser 
 
 After T36 (vines on F, held; on the branch `vine-key`, not deployed): `./scripts/check.sh` passed in all three browsers; `break_tests.py T36`: 3 of 3 caught, after the first run missed a grab and drop in one tick and the test was tightened; `break_tests.py T33`: 13 of 13 caught, with two rows re-pointed (363 rows).
 
+T36 live at cddf925 (2026-11-09): the first publish stopped on a Firefox "scene holds still" row while main was already pushed, so the Pages run deployed the old build; the second publish passed, and re-running the Pages workflow put cddf925 live. The live browser check passed in Chromium, Firefox and WebKit. The live online check failed both runs as after T34: the guest opening the invite link never found the room (R8.11, R21.7). T36 changes only a key on the vine, so this is the open relay fault, not the change.
+
 After T32 (playlists, the match plan, the kept string): `break_tests.py T32`: 13 of 13 caught; live at be8d421 (2026-11-07): the live browser check passed; the live online check failed twice just after the deploy, once on "A message from another browser made no sense" (R21.7, open), then passed in Chromium and Firefox (324 rows).
