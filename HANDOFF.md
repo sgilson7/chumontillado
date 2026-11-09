@@ -119,6 +119,8 @@ After T36 (vines on F, held; on the branch `vine-key`, not deployed): `./scripts
 
 After T37 (the Cubo, on the branch `cube-map`, not deployed): `./scripts/check.sh` passed in all three browsers; `break_tests.py T37`: 10 of 10 caught, after the first run missed two (a yo-yo to the ceiling that passed for the underside, since tightened, and the fit check before a turn, which no case reaches: its row was retired, R25.5); five older rows re-pointed where the code moved (373 rows). Seen in Chromium: the Cubo drawn, the view rolling onto a wall, a bot on a wall.
 
+T37 live at c3100a9 (2026-11-09): published before main was pushed; build.txt named the commit; the live browser check passed in Chromium, Firefox and WebKit, and the live online check passed in full in Chromium and Firefox on its first run.
+
 T36 live at cddf925 (2026-11-09): the first publish stopped on a Firefox "scene holds still" row while main was already pushed, so the Pages run deployed the old build; the second publish passed, and re-running the Pages workflow put cddf925 live. The live browser check passed in Chromium, Firefox and WebKit. The live online check failed both runs as after T34: the guest opening the invite link never found the room (R8.11, R21.7). T36 changes only a key on the vine, so this is the open relay fault, not the change.
 
 After T32 (playlists, the match plan, the kept string): `break_tests.py T32`: 13 of 13 caught; live at be8d421 (2026-11-07): the live browser check passed; the live online check failed twice just after the deploy, once on "A message from another browser made no sense" (R21.7, open), then passed in Chromium and Firefox (324 rows).
