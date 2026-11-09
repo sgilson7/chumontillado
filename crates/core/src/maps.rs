@@ -45,21 +45,23 @@ pub fn all() -> [Map; COUNT] {
         tobogan(),
         selva(),
         barranco(),
+        cubo(),
     ]
 }
 
 /// How many maps a match goes round.
-pub const COUNT: usize = 14;
+pub const COUNT: usize = 15;
 
 /// T31: the twice-as-wide maps and the Tobogán, where nothing to move off
 /// need be nearer than 12 m; T33 added the Selva and the Barranco.
-pub const WIDE: [&str; 6] = [
+pub const WIDE: [&str; 7] = [
     "map_dehesa",
     "map_sierra",
     "map_arrabal",
     "map_tobogan",
     "map_selva",
     "map_barranco",
+    "map_cubo",
 ];
 
 /// How far from something to move off a place on `m`'s floor may be (m):
@@ -89,7 +91,8 @@ pub fn map(k: usize) -> Map {
         10 => arrabal(),
         11 => tobogan(),
         12 => selva(),
-        _ => barranco(),
+        13 => barranco(),
+        _ => cubo(),
     }
 }
 
@@ -184,6 +187,7 @@ pub fn plaza() -> Map {
         ],
         bot_loop: vec![(8, 0), (0, 8), (-8, 0), (0, -8)],
         vines: Vec::new(),
+        cube: None,
     }
 }
 
@@ -296,6 +300,7 @@ pub fn catedral() -> Map {
             (0, -3),
         ],
         vines: Vec::new(),
+        cube: None,
     }
 }
 
@@ -393,6 +398,7 @@ pub fn galeria() -> Map {
         ],
         bot_loop: vec![(-30, 0), (30, 0)],
         vines: Vec::new(),
+        cube: None,
     }
 }
 
@@ -484,6 +490,7 @@ pub fn mercado() -> Map {
         ],
         bot_loop: vec![(14, 0), (0, 14), (-14, 0), (0, -14)],
         vines: Vec::new(),
+        cube: None,
     }
 }
 
@@ -562,6 +569,7 @@ pub fn puerto() -> Map {
         ],
         bot_loop: vec![(12, -22), (12, 22), (-12, 22), (-12, -22)],
         vines: Vec::new(),
+        cube: None,
     }
 }
 
@@ -643,6 +651,7 @@ pub fn acueducto() -> Map {
         ],
         bot_loop: vec![(0, -24), (0, 24)],
         vines: Vec::new(),
+        cube: None,
     }
 }
 
@@ -760,6 +769,7 @@ pub fn molino() -> Map {
         ],
         bot_loop: vec![(12, 0), (0, 12), (-12, 0), (0, -12)],
         vines: Vec::new(),
+        cube: None,
     }
 }
 
@@ -865,6 +875,7 @@ pub fn alcazar() -> Map {
         ],
         bot_loop: vec![(-12, -12), (12, -12), (12, 12), (-12, 12)],
         vines: Vec::new(),
+        cube: None,
     }
 }
 
@@ -930,6 +941,7 @@ pub fn dehesa() -> Map {
         ],
         bot_loop: vec![(16, -8), (16, 8), (-16, 8), (-16, -8)],
         vines: Vec::new(),
+        cube: None,
     }
 }
 
@@ -983,6 +995,7 @@ pub fn sierra() -> Map {
         ],
         bot_loop: vec![(-4, 20), (4, 20), (4, -20), (-4, -20)],
         vines: Vec::new(),
+        cube: None,
     }
 }
 
@@ -1048,6 +1061,7 @@ pub fn arrabal() -> Map {
         ],
         bot_loop: vec![(12, 12), (-12, 12), (-12, -12), (12, -12)],
         vines: Vec::new(),
+        cube: None,
     }
 }
 
@@ -1135,6 +1149,7 @@ pub fn tobogan() -> Map {
         ],
         bot_loop: vec![(-8, -60), (8, -60), (8, -80), (-8, -80)],
         vines: Vec::new(),
+        cube: None,
     }
 }
 
@@ -1217,6 +1232,7 @@ pub fn selva() -> Map {
         ],
         bot_loop: vec![(20, 30), (-20, 30), (-20, -30), (20, -30)],
         vines,
+        cube: None,
     }
 }
 
@@ -1288,6 +1304,94 @@ pub fn barranco() -> Map {
         ],
         bot_loop: vec![(8, 30), (-8, 30), (-8, -30), (8, -30)],
         vines,
+        cube: None,
+    }
+}
+
+/// T37: the Cubo's half width inside, its walls' thickness, its hole's
+/// half width, the lining round the hole, and its vine's length (m).
+pub const CUBO_HALF: i32 = 18;
+pub const CUBO_WALL: i32 = 1;
+const CUBO_HOLE: i32 = 2;
+const CUBO_LINING: Fx = ONE / 4;
+pub const CUBO_VINE: i32 = 15;
+
+/// T37: the Cubo. Sam: "a map that is a cube, that when you touch a wall /
+/// start to approach it, your gravity shifts to walk on that wall ... and in
+/// the center of the cube there is one vine"; "there should be a hole that
+/// lets you go on the outside of the cube as well". A box 36 m inside
+/// (CS-Q29: 36 m), its walls 1 m thick, standing on the ground at y = −1
+/// so its inner floor is at 0. In the middle of the floor a hole 4 m square
+/// goes through to the outside (CS-Q30), lined with trim; every other face
+/// has a plinth 4 m square and 1.5 m deep in its middle to move off. One
+/// vine hangs from the middle of the cube, 15 m toward whichever face a
+/// body stands on, so its end is 3 m off that face: a jump's reach.
+pub fn cubo() -> Map {
+    let (h, w, o) = (CUBO_HALF, CUBO_WALL, CUBO_HOLE);
+    let top = 2 * h;
+    let mut bs = vec![
+        // the floor round the hole
+        b(-h - w, -w, -h - w, h + w, 0, -o, Surface::Floor),
+        b(-h - w, -w, o, h + w, 0, h + w, Surface::Floor),
+        b(-h - w, -w, -o, -o, 0, o, Surface::Floor),
+        b(o, -w, -o, h + w, 0, o, Surface::Floor),
+        // the roof and the four walls
+        b(-h - w, top, -h - w, h + w, top + w, h + w, Surface::Wall),
+        b(-h - w, 0, -h - w, -h, top, h + w, Surface::Wall),
+        b(h, 0, -h - w, h + w, top, h + w, Surface::Wall),
+        b(-h, 0, -h - w, h, top, -h, Surface::Wall),
+        b(-h, 0, h, h, top, h + w, Surface::Wall),
+    ];
+    // the hole's lining, a quarter metre thick inside it
+    let (oo, l, ww) = (int(o), CUBO_LINING, int(w));
+    bs.extend([
+        block(v3(-oo, -ww, -oo), v3(oo, 0, -oo + l), Surface::Trim),
+        block(v3(-oo, -ww, oo - l), v3(oo, 0, oo), Surface::Trim),
+        block(v3(-oo, -ww, -oo + l), v3(-oo + l, 0, oo - l), Surface::Trim),
+        block(v3(oo - l, -ww, -oo + l), v3(oo, 0, oo - l), Surface::Trim),
+    ]);
+    // a plinth in the middle of the roof and of each wall
+    let (p, d, hh) = (int(2), ONE * 3 / 2, int(h));
+    let mid = int(h);
+    bs.extend([
+        block(v3(-p, int(top) - d, -p), v3(p, int(top), p), Surface::Block),
+        block(v3(-hh, mid - p, -p), v3(-hh + d, mid + p, p), Surface::Block),
+        block(v3(hh - d, mid - p, -p), v3(hh, mid + p, p), Surface::Block),
+        block(v3(-p, mid - p, -hh), v3(p, mid + p, -hh + d), Surface::Block),
+        block(v3(-p, mid - p, hh - d), v3(p, mid + p, hh), Surface::Block),
+    ]);
+    Map {
+        brushes: bs,
+        spawns: vec![
+            spawn(12, 12, 0, 0),
+            spawn(-12, 12, 0, 0),
+            spawn(-12, -12, 0, 0),
+            spawn(12, -12, 0, 0),
+        ],
+        name: "map_cubo",
+        pickups: vec![
+            (v3(int(6), 0, 0), Weapon::Ak),
+            (v3(-int(6), 0, 0), Weapon::Shotgun),
+            (v3(0, 0, int(6)), Weapon::Katana),
+            (v3(0, 0, -int(6)), Weapon::Rifle),
+            (v3(int(14), 0, 0), Weapon::Toro),
+            (v3(-int(14), 0, 0), Weapon::Garrocha),
+            (v3(0, 0, int(14)), Weapon::Drum),
+            (v3(0, 0, -int(14)), Weapon::Guadana),
+            (v3(int(8), 0, int(8)), Weapon::MachinePistol),
+            (v3(-int(8), 0, -int(8)), Weapon::Trabuco),
+            (v3(-int(8), 0, int(8)), Weapon::Punal),
+            (v3(int(8), 0, -int(8)), Weapon::Collage),
+        ],
+        bot_loop: vec![(10, 10), (-10, 10), (-10, -10), (10, -10)],
+        vines: vec![Vine {
+            top: v3(0, int(h), 0),
+            length: int(CUBO_VINE),
+        }],
+        cube: Some(crate::gravity::Cube {
+            centre: v3(0, int(h), 0),
+            half: int(h),
+        }),
     }
 }
 
@@ -1430,10 +1534,10 @@ mod tests {
     }
 
     #[test]
-    fn a_match_goes_round_the_fourteen_maps_in_turn() {
+    fn a_match_goes_round_the_fifteen_maps_in_turn() {
         // T16 added the Molino and the Alcázar after the six; T31 the
         // Dehesa, the Sierra, the Arrabal and the Tobogán; T33 the Selva
-        // and the Barranco
+        // and the Barranco; T37 the Cubo
         let names: Vec<&str> = all().iter().map(|m| m.name).collect();
         assert_eq!(
             names,
@@ -1451,7 +1555,8 @@ mod tests {
                 "map_arrabal",
                 "map_tobogan",
                 "map_selva",
-                "map_barranco"
+                "map_barranco",
+                "map_cubo"
             ]
         );
         for (k, n) in names.iter().enumerate() {

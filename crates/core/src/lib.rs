@@ -22,6 +22,7 @@ pub mod fx;
 pub mod game;
 pub mod geom;
 pub mod glossary;
+pub mod gravity;
 pub mod hands;
 pub mod hurt;
 pub mod input;

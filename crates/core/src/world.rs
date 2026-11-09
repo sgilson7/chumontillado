@@ -27,6 +27,7 @@ use crate::arms::{Arms, Shot};
 use crate::camera::{self, Aim};
 use crate::fx::{self, int, Fx, ONE};
 use crate::geom::{facing, right_of, v3, Affine, V3};
+use crate::gravity::{self, Turn};
 use crate::input::{Input, Mouse, ALT, BACK, CROUCH, FORWARD, JUMP, LEFT, RESET, RIGHT, VINE};
 use crate::look::{rgb, Look, Palette, Rgb};
 use crate::map::{self, Map};
@@ -114,6 +115,11 @@ pub struct Player {
     pub skin: u8,
     /// T34: and whether lifelike, else painted. Drawn only, so not summed
     pub lifelike: bool,
+    /// T37: its gravity's frame: the identity but on the Cubo
+    pub frame: Turn,
+    /// T37: the view's turn after its gravity turned: the up and the
+    /// forward it turns from, in the world, and ticks left. Drawn only
+    pub turning: Option<(V3, V3, i32)>,
 }
 
 /// CS-Q22 (the journal's Feel mockups page): a seat's shots and hits in
@@ -265,6 +271,8 @@ impl Player {
             since_trick: 1_000,
             skin: 0,
             lifelike: false,
+            frame: Turn::IDENTITY,
+            turning: None,
         }
     }
 
@@ -291,7 +299,22 @@ impl Player {
     /// The eye between last tick and this one, `alpha` of the way.
     pub fn eye(&self, alpha: Fx) -> V3 {
         let feet = self.prev.lerp(self.body.origin, alpha);
-        feet.add(v3(0, fx::lerp(self.prev_eye, self.body.eye(), alpha), 0))
+        feet.add(self.up().scale(fx::lerp(self.prev_eye, self.body.eye(), alpha)))
+    }
+
+    /// T37: its up in the world.
+    pub fn up(&self) -> V3 {
+        self.frame.up()
+    }
+
+    /// T37: where it looks, in the world.
+    pub fn look(&self) -> V3 {
+        gravity::look(&self.frame, self.aim.yaw, self.aim.pitch)
+    }
+
+    /// T37: its speed across its own floor (m/s).
+    pub fn speed(&self) -> Fx {
+        self.frame.back(self.body.velocity).len_xz()
     }
 
     pub fn alive(&self) -> bool {
@@ -300,11 +323,11 @@ impl Player {
 
     /// What a shot meets of it.
     pub fn target(&self) -> Target {
-        Target::of(self.body.origin, self.body.eye())
+        Target::of(self.body.origin, self.body.eye()).turned(self.frame)
     }
 
     pub fn eye_now(&self) -> V3 {
-        self.body.origin.add(v3(0, self.body.eye(), 0))
+        self.body.origin.add(self.up().scale(self.body.eye()))
     }
 
     /// The movement's numbers while holding its weapon: the navaja's faster
@@ -360,6 +383,9 @@ pub struct World {
     /// shared, not copied, by rollback's copies of the world (M4): it
     /// never changes in a match
     pub map: Rc<Map>,
+    /// T37: on a map whose gravity turns, the map as each of the 24 frames
+    /// meets it (`gravity::all` order); empty elsewhere
+    pub turned: Rc<Vec<Map>>,
     /// T32: the maps a match plays in order, and its weapons placed or at
     /// random
     pub plan: crate::plan::Plan,
@@ -484,6 +510,7 @@ impl World {
             plan: crate::plan::Plan::default(),
             heard: Vec::new(),
             nav: None,
+            turned: Rc::new(Vec::new()),
             skill: pilot::Skill::Normal,
         }
     }
@@ -549,6 +576,10 @@ impl World {
             p.prev = p.body.origin;
         }
         self.nav = Some(Rc::new(crate::nav::Nav::of(&m)));
+        self.turned = Rc::new(match m.cube {
+            Some(_) => gravity::all().iter().map(|t| m.turned_back(t)).collect(),
+            None => Vec::new(),
+        });
         self.map = Rc::new(m);
         self.flying.clear();
         self.bursts.clear();
@@ -612,6 +643,7 @@ impl World {
             }
             mix(p.vine_rest as i64);
             mix(p.arms.burst_left as i64);
+            mix(p.frame.index() as i64);
         }
         for q in &self.flying {
             v3s(&mut mix, q.at);
@@ -769,6 +801,7 @@ impl World {
         let inside = self.map.inside();
         let held = Rc::clone(&self.map);
         let vines = &held.vines;
+        let turned = Rc::clone(&self.turned);
         {
             let mut mover = Mover::new(&self.map);
             for (id, (p, input)) in self.players.iter_mut().zip(&records).enumerate() {
@@ -821,6 +854,10 @@ impl World {
                     p.pinned -= 1;
                     p.body.velocity = V3::ZERO;
                     p.events = Events::default();
+                } else if let Some(cube) = held.cube {
+                    // T37: moved in its own frame against the map turned
+                    // into it, then perhaps onto another face
+                    turn_and_move(p, input, from, &turned, cube);
                 } else {
                     mover.t = p.tuning();
                     p.events = mover.tick(&mut p.body, input, from, p.aim.yaw);
@@ -1709,6 +1746,57 @@ fn swing_on_vine(p: &mut Player, input: &Input, vines: &[map::Vine]) -> bool {
     let along = v3(fx::div(step.x, dt), fx::div(step.y, dt), fx::div(step.z, dt));
     p.body.velocity = along.add(half_g);
     true
+}
+
+/// T37: a body's tick on a map whose gravity turns. The body moves in its
+/// own frame, against the map as that frame meets it; then, if its gravity
+/// turns (`gravity::shift`) and its body fits where the turn puts it, its
+/// frame turns, its speed and view with it where it ran round a corner, and
+/// the view starts its turn on screen.
+fn turn_and_move(p: &mut Player, input: &Input, from: i32, turned: &[Map], cube: gravity::Cube) {
+    let t = p.frame;
+    let mut m = Mover::new(&turned[t.index() as usize]);
+    m.t = p.tuning();
+    let was_on_ground = p.body.on_ground;
+    let mut b = p.body;
+    b.origin = t.back(b.origin);
+    b.velocity = t.back(b.velocity);
+    p.events = m.tick(&mut b, input, from, p.aim.yaw);
+    let local_cube = gravity::Cube {
+        centre: t.back(cube.centre),
+        half: cube.half,
+    };
+    let free = p.vine.is_none() && p.hook.is_none() && p.pinned == 0;
+    let s = if free {
+        gravity::shift(&mut m, &b, was_on_ground, input, p.aim.yaw, &local_cube)
+    } else {
+        None
+    };
+    let world_v = t.apply(b.velocity);
+    p.body = b;
+    p.body.origin = t.apply(b.origin);
+    p.body.velocity = world_v;
+    let Some(s) = s else { return };
+    let next = t.then(&s.turn);
+    let origin = t.apply(s.origin);
+    let mut fit = Mover::new(&turned[next.index() as usize]);
+    if !gravity::clear(&mut fit, &p.body, next.back(origin)) {
+        return;
+    }
+    let (up_from, fwd_from) = (p.up(), p.look());
+    p.frame = next;
+    p.body.origin = origin;
+    p.body.on_ground = false;
+    p.body.slam_from = None;
+    if s.carry {
+        // speed and view turn with the corner
+        p.body.velocity = next.apply(b.velocity);
+    } else {
+        let (yaw, pitch) = gravity::aim_toward(&next, fwd_from);
+        p.aim.yaw = yaw;
+        p.aim.pitch = pitch;
+    }
+    p.turning = Some((up_from, fwd_from, gravity::TURN_TICKS));
 }
 
 /// T27: a body that has moved past the walls' inner faces, over the top

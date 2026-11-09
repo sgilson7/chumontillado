@@ -588,6 +588,8 @@ pub struct Target {
     pub feet: V3,
     pub body_top: Fx,
     pub head: V3,
+    /// T37: the body's gravity frame: it stands along the frame's up
+    pub frame: crate::gravity::Turn,
 }
 
 /// The body's radius and the head's: the shared hit envelope (CS-Q12),
@@ -605,6 +607,35 @@ impl Target {
             feet,
             body_top: eye - HEAD_R,
             head: feet.add(v3(0, eye, 0)),
+            frame: crate::gravity::Turn::IDENTITY,
+        }
+    }
+
+    /// T37: the same body standing in gravity frame `frame`, along its up.
+    pub fn turned(self, frame: crate::gravity::Turn) -> Target {
+        Target {
+            head: self.feet.add(frame.apply(self.head.sub(self.feet))),
+            frame,
+            ..self
+        }
+    }
+
+    /// T37: a world point as the body's own frame sees it, about its feet.
+    fn local(&self, p: V3) -> V3 {
+        self.feet.add(self.frame.back(p.sub(self.feet)))
+    }
+
+    /// T37: and back to the world.
+    fn world(&self, p: V3) -> V3 {
+        self.feet.add(self.frame.apply(p.sub(self.feet)))
+    }
+
+    /// T37: the body upright, as its own frame sees it.
+    fn standing(&self) -> Target {
+        Target {
+            head: self.local(self.head),
+            frame: crate::gravity::Turn::IDENTITY,
+            ..*self
         }
     }
 }
@@ -664,6 +695,8 @@ pub fn ray_column(o: V3, d: V3, c: V3, r: Fx, lo: Fx, hi: Fx) -> Option<Fx> {
 /// Where the unit ray first meets a body, grown by `grow` (a projectile's
 /// size), and whether it is the head.
 pub fn meets(o: V3, d: V3, t: &Target, grow: Fx) -> Option<(Fx, bool)> {
+    // T37: in the body's own frame, where it stands upright
+    let (o, d, t) = (t.local(o), t.frame.back(d), &t.standing());
     let head = ray_ball(o, d, t.head, HEAD_R + grow);
     let body = ray_column(
         o,
@@ -684,8 +717,9 @@ pub fn meets(o: V3, d: V3, t: &Target, grow: Fx) -> Option<(Fx, bool)> {
 /// The point of a body's upright line, from its feet to its head's centre,
 /// nearest `p`.
 pub fn nearest_on(t: &Target, p: V3) -> V3 {
-    let top = t.head.y;
-    t.feet.add(v3(0, p.y.clamp(t.feet.y, top) - t.feet.y, 0))
+    let (q, u) = (t.local(p), t.standing());
+    let top = u.head.y;
+    t.world(u.feet.add(v3(0, q.y.clamp(u.feet.y, top) - u.feet.y, 0)))
 }
 
 /// How far `p` is from a body's surface: from its upright line, less the
@@ -795,8 +829,10 @@ pub const CUT_SAMPLES: i32 = 5;
 pub fn in_cut(s: &Swing, eye: V3, frame: (V3, V3, V3), was: i32, now: i32, t: &Target) -> bool {
     let (f, along, n) = frame;
     (0..CUT_SAMPLES).any(|k| {
-        let y = t.feet.y + fx::mul(t.head.y - t.feet.y, ONE * k / (CUT_SAMPLES - 1));
-        let q = v3(t.feet.x, y, t.feet.z).sub(eye);
+        let q = t
+            .feet
+            .add(t.head.sub(t.feet).scale(ONE * k / (CUT_SAMPLES - 1)))
+            .sub(eye);
         let d = q.len();
         if d <= BODY_R {
             return true;

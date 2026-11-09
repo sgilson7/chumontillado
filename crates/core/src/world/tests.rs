@@ -5,6 +5,7 @@
 use super::*;
 use crate::fx::int;
 use crate::geom::yaw_of;
+use crate::gravity::Turn;
 use crate::input::{CROUCH, FORWARD, JUMP, LEFT, RIGHT, VINE};
 use crate::movement::{Mover, TUNING};
 
@@ -1800,8 +1801,9 @@ fn every_maps_walls_stand_at_the_edge_of_its_inside() {
     maps.push(crate::map::practice());
     for m in &maps {
         assert_eq!(m.brushes[0].surface, crate::map::Surface::Floor, "{}", m.name);
-        // T31: nor the Tobogán, whose arena is walled in stone blocks
-        let open = ["map_plaza", "map_tobogan"].contains(&m.name);
+        // T31: nor the Tobogán, whose arena is walled in stone blocks; T37:
+        // nor the Cubo, walked on outside as well as in
+        let open = ["map_plaza", "map_tobogan", "map_cubo"].contains(&m.name);
         assert_eq!(m.inside().is_none(), open, "{}", m.name);
         let Some((lo, hi)) = m.inside() else { continue };
         let walls: Vec<_> = m
@@ -2250,4 +2252,145 @@ fn every_lifelike_body_stays_inside_the_hit_envelope_but_what_it_is_allowed() {
     // half of 0.98 m across, and 2 cm for the hoop bands round it
     assert!(allowed("hidalgo", "hat", Up).unwrap() <= ONE * 209 / 100);
     assert!(allowed("infanta", "farthingale", Out).unwrap() <= ONE * 51 / 100);
+}
+
+/// T37: the Cubo alone, the round under way, the one player stood at
+/// `at` on the inner floor facing `face`.
+fn in_the_cubo(at: V3, face: V3) -> World {
+    let cubo = (0..crate::maps::COUNT)
+        .find(|&k| crate::maps::map(k).name == "map_cubo")
+        .unwrap();
+    let mut w = World::online(0b1, 0b1110, [0, 1, 2, 3], 0);
+    w.start_round(cubo);
+    run(&mut w, Input::default(), crate::rounds::COUNT_TICKS as usize + 1);
+    let p = &mut w.players[0];
+    p.body = body_at(at);
+    p.prev = at;
+    p.aim.yaw = yaw_of(face);
+    p.aim.pitch = 0;
+    run(&mut w, Input::default(), 5);
+    w
+}
+
+/// Sam, T37: "when you touch a wall / start to approach it, your gravity
+/// shifts to walk on that wall, with the intent being you lose no
+/// momentum". Run across the floor into the east wall, a body turns onto
+/// it as it nears it, its speed and view turned up the wall with it; it
+/// lands on the wall and runs on up it at much the speed it ran in at.
+#[test]
+fn run_into_a_cubo_wall_and_you_run_on_up_it_at_the_same_speed() {
+    let mut w = in_the_cubo(v3(int(4), 0, int(8)), v3(ONE, 0, 0));
+    let mut before = None;
+    for _ in 0..240 {
+        let speed = w.players[0].speed();
+        w.step(&[keys(FORWARD)]);
+        if w.players[0].frame != Turn::IDENTITY {
+            before = Some(speed);
+            break;
+        }
+    }
+    let before = before.expect("the wall takes the body");
+    let p = &w.players[0];
+    assert_eq!(p.up(), v3(-ONE, 0, 0), "the east wall is its floor");
+    // the view turned up the wall with it
+    assert!(p.look().y > ONE * 9 / 10, "looking up the wall: {:?}", p.look());
+    assert!(
+        p.body.velocity.y >= before * 9 / 10,
+        "carried up: {:?}",
+        p.body.velocity
+    );
+    let y0 = p.body.origin.y;
+    let mut landed = false;
+    let mut slowest = before;
+    for _ in 0..30 {
+        w.step(&[keys(FORWARD)]);
+        let p = &w.players[0];
+        landed |= p.body.on_ground;
+        if landed {
+            slowest = slowest.min(p.speed());
+        }
+    }
+    let p = &w.players[0];
+    assert!(landed, "it stands on the wall");
+    assert!(
+        slowest >= before * 9 / 10,
+        "{} m/s on the wall from {} on the floor",
+        fx::decimal(slowest, 1),
+        fx::decimal(before, 1)
+    );
+    assert!(p.body.origin.y > y0 + int(3), "and runs up it");
+    assert!(
+        p.body.origin.x > int(crate::maps::CUBO_HALF) - int(2),
+        "against the wall"
+    );
+}
+
+/// T37: from the roof outside, run off its edge and a body rolls round the
+/// edge onto the wall's outer face below it, still running.
+#[test]
+fn run_off_the_cubos_outer_edge_and_you_roll_round_it_onto_the_side() {
+    let h = int(crate::maps::CUBO_HALF + crate::maps::CUBO_WALL);
+    let top = int(2 * crate::maps::CUBO_HALF + crate::maps::CUBO_WALL);
+    let mut w = in_the_cubo(v3(h - int(6), top, int(8)), v3(ONE, 0, 0));
+    assert!(w.players[0].body.on_ground, "it stands on the roof");
+    let mut rolled = false;
+    for _ in 0..120 {
+        w.step(&[keys(FORWARD)]);
+        rolled |= w.players[0].up() == v3(ONE, 0, 0);
+        if rolled && w.players[0].body.on_ground {
+            break;
+        }
+    }
+    let p = &w.players[0];
+    assert!(rolled && p.body.on_ground, "on the east face: up {:?}", p.up());
+    assert!(
+        p.body.velocity.y < -int(5),
+        "running down it: {:?}",
+        p.body.velocity
+    );
+    assert!(
+        near(p.body.origin.x, h, ONE / 10),
+        "its feet on the face: {}",
+        fx::decimal(p.body.origin.x, 2)
+    );
+}
+
+/// Sam, T37: "there should be a hole that lets you go on the outside of
+/// the cube as well". Walk into the hole in the floor, and a body goes
+/// down its lining and round its rim onto the underside, outside.
+#[test]
+fn walk_into_the_cubos_hole_and_you_come_out_on_its_underside() {
+    let mut w = in_the_cubo(v3(-int(6), 0, ONE / 2), v3(ONE, 0, 0));
+    for _ in 0..240 {
+        w.step(&[keys(FORWARD)]);
+        let p = &w.players[0];
+        if p.up() == v3(0, -ONE, 0) && p.body.on_ground {
+            break;
+        }
+    }
+    let p = &w.players[0];
+    assert_eq!(p.up(), v3(0, -ONE, 0), "the underside is its floor");
+    assert!(p.body.on_ground);
+    assert!(near(p.body.origin.y, -int(crate::maps::CUBO_WALL), ONE / 10));
+}
+
+/// T37: thrown out into the open beside the cube, a body falls back to
+/// the face it is over, and is not felled for falling.
+#[test]
+fn out_in_the_open_beside_the_cubo_you_fall_back_onto_it() {
+    let h = int(crate::maps::CUBO_HALF + crate::maps::CUBO_WALL);
+    let mut w = in_the_cubo(v3(int(4), 0, int(8)), v3(ONE, 0, 0));
+    let p = &mut w.players[0];
+    p.body.origin = v3(h + int(8), int(18), 0);
+    p.body.velocity = v3(int(5), int(5), 0);
+    p.body.on_ground = false;
+    run(&mut w, Input::default(), 300);
+    let p = &w.players[0];
+    assert!(p.alive());
+    assert_eq!(p.up(), v3(ONE, 0, 0));
+    assert!(
+        p.body.on_ground && near(p.body.origin.x, h, ONE / 10),
+        "{:?}",
+        p.body.origin
+    );
 }

@@ -93,6 +93,8 @@ pub struct Map {
     pub bot_loop: Vec<(i32, i32)>,
     /// T33: the vines that hang to swing on
     pub vines: Vec<Vine>,
+    /// T37: the Cubo, whose gravity turns to the face a body walks on
+    pub cube: Option<crate::gravity::Cube>,
 }
 
 /// T33: a vine, hanging straight down `length` m from `top` until someone
@@ -113,9 +115,10 @@ impl Map {
     /// (its first brush) reaches a metre past the walls' inner faces each
     /// way. Nobody goes past it at any height, over the walls into the sky
     /// included; shots do. T28: a map with no walls (the Plaza) has no
-    /// inside; off its edge is a fall.
+    /// inside; off its edge is a fall. T37: nor has the Cubo, whose outside
+    /// is walked on too.
     pub fn inside(&self) -> Option<(V3, V3)> {
-        if !self.brushes.iter().any(|b| b.surface == Surface::Wall) {
+        if self.cube.is_some() || !self.brushes.iter().any(|b| b.surface == Surface::Wall) {
             return None;
         }
         let f = &self.brushes[0];
@@ -655,6 +658,7 @@ pub fn practice() -> Map {
         pickups: Vec::new(),
         bot_loop: crate::pilot::LOOP.to_vec(),
         vines: Vec::new(),
+        cube: None,
     }
 }
 
