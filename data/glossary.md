@@ -1,0 +1,433 @@
+# Glossary
+
+The source of truth for what each word in this tool means. Strings, tests, the plan and the README use a term in the sense given here. The page shows a definition when a reader hovers the term.
+
+Write each entry as a `### Term` heading, then one or two plain sentences, then an optional `Not:` line listing words that must not be used for it. A number a rule decides is a `{placeholder}` the core fills, so the glossary cannot disagree with the rules. Keep entries in alphabetical order. `crates/core/tests/copy.rs` checks the format, the placeholders and the `Not:` words; `TONE.md` governs the prose.
+
+<!--
+An example entry. It sits inside this comment, so it does not count.
+
+### Spout
+
+Where slush comes out. Each line has up to {line.spouts} spouts.
+
+Not: tap, dispenser, nozzle
+-->
+
+### Hop
+
+A jump on the tick of landing. It skips that tick's friction, so speed gained in the air is kept. Holding jump hops on every landing.
+
+Not: bunny hop, bhop
+
+### Practice room
+
+The room for learning to move and shoot: a slope, two surf ramps, a shaft to climb, open floor, straw targets and a bot.
+
+Not: training ground, tutorial, sandbox
+
+### Slam
+
+A drop straight down, started by crouching in the air. A jump straight after a slam lands goes higher the further it fell.
+
+Not: ground pound, stomp
+
+### Slide
+
+Crouching at a run: a burst of speed and little friction until crouch is let go or the speed falls away.
+
+Not: crouch slide, power slide
+
+### Slide jump
+
+A jump out of a slide, or just after one. It adds speed along the way of travel.
+
+Not: slide hop
+
+### Slope
+
+A face shallow enough to walk up. The practice room's slope leads to its balcony.
+
+Not: incline, ramp
+
+### Surf ramp
+
+A face too steep to stand on. A player on it is in the air, and holding into it keeps them on the face while gravity adds speed.
+
+Not: incline
+
+### Wall jump
+
+A jump off a wall while in the air: a push up and away from it, with the speed along the wall kept. A few are allowed each time a player leaves the ground.
+
+Not: wall kick, double jump
+
+### Acueducto
+
+A valley whose banks are long surf ramps, crossed by an aqueduct to run along and climb.
+
+Not: aqueduct map, canyon
+
+### AK-47
+
+A rifle drawn true that fires three rounds for each pull of the trigger, then rests a moment before the next three.
+
+Not: assault rifle, burst rifle
+
+### Alcázar
+
+A fortress courtyard: ramparts along two sides, too high for a jump, a tower in each corner, arcades of columns, a fountain in the middle. The puñal's jump reaches the ramparts.
+
+Not: castle map, fort
+
+### Arrabal
+
+A quarter of houses on a grid of streets, twice as wide as the first maps, with a surf ramp up a house on each side of its square.
+
+Not: town, city map
+
+### Barranco
+
+A deep ravine whose two sides are surf ramps the whole of its length, crossed by bridges hung with vines.
+
+Not: gorge, valley map
+
+### Bot
+
+A seat played by the game. It moves and shoots only through the same keys and mouse a person's seat uses.
+
+Not: AI, NPC, computer player
+
+### Campana
+
+A painted bell fired in a lob. It bursts where it lands, and its toll pushes everyone near it away.
+
+Not: bell gun, mortar
+
+### Catedral
+
+A cathedral open to the sky: columns down the nave, flying buttresses to surf, a bell tower to climb.
+
+Not: church map
+
+### Collage
+
+A painted gun of scraps stuck together. Its shots bounce once off a wall, so they go round corners.
+
+Not: ricochet gun
+
+### Cubo
+
+A great hollow cube whose every face is a floor. Run at a wall and you turn onto it and run on up it at the same speed; run off an outer edge and you roll round onto the next face. A hole in the middle of its floor goes through to the outside, and one vine hangs from its middle toward whichever face you stand on.
+
+Not: box map, gravity room
+
+### Cut
+
+A melee swing's path, picked by how your view turns as you swing: across a level cut, down a chop, up a rising cut. Between them it cuts on the diagonal; turning too little, the katana and guadaña cut level each way in turn and a knife thrusts.
+
+### Dehesa
+
+A pasture of holm oaks twice as wide as the first maps: a trunk to wall jump off wherever you are, two long ridges to surf and a well at its centre.
+
+Not: pasture map, forest
+
+### Drum launcher
+
+A gun drawn true that throws bouncing grenades. Each bursts when it meets a body or its fuse runs out.
+
+Not: grenade launcher, nade launcher
+
+### Duel the bot
+
+The practice room with its bot shooting back. Each of you stands again at your spawn a moment after going down.
+
+Not: deathmatch, versus
+
+### El Sordo
+
+A skin after Goya: a black cloak, a ragged grey head and wide white eyes.
+
+Not: deaf man
+
+### Galería
+
+A long hall with rooms of paintings off it, some tall enough to climb wall to wall.
+
+Not: museum, gallery map
+
+### Garrocha
+
+A picador's pole drawn true, long and slow. Wound back for a long moment, it flings you along your aim faster than anything else can, its point striking whoever it meets.
+
+Not: lance, spear, pole vault
+
+### Guadaña
+
+The painted scythe: a long, slow swing. Its second button throws a hook at a wall and pulls you there while held.
+
+Not: scythe, reaper
+
+### Headshot
+
+A shot that meets the head. It does twice a body's damage.
+
+Not: crit, critical
+
+### Hitscan
+
+A gun whose shot arrives the moment it is fired, along a straight line from the eye.
+
+Not: instant hit, raycast
+
+### Host
+
+The player who opens an online match. The host holds the first seat, gives each guest a seat, starts the match, and passes on what one guest sends to the others.
+
+Not: server, admin
+
+### Invite link
+
+The game's address with a room code in it. Opening it joins that room.
+
+Not: lobby link
+
+### Katana
+
+A sword drawn true. Each swing carries you on a little, its second button lunges, and the first ticks of a swing parry.
+
+Not: sword, blade
+
+### Lever rifle
+
+A rifle drawn true: slow and heavy, a headshot kills.
+
+Not: sniper, marksman rifle
+
+### Lifelike
+
+A skin's style drawn as Style Lab made it: a photographed body with its own clothes, moving as a person does. Hit the same as its painted style.
+
+Not: realistic, HD, photoreal
+
+### Lobby
+
+Where the players of an online match wait for the host to start it, each seat a card with its figure in it. After a match, everyone still in the room comes back to it for the next.
+
+Not: waiting room
+
+### Lobby list
+
+The lobbies other players are hosting with a seat free, read from the public relays: Find a game shows it, and Quick match joins from it. A lobby leaves it when it fills, starts or closes, and a host can keep theirs off it.
+
+Not: server browser, matchmaking server
+
+### Lunge
+
+The katana's second use: it flings you along your view and hits whatever its arc meets on the way.
+
+Not: dash
+
+### Machine pistol
+
+A small gun drawn true that fires while the button is held.
+
+Not: SMG, uzi
+
+### Mercado
+
+A market square ringed by arcades: the stalls' steep roofs are short surf ramps, a fountain stands in the middle.
+
+Not: marketplace map
+
+### Molino
+
+A hill of La Mancha whose four sides are surf ramps, a windmill in each corner with its sails across its face, stone walls and haystacks over the fields.
+
+Not: windmill map, hill
+
+### Navaja
+
+A folding knife drawn true, quick and short. From behind it fells anyone; held, it makes you a little faster.
+
+Not: knife, switchblade, backstab knife
+
+### Painted
+
+A skin's style as the game first drew it, from the painted shapes. Every skin can be worn painted or lifelike.
+
+Not: stylized, classic, old
+
+### Parry
+
+A katana swing turning a projectile back the way you face, as yours. It works in the first ticks of a swing.
+
+Not: deflect, reflect
+
+### Pincel
+
+The painted rifle. It charges while the button is held, fires when let go, passes through bodies, and leaves its stroke in the air.
+
+Not: railgun, brush gun
+
+### Playlist
+
+Maps in the order a match plays them, built on the Playlists screen and kept in this browser. Every map, in turn, is the first playlist.
+
+Not: rotation, map pool
+
+### Plaza
+
+The bullring: an open ring, its stands a ring of surf ramps, standing in the sky with nothing behind them.
+
+Not: arena, bullring map
+
+### Projectile
+
+A shot that flies, falls and bounces, so it arrives a moment after it is fired.
+
+Not: bullet, missile
+
+### Puerto
+
+A harbour: a ship's hull down the middle to surf either side, crates stacked on the quays, a shed.
+
+Not: port map, docks
+
+### Pump shotgun
+
+A gun drawn true that fires eight pellets on a fixed ring. Fired at the floor in the air, it throws you up.
+
+Not: scattergun
+
+### Puñal
+
+A straight dagger drawn true, light and quick. Held, it makes a jump more than twice as high.
+
+Not: dagger, knife, high-jump knife
+
+### Quick match
+
+Joins the best lobby on the lobby list, or hosts one if the list is empty. When two players looking at once each host, one gives way and joins the other.
+
+Not: matchmaking queue, ranked
+
+### Room code
+
+Five letters that name an online match. Anyone who types them joins it while a seat is free.
+
+Not: lobby code, session id
+
+### Round
+
+One life each on one map, after a short count: the last seat standing takes it. A match is won on rounds taken.
+
+Not: heat, leg
+
+### Seat
+
+One of an online match's four places. A player holds it, or a bot plays it.
+
+Not: player slot
+
+### Selva
+
+A jungle twice as wide as the first maps: rows of vines hang from branches across its middle, between two great surf ramps.
+
+Not: forest, jungle map
+
+### Service pistol
+
+The sidearm every player starts with.
+
+Not: handgun, sidearm pistol
+
+### Sierra
+
+Four long ridges to surf, each cut by a pass at its middle, with rocks in the valleys between; twice as wide as the first maps.
+
+Not: mountains, hills map
+
+### Skin
+
+How a player looks: the Hidalgo, the Infanta, the Harlequin, El Sordo, the Friar, the Torero, the Black Knight or the Ivory Knight, each painted or lifelike. Every skin is hit the same.
+
+Not: costume, outfit
+
+### Skin style
+
+Whether a skin is worn painted or lifelike: a setting beside the skin, seen by everyone in a match. Bots wear theirs painted.
+
+Not: quality, mode
+
+### Straw target
+
+A figure on a post in the practice room. Shot down, it stands again a few seconds later.
+
+Not: dummy, mannequin
+
+### The Black Knight
+
+A knight in blackened plate under a flat-topped helm, with wide shoulders and a torn dark cloak, from Chumworld Arena.
+
+Not: dark knight, black helm
+
+### The Friar
+
+A skin after Zurbarán: a white habit to the ground in deep folds, a rope belt, the hood up behind a face in shadow.
+
+Not: monk, priest
+
+### The Harlequin
+
+A skin after Picasso: diamonds of colour, and a face in two views at once.
+
+Not: clown, jester
+
+### The Hidalgo
+
+A skin after El Greco: drawn long, a black doublet, a ruff and a crimson sash.
+
+Not: nobleman
+
+### The Infanta
+
+A skin after Velázquez: a silver bell skirt, wide pale hair and a red bow.
+
+Not: princess
+
+### The Ivory Knight
+
+A knight in pale plate with gilt, a crown of spikes on the helm and a skirt of plate scorched at the hem, from Chumworld Arena.
+
+Not: white knight, ivory crown
+
+### The Torero
+
+A skin after Zuloaga: a suit of lights in green and gold, pink stockings, a black two-lobed hat and a pink cape over one shoulder.
+
+Not: matador, bullfighter
+
+### Tobogán
+
+A slide from a platform high in the sky: a trough of two surf faces that falls, levels and rises to a jump into a walled arena. Off its sides is a fall to your death.
+
+Not: slide map, chute
+
+### Toro
+
+A painted gun with horns that fires slow rockets. Fired at your feet, its burst throws you up.
+
+Not: rocket launcher, bazooka
+
+### Trabuco
+
+A painted blunderbuss that fires seven nails. A nail that meets a body with a wall close behind pins it there.
+
+Not: nail gun, blunderbuss
+
+### Vine
+
+A rope of green hanging from a branch or a bridge. Hold F as you reach it to take hold and swing; let go of F, or jump, to drop off, keeping the speed of the swing.
+
+Not: rope, liana

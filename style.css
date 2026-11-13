@@ -1,0 +1,211 @@
+/* The page's frame round the view: the loading state, the panels the core
+   describes (title, menu, pause, settings), the lines over play, and
+   messages. The journal's roster palette: primed canvas, ivory black,
+   vermilion and ochre, after the tenebrists. */
+:root {
+  --ink: #efe3c8;
+  --ink-soft: #bfae8f;
+  --umber: #2a1e15;
+  --umber-edge: #4a3527;
+  --glass: rgba(23, 17, 12, 0.9);
+  --accent: #b3361f;
+  --accent-deep: #6e1d18;
+  --ochre: #c79a3a;
+  --hit: #f2e6cf;
+  --shadow: 0 18px 50px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+* { box-sizing: border-box; }
+/* A display rule elsewhere must not show what the page hid. */
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; overflow: hidden; }
+body {
+  background: #17110c;
+  color: var(--ink);
+  font: 16px/1.45 Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+#view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; background: #17110c; }
+body[data-ready="false"] #view { visibility: hidden; }
+#loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 18px; letter-spacing: 0.08em; color: var(--ink-soft); }
+
+/* the crosshair: a small cross, only in play */
+#crosshair { position: fixed; left: 50%; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px; pointer-events: none; display: none; filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 1px #000); }
+#crosshair::before, #crosshair::after { content: ""; position: absolute; background: var(--ink); }
+#crosshair::before { left: 0; right: 0; top: 8px; height: 2px; }
+#crosshair::after { top: 0; bottom: 0; left: 8px; width: 2px; }
+body[data-screen="play"] #crosshair { display: block; }
+
+#overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.15) 0%, rgba(0, 0, 0, 0.6) 100%); }
+body[data-screen="title"] #overlay, body[data-screen="menu"] #overlay { align-items: flex-end; justify-content: flex-start; padding: 0 0 8vh 6vw; background: linear-gradient(90deg, rgba(10, 6, 3, 0.75) 0%, rgba(0, 0, 0, 0) 62%); }
+.panel { min-width: 320px; max-width: 460px; max-height: calc(100vh - 32px); overflow: auto; padding: 28px 32px 24px; border-radius: 6px; background: var(--glass); border: 1px solid var(--umber-edge); box-shadow: var(--shadow); }
+#title, #menu { background: none; border: none; box-shadow: none; max-width: 640px; }
+.panel h1 { margin: 0 0 14px; font-size: 30px; line-height: 1.1; font-weight: 700; letter-spacing: 0.05em; }
+#title h1, #menu h1 { font-size: 64px; letter-spacing: 0.04em; font-style: italic; text-shadow: 0 3px 18px rgba(0, 0, 0, 0.7); }
+.panel h2 { margin: 20px 0 8px; font-size: 12px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-soft); }
+.panel p { margin: 0 0 16px; color: var(--ink-soft); font-size: 17px; }
+.panel button { display: block; width: 100%; padding: 13px 22px; border: 1px solid var(--accent-deep); border-radius: 4px; background: var(--accent); color: #f6efe2; font: inherit; font-size: 18px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; box-shadow: 0 3px 0 var(--accent-deep); }
+#title button, #menu button { max-width: 320px; }
+.panel button + button { margin-top: 10px; }
+.panel button:hover:not(:disabled) { filter: brightness(1.1); }
+.panel button:focus-visible { outline: 2px solid var(--ochre); outline-offset: 3px; }
+.setting { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--umber-edge); }
+.setting .label { flex: 1; }
+/* M4: a code or link to copy, or a box to type a code into */
+.field { display: block; margin: 0 0 12px; }
+.field .label { display: block; margin-bottom: 4px; font-size: 12px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-soft); }
+.field input { box-sizing: border-box; width: 100%; padding: 10px 12px; border: 1px solid var(--umber-edge); border-radius: 4px; background: rgba(255, 250, 240, 0.08); color: inherit; font: inherit; font-size: 17px; }
+.field input[readonly] { font-family: ui-monospace, Menlo, monospace; letter-spacing: 0.04em; }
+#room-code { font-size: 26px; letter-spacing: 0.3em; text-align: center; }
+.field + button { margin-top: 4px; }
+/* the copy buttons and seat switches sit side by side, smaller than a
+   screen's choices */
+.panel .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; margin: 0 0 12px; }
+.panel button + .pair { margin-top: 10px; }
+.panel .pair button.small { margin: 0; padding: 8px 10px; font-size: 13px; letter-spacing: 0.06em; box-shadow: none; }
+.panel .pair button.small:disabled { opacity: 0.55; cursor: default; }
+#online h1 { margin-bottom: 8px; }
+/* T25: the online lobby, in portrait: the room's code across the top, the
+   four seats as tall cards each round the figure standing in it (the core
+   says where), and Start and Leave along the foot */
+#online.lobby { position: fixed; inset: 0; min-width: 0; max-width: none; max-height: none; padding: 0; overflow: visible; border: none; border-radius: 0; background: none; box-shadow: none; pointer-events: none; }
+#online.lobby .head, #online.lobby .bar, #online.lobby .card { pointer-events: auto; }
+#online.lobby .head { position: absolute; left: 0; right: 0; top: 0; display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px 32px; padding: 18px 4vw 40px; background: linear-gradient(to bottom, rgba(12, 8, 5, 0.92) 0%, rgba(12, 8, 5, 0.7) 70%, rgba(12, 8, 5, 0) 100%); }
+#online.lobby .intro { flex: 1 1 340px; max-width: 62ch; }
+#online.lobby .intro h1 { font-size: 34px; }
+#online.lobby .intro p { margin: 0; font-size: 15px; }
+#online.lobby .room { flex: 0 1 460px; display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 0 12px; align-items: end; }
+#online.lobby .room .field { margin: 0 0 8px; }
+#online.lobby .room .pair { grid-column: 1 / -1; margin: 0; }
+#online.lobby #room-code { font-size: 22px; padding: 7px 8px; }
+#online.lobby .bar { position: absolute; left: 0; right: 0; bottom: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; padding: 40px 4vw 22px; background: linear-gradient(to top, rgba(12, 8, 5, 0.85) 0%, rgba(12, 8, 5, 0) 100%); }
+#online.lobby .bar button { width: auto; min-width: 240px; margin: 0; }
+.cards { position: absolute; inset: 0; }
+.card { position: absolute; left: var(--x); top: max(calc(var(--head) - 44px), 142px); bottom: calc(100% - var(--feet) - 92px); width: min(18.5vw, 280px); transform: translateX(-50%); display: flex; flex-direction: column; justify-content: space-between; padding: 10px 12px 12px; border: 1px solid var(--umber-edge); border-radius: 8px; background: linear-gradient(to bottom, rgba(23, 17, 12, 0.55) 0%, rgba(23, 17, 12, 0) 18%, rgba(23, 17, 12, 0) 70%, rgba(23, 17, 12, 0.92) 86%); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(239, 227, 200, 0.04); }
+.card-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 12px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
+.card-top .seat { color: var(--ink-soft); }
+.card-top .who { padding: 2px 8px; border-radius: 3px; background: var(--umber); border: 1px solid var(--umber-edge); }
+.card .plate { display: flex; flex-direction: column; gap: 4px; }
+.card .plate p { margin: 0; }
+.card .skin { font-size: 20px; font-style: italic; font-weight: 700; line-height: 1.15; color: var(--ink); }
+.card .note { font-size: 13px; color: var(--ochre); }
+.panel .card .pair, .card .plate button.small { margin: 6px 0 0; padding: 7px 10px; font-size: 12px; letter-spacing: 0.06em; box-shadow: none; }
+/* T34: the style worn, and on your card Painted and Lifelike side by side, the one worn pressed */
+.card .style { font-size: 13px; letter-spacing: 0.06em; color: var(--ochre); }
+.card .styles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.card .styles button:disabled { opacity: 1; background: var(--ochre); color: var(--umber); }
+/* T26: your card's skin picker: Previous and Next either side of the name */
+.card .picker { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 6px 8px; }
+.card .picker .picked { grid-column: 1 / -1; grid-row: 1; min-width: 0; display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.card .picker .of { font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-soft); }
+.panel .card .picker button.small { margin: 0; padding: 7px 8px; font-size: 12px; letter-spacing: 0.06em; }
+.card[data-kind="you"] { border-color: var(--ochre); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), 0 0 0 1px var(--ochre), 0 0 24px rgba(199, 154, 58, 0.25); }
+.card[data-kind="you"] .who { background: var(--ochre); border-color: var(--ochre); color: var(--umber); }
+.card[data-kind="player"] .who { background: var(--accent); border-color: var(--accent-deep); color: #f6efe2; }
+.card[data-kind="bot"] { border-style: solid; opacity: 0.92; }
+.card[data-kind="empty"] { border: 1px dashed var(--ink-soft); background: rgba(23, 17, 12, 0.35); justify-content: space-between; }
+.card[data-kind="empty"] .plate button.small { background: transparent; color: var(--ink); border-color: var(--ink-soft); }
+@media (max-height: 640px) {
+  #online.lobby .intro h1 { font-size: 26px; }
+  #online.lobby .intro p { font-size: 13px; }
+  .card .skin { font-size: 16px; }
+}
+#online table.controls td { padding: 2px 0; }
+.setting output { min-width: 64px; text-align: right; font-weight: 700; color: var(--ochre); }
+.setting button { width: auto; min-width: 44px; margin: 0; padding: 6px 12px; font-size: 14px; letter-spacing: 0.04em; box-shadow: none; }
+.setting + button { margin-top: 20px; }
+.setting button + button { margin-top: 0; }
+table.controls { width: 100%; border-collapse: collapse; }
+table.controls td { padding: 4px 0; vertical-align: top; font-size: 14px; }
+table.controls td:first-child { width: 34%; padding-right: 10px; }
+kbd { display: inline-block; padding: 2px 8px; border-radius: 3px; background: var(--umber); border: 1px solid var(--umber-edge); font: inherit; font-size: 13px; font-weight: 700; }
+#message { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); margin: 0; max-width: 80vw; color: #f4b39f; }
+/* a message that the game has stopped, or cannot draw: plain to read */
+#message.error { top: 50%; bottom: auto; transform: translate(-50%, -50%); padding: 18px 24px; border-radius: 6px; background: rgba(20, 14, 10, 0.92); border: 1px solid #f4b39f; font-size: 17px; line-height: 1.5; z-index: 20; }
+
+/* the lines over play: speed under the crosshair's lower left, as the
+   journal's HUD mockup places it */
+#hud { position: fixed; inset: 0; pointer-events: none; }
+.hud-item { position: fixed; margin: 0; padding: 6px 14px; border-radius: 5px; background: rgba(0, 0, 0, 0.5); color: var(--ink); opacity: 0; transition: opacity 0.4s ease; }
+.hud-item.shown { opacity: 1; }
+body:not([data-screen="play"]) #hud { display: none; }
+#hud-speed { left: 50%; bottom: 4vh; transform: translateX(-50%); font: 700 28px/1.2 ui-monospace, Menlo, Consolas, monospace; min-width: 180px; text-align: center; transition: none; }
+/* T18: the health bar: what is left in ivory, the part just lost in
+   vermilion until it drains, the rest dark; it jolts when hit and pulses
+   red when low */
+#hud-health {
+  left: 24px; bottom: 4vh; width: 280px; padding: 4px 14px; font-size: 22px; font-weight: 700; transition: none;
+  color: var(--umber); text-shadow: 0 0 6px rgba(239, 227, 200, 0.6);
+  border: 2px solid var(--umber-edge);
+  background: linear-gradient(to right, var(--ink) 0 var(--fill, 100%), var(--accent) var(--fill, 100%) var(--trail, 100%), rgba(0, 0, 0, 0.6) var(--trail, 100%));
+}
+#hud-health[data-tone="struck"] { animation: jolt 0.13s linear; border-color: var(--accent); }
+#hud-health[data-tone="low"] { animation: low 0.9s ease-in-out infinite; color: var(--ink); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8); background: linear-gradient(to right, var(--accent) 0 var(--fill, 100%), var(--accent-deep) var(--fill, 100%) var(--trail, 100%), rgba(0, 0, 0, 0.6) var(--trail, 100%)); }
+@keyframes jolt { 0% { transform: translate(0, 0); } 25% { transform: translate(-5px, 2px); } 50% { transform: translate(4px, -2px); } 75% { transform: translate(-2px, 1px); } 100% { transform: translate(0, 0); } }
+@keyframes low { 0%, 100% { border-color: var(--umber-edge); } 50% { border-color: var(--accent); box-shadow: 0 0 14px var(--accent); } }
+/* T18: hit: the screen's edges flush red, and an arc round the crosshair
+   points to the shooter; the core sets how strong and which way */
+#hud-hurt { inset: 0; padding: 0; border-radius: 0; transition: none; background: radial-gradient(ellipse at center, transparent 45%, rgba(110, 29, 24, 0.55) 75%, rgba(179, 54, 31, 0.95) 100%); }
+#hud-hurt.shown { opacity: var(--fill); }
+#hud-bearing { left: 50%; top: 50%; width: 0; height: 0; padding: 0; background: none; border-radius: 0; transition: none; transform: rotate(var(--turn, 0deg)); }
+#hud-bearing.shown { opacity: var(--fill); }
+#hud-bearing::before { content: ""; position: absolute; width: 22vh; height: 22vh; left: -11vh; top: -11vh; border-radius: 50%; border: 7px solid transparent; border-top-color: var(--accent); filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.8)); }
+#hud-walls { left: 24px; bottom: calc(4vh + 52px); font-size: 16px; letter-spacing: 0.04em; transition: none; }
+#hud-doing { left: 24px; bottom: calc(4vh + 94px); font-size: 14px; color: var(--ink-soft); transition: none; }
+#hud-ammo { right: 24px; bottom: 4vh; font: 700 28px/1.2 ui-monospace, Menlo, Consolas, monospace; transition: none; }
+#hud-gun { right: 24px; bottom: calc(4vh + 52px); font-size: 16px; transition: none; }
+#hud-top { right: 24px; top: 18px; font-size: 15px; transition: none; }
+#hud-hint { left: 50%; top: 18px; transform: translateX(-50%); font-size: 15px; transition: opacity 1.2s ease; }
+#hud-reload, #hud-charge { left: 50%; top: calc(50% + 36px); transform: translateX(-50%); font-size: 14px; letter-spacing: 0.08em; transition: none; }
+/* M5: the round */
+#hud-round { left: 24px; top: 18px; font-size: 15px; transition: none; }
+#hud-scores { left: 24px; top: 58px; font-size: 14px; color: var(--ink-soft); transition: none; }
+#hud-clock { left: 50%; top: 66px; transform: translateX(-50%); font: 700 22px/1.2 ui-monospace, Menlo, Consolas, monospace; transition: none; }
+#hud-count { left: 50%; top: 30%; transform: translateX(-50%); font: 700 72px/1 ui-monospace, Menlo, Consolas, monospace; padding: 10px 30px; transition: none; }
+#hud-ended { left: 50%; top: 30%; transform: translateX(-50%); font-size: 30px; font-weight: 700; padding: 12px 28px; transition: none; }
+#hud-watching { left: 50%; top: 70%; transform: translateX(-50%); font-size: 16px; transition: none; }
+#hud-online { left: 24px; top: 98px; font-size: 13px; transition: none; }
+/* the markers through walls: a hollow diamond where each seat stands */
+[id^="hud-seen-"] { width: 18px; height: 18px; margin: -9px 0 0 -9px; padding: 0; background: none; border: 3px solid var(--accent); border-radius: 2px; transform: rotate(45deg); transition: none; box-shadow: 0 0 6px rgba(0, 0, 0, 0.6); }
+#hud-dead { left: 50%; top: 38%; transform: translateX(-50%); font-size: 26px; padding: 12px 24px; transition: none; }
+/* the hit mark and the kill mark: an X round the crosshair, open at its
+   middle; the kill's larger and heavier */
+#hud-mark, #hud-kill { left: 50%; top: 50%; padding: 0; background: none; border-radius: 0; transition: none; }
+#hud-mark { width: 34px; height: 34px; margin: -17px 0 0 -17px; }
+#hud-kill { width: 52px; height: 52px; margin: -26px 0 0 -26px; }
+#hud-mark::before, #hud-mark::after, #hud-kill::before, #hud-kill::after {
+  content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 3px; margin-left: -1.5px;
+  background: linear-gradient(to bottom, var(--hit) 0 34%, transparent 34% 66%, var(--hit) 66% 100%);
+}
+#hud-kill::before, #hud-kill::after { width: 5px; margin-left: -2.5px; background: linear-gradient(to bottom, var(--accent) 0 34%, transparent 34% 66%, var(--accent) 66% 100%); }
+#hud-mark::before, #hud-kill::before { transform: rotate(45deg); }
+#hud-mark::after, #hud-kill::after { transform: rotate(-45deg); }
+@media (max-height: 640px) {
+  #title h1, #menu h1 { font-size: 44px; }
+  table.controls td { padding: 1px 0; }
+}
+
+/* T32: the Playlists screen: the playlist on the left, every map on the right */
+body[data-screen="playlists"] #overlay { gap: 24px; align-items: stretch; padding: 4vh 4vw; }
+#playlist { flex: 1 1 460px; max-width: 560px; }
+#maps { flex: 0 1 360px; }
+#maps button { padding: 9px 16px; font-size: 15px; text-align: left; }
+#maps button + button { margin-top: 6px; }
+#playlist .setting output { min-width: 0; flex: 3; text-align: left; color: inherit; }
+#playlist .setting .label { flex: 0 0 32px; color: var(--ink-soft); }
+#playlist .setting button:disabled { opacity: 0.35; cursor: default; }
+#playlist > button { margin-top: 10px; }
+@media (max-width: 760px) {
+  body[data-screen="playlists"] #overlay { flex-direction: column; overflow: auto; }
+}
+/* T32: in the lobby, the host's plan for the match beside the room code */
+#online.lobby .plan { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 28px; width: 100%; }
+#online.lobby .plan .setting { gap: 8px; padding: 0; border: none; font-size: 14px; }
+#online.lobby .plan .setting output { min-width: 0; font-size: 14px; }
+#online.lobby .plan .setting button { min-width: 0; padding: 4px 10px; font-size: 12px; }
+#playlist .pair { display: flex; gap: 10px; }
+#playlist .pair button { margin-top: 0; padding: 9px 12px; font-size: 14px; }
+@media (max-width: 760px) {
+  #playlist .setting { flex-wrap: wrap; }
+  #playlist .setting output { flex: 1 1 60%; }
+}

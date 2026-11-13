@@ -1,0 +1,24 @@
+{
+ "_about": "T34: how deep one capsule may sink before scripts/check_clips.py fails, in metres (Espiochum's limits). Capsules are rough (a bone and a radius), so a little overlap is allowed. off_the_floor names the lower clips whose feet are meant to leave the floor: in the air, and hanging from a vine. contacts lists, per upper clip, bone prefixes meant to touch there (Espiochum's rule): in the slash's wind-up the right arm crosses in front of the chest, nearer than the chest's round capsule allows.",
+ "ground": 0.03,
+ "self": 0.035,
+ "off_the_floor": [
+  "air",
+  "hang"
+ ],
+ "contacts": {
+  "slash": [
+   [
+    [
+     "upperarm01.R",
+     "upperarm02.R",
+     "lowerarm01.R"
+    ],
+    [
+     "spine01",
+     "spine02"
+    ]
+   ]
+  ]
+ }
+}

@@ -1,0 +1,4 @@
+{
+  "_note": "Renderer names that mean a CPU is drawing in place of a graphics card (the realtime kit's list). The page tells the core, which then draws fewer pixels (crates/core/src/game.rs, SOFTWARE_SCALE_PCT).",
+  "software": ["SwiftShader", "llvmpipe", "Software", "Microsoft Basic Render"]
+}

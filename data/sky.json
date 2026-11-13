@@ -1,0 +1,7 @@
+{
+  "_note": "The sky's share of the haze (M2, crates/core/src/sky.rs; scene.frag and water.frag's haze). The land fades wholly into the sky's colour between edge_m, before the 16 384 m far plane, so the horizon has no edge; over the middle distance (aerial_m: rising, whole, falling, gone) the haze is tinted toward a cool blue, so far ridges read as land fading into air, as Crimson Desert's vistas do, and are the sky's own colour again by the horizon.",
+  "edge_m": [12500, 16000],
+  "aerial": [150, 172, 204],
+  "aerial_pct": 38,
+  "aerial_m": [1200, 5500, 9000, 15000]
+}
