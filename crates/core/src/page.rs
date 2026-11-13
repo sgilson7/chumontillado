@@ -12,6 +12,20 @@ use serde::Serialize;
 
 /// Every key the game reads, so a missing one is found at start, not mid-game.
 pub const REQUIRED: &[&str] = &[
+    "quick_match",
+    "find_game",
+    "quick_looking",
+    "browse_connecting",
+    "browse_none",
+    "browse_some",
+    "browse_maps",
+    "browse_lobby",
+    "region_americas",
+    "region_europe",
+    "region_asia",
+    "setting_listed",
+    "listed_public",
+    "listed_friends",
     "title",
     "loading",
     "no_webgl",

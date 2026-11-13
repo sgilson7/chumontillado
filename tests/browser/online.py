@@ -182,6 +182,61 @@ def run(p, engine, origin):
     browser.close()
 
 
+def run_list(p, engine, origin):
+    """T38: a public host's lobby is listed, and a player who presses Find a
+    game sees it and joins it from the list; then two players press Quick
+    match at once and end in one lobby."""
+    print(f"\n[{engine}] online: Find a game lists a host's lobby; two Quick matches meet")
+    browser = getattr(p, engine).launch(**LAUNCH.get(engine, {}))
+    seen = []
+    q = "?ice=none&pointer=free"
+    host = open_page(browser, f"{origin}/index.html{q}", "host", seen)
+    host.click("#title button")
+    host.click('button[data-action="online.host"]')
+    host.wait_for_selector("#room-code", state="attached", timeout=TIMEOUT_MS)
+    code = host.input_value("#room-code")
+    finder = open_page(browser, f"{origin}/index.html{q}", "finder", seen)
+    finder.click("#title button")
+    finder.click('button[data-action="browse.open"]')
+    listed = f'button[data-action="browse.join"][data-value="{code}"]'
+    try:
+        finder.wait_for_selector(listed, state="attached", timeout=TIMEOUT_MS)
+        ok = True
+    except Exception:
+        ok = False
+    check(ok, f"Find a game lists the host's lobby ({code})")
+    if ok:
+        finder.click(listed)
+        try:
+            host.locator("#seat-1 .who", has_text=STRINGS["seat_player"]).wait_for(state="attached", timeout=TIMEOUT_MS * 2)
+            ok = True
+        except Exception:
+            ok = False
+        check(ok, "the player who found it takes a seat in the host's lobby")
+    # both leave as a player would, so their records and links close
+    for page in (host, finder):
+        page.click('button[data-action="screen.menu"]')
+
+    a = open_page(browser, f"{origin}/index.html{q}", "quick a", seen)
+    b = open_page(browser, f"{origin}/index.html{q}", "quick b", seen)
+    for page in (a, b):
+        page.click("#title button")
+    for page in (a, b):
+        page.click('button[data-action="browse.quick"]')
+    # one hosts, the other gives way and joins it: the host sees a player
+    joined = []
+    for who, page in (("a", a), ("b", b)):
+        try:
+            page.locator("#seat-1 .who", has_text=STRINGS["seat_player"]).wait_for(state="attached", timeout=TIMEOUT_MS * 2)
+            joined.append(who)
+        except Exception:
+            pass
+    codes = {a.input_value("#room-code") if a.query_selector("#room-code") else "", b.input_value("#room-code") if b.query_selector("#room-code") else ""}
+    check(len(joined) >= 1 and len(codes) == 1, f"two Quick matches pressed at once end in one lobby ({joined}, {codes})")
+    check(not seen, f"no page error ({seen})")
+    browser.close()
+
+
 def main(engines):
     # BUILDER_ORIGIN, as for the browser check: the live site, whose invite
     # link is then the real one
@@ -191,6 +246,7 @@ def main(engines):
     with sync_playwright() as p:
         for engine in engines:
             run(p, engine, origin)
+            run_list(p, engine, origin)
     if server:
         server.shutdown()
     print()

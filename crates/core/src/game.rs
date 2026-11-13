@@ -42,6 +42,8 @@ pub enum Screen {
     Online,
     /// T32: building playlists of maps
     Playlists,
+    /// T38: the list of open lobbies, and Quick match looking
+    Browse,
 }
 
 impl Screen {
@@ -54,6 +56,7 @@ impl Screen {
             Screen::Settings => "settings",
             Screen::Online => "online",
             Screen::Playlists => "playlists",
+            Screen::Browse => "browse",
         }
     }
 }
@@ -103,11 +106,30 @@ pub struct Game {
     /// a room code the reader is typing toward, or that a link brought
     pub invited: String,
     /// the seed the page drew, for room codes
-    seed: u32,
+    pub(crate) seed: u32,
     /// the page's clock at the last frame (µs)
     pub now_us: i64,
     /// the last words of a match just left, still to send
     outbox_left: Vec<(u32, String)>,
+    /// T38: the link to the relays for the lobby list (`find.rs`): asked
+    /// of the page, and once open, what the core keeps of it
+    pub(crate) lobby_link: bool,
+    pub relays: Option<crate::browse::Relays>,
+    /// the bytes the page drew for this visit's key, kept for every link
+    pub(crate) lobby_seed: Vec<u8>,
+    /// the last frames of a link just closed, still to send
+    pub(crate) lobby_left: Vec<(i32, String)>,
+    /// a hosted lobby is listed (a setting, on to start)
+    pub public: bool,
+    /// Quick match, while it is under way
+    pub quick: Option<crate::find::Quick>,
+    /// lobbies joined from the list whose hosts never answered
+    pub(crate) dead: crate::find::Dead,
+    /// the lobby last joined from the list, until it answers or is left
+    pub(crate) from_list: Option<String>,
+    /// the page clock the list opened at, and the last whole second shown
+    pub(crate) listed_since_us: i64,
+    pub(crate) listed_secs_seen: i64,
     /// the field just copied to the clipboard, whose button says so
     pub copied: String,
     /// M5: the skin this player wears (a setting), by `skins::SKINS` number
@@ -187,6 +209,16 @@ impl Game {
             seed,
             now_us: 0,
             outbox_left: Vec::new(),
+            lobby_link: false,
+            relays: None,
+            lobby_seed: Vec::new(),
+            lobby_left: Vec::new(),
+            public: true,
+            quick: None,
+            dead: Default::default(),
+            from_list: None,
+            listed_since_us: 0,
+            listed_secs_seen: 0,
             copied: String::new(),
             skin: 0,
             lifelike: false,
@@ -254,6 +286,7 @@ impl Game {
     /// bits, and the mouse and wheel movement in hundredths of a CSS pixel.
     pub fn advance(&mut self, now_us: i64, bits: u32, dx: i32, dy: i32, wheel: i32) {
         self.now_us = now_us;
+        self.follow_lobby();
         // R10.12: a new word about the links shows at once
         let notice = self.versus.as_ref().and_then(|v| v.notice(now_us));
         if notice != self.notice_seen {
@@ -735,7 +768,7 @@ impl Game {
     }
 
     /// M4: a room to host or join: the transport is told to open it.
-    fn open_room(&mut self, host: bool, code: &str) {
+    pub(crate) fn open_room(&mut self, host: bool, code: &str) {
         let mut v = Versus::new(host, code, &self.build, self.skin, self.lifelike);
         v.set_skill(self.skill);
         v.opened_us = Some(self.now_us);
@@ -747,7 +780,7 @@ impl Game {
         self.ui_version += 1;
     }
 
-    fn command(&mut self, act: &str, host: bool, room: &str) {
+    pub(crate) fn command(&mut self, act: &str, host: bool, room: &str) {
         let id = self.cmds.len() as u32 + 1;
         self.cmds.push(Cmd {
             id,
@@ -762,6 +795,7 @@ impl Game {
     /// Leaves an online lobby or match, if one is open: the others are told
     /// and the transport closes.
     pub fn leave_online(&mut self) {
+        self.forget_dead_lobby();
         if let Some(mut v) = self.versus.take() {
             v.leave();
             // the bye goes out before the close
@@ -869,8 +903,23 @@ impl Game {
                 self.draw();
             }
             "screen.menu" => {
+                self.quick = None;
                 self.leave_online();
                 self.show(Screen::Menu)
+            }
+            // T38: the lobby list, and Quick match
+            "browse.open" => self.find_game(),
+            "browse.quick" => self.quick_match(),
+            "browse.join" => {
+                let code = versus::read_code(v).ok_or_else(|| self.strings.get("online.bad_room"))?;
+                self.quick = None;
+                self.join_listed(&code);
+            }
+            // T38: a hosted lobby listed, or for friends only
+            "online.public" => {
+                let step: i32 = v.parse().map_err(|_| format!("\"{value}\" is not a step."))?;
+                self.public = step > 0;
+                self.ui_version += 1;
             }
             // M4: online play
             "online.build" => self.build = v.to_string(),
@@ -2160,8 +2209,8 @@ pub(crate) mod tests {
         let rows: Vec<&str> = lobby.settings.iter().map(|r| r.id.as_str()).collect();
         assert_eq!(
             rows,
-            ["playlist", "order", "weapons"],
-            "the host plans in its lobby"
+            ["playlist", "order", "weapons", "listed"],
+            "the host plans in its lobby, and says whether it is listed (T38)"
         );
         let code = h.versus.as_ref().unwrap().code.clone();
         g.act("online.room", &code).unwrap();

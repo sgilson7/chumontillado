@@ -11,10 +11,13 @@ import * as rtc from "./net/rtc.js";
 
 export function makeOnline(game, act) {
   let link = null;
+  let relays = null;
   let done = 0;
 
   function pump() {
     for (const [id, text] of JSON.parse(game.online_outbox())) if (link) link.send(id, text);
+    // T38: the lobby list's frames
+    for (const [to, text] of JSON.parse(game.lobby_outbox())) if (relays) relays.send(to, text);
   }
 
   // a code the transport made, or its refusal of one pasted in
@@ -61,6 +64,27 @@ export function makeOnline(game, act) {
       pump();
       if (link) link.close();
       link = null;
+    },
+    // T38: the lobby list's link to the relays
+    lobby_open() {
+      if (relays) return;
+      relays = rtc.openRelays({
+        ready: (bytes, wall, behind) => game.lobby_ready(bytes, wall, behind),
+        onOpen: (k) => {
+          game.lobby_opened(k);
+          pump();
+        },
+        onText: (text) => {
+          game.lobby_message(text);
+          pump();
+        },
+      });
+    },
+    lobby_close() {
+      // the last record (closed) goes before the link closes
+      pump();
+      if (relays) relays.close();
+      relays = null;
     },
   };
 

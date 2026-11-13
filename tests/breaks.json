@@ -2263,8 +2263,8 @@
  {
   "name": "T32 only the host plans in the lobby",
   "file": "crates/core/src/api.rs",
-  "find": "    // T32: the host plans the match's maps and weapons\n    if v.host {",
-  "replace": "    // T32: the host plans the match's maps and weapons\n    if v.host || true {",
+  "find": "    // whether the lobby is listed\n    if v.host {",
+  "replace": "    // whether the lobby is listed\n    if v.host || true {",
   "test": "online_the_hosts_plan_goes_with_its_start_and_the_guest_plays_it"
  },
  {
@@ -2609,5 +2609,145 @@
   "find": "        _ => cubo(),\n",
   "replace": "        _ => barranco(),\n",
   "test": "a_match_goes_round_the_fifteen_maps_in_turn"
+ },
+ {
+  "name": "T38 a record is listed without its signature checked",
+  "file": "crates/core/src/browse.rs",
+  "find": "    if !nostr::check(e) {\n",
+  "replace": "    if false {\n",
+  "test": "each_kind_of_bad_record_is_turned_away"
+ },
+ {
+  "name": "T38 an expired record is listed",
+  "file": "crates/core/src/browse.rs",
+  "find": "    if until <= now_s {\n",
+  "replace": "    if false {\n",
+  "test": "each_kind_of_bad_record_is_turned_away"
+ },
+ {
+  "name": "T38 a record without its work is listed",
+  "file": "crates/core/src/browse.rs",
+  "find": "    if committed < WORK_BITS || done < WORK_BITS {\n",
+  "replace": "    if false {\n",
+  "test": "each_kind_of_bad_record_is_turned_away"
+ },
+ {
+  "name": "T38 another build's lobby is listed",
+  "file": "crates/core/src/browse.rs",
+  "find": "    if ad.protocol != PROTOCOL || ad.build != build {\n",
+  "replace": "    if false {\n",
+  "test": "each_kind_of_bad_record_is_turned_away"
+ },
+ {
+  "name": "T38 a record may carry a stranger's text",
+  "file": "crates/core/src/browse.rs",
+  "find": "#[serde(deny_unknown_fields)]\npub struct Ad {\n",
+  "replace": "pub struct Ad {\n",
+  "test": "each_kind_of_bad_record_is_turned_away"
+ },
+ {
+  "name": "T38 an older record replaces a newer",
+  "file": "crates/core/src/browse.rs",
+  "find": "            Some(old) if !newer(&l, old) => false,\n",
+  "replace": "            Some(_) if false => false,\n",
+  "test": "a_hosts_newer_record_replaces_its_older_and_a_closed_one_leaves_the_list"
+ },
+ {
+  "name": "T38 a closed or full lobby stays listed",
+  "file": "crates/core/src/browse.rs",
+  "find": ".filter(|l| l.free() && l.made",
+  "replace": ".filter(|l| l.made",
+  "test": "a_hosts_newer_record_replaces_its_older_and_a_closed_one_leaves_the_list"
+ },
+ {
+  "name": "T38 the list ignores the region",
+  "file": "crates/core/src/browse.rs",
+  "find": "            l.ad.region != region,\n",
+  "replace": "            false,\n",
+  "test": "the_list_puts_this_region_first_then_fuller_lobbies"
+ },
+ {
+  "name": "T38 both lone quick hosts give way",
+  "file": "crates/core/src/browse.rs",
+  "find": "        && (!other.ad.quick || other.host < mine.host)\n",
+  "replace": "        && (!other.ad.quick || other.host != mine.host)\n",
+  "test": "two_players_pressing_quick_match_at_once_end_in_one_lobby"
+ },
+ {
+  "name": "T38 a lobby hosted on purpose gives way",
+  "file": "crates/core/src/browse.rs",
+  "find": "    mine.ad.quick\n",
+  "replace": "    true\n",
+  "test": "of_two_lone_quick_hosts_exactly_one_gives_way"
+ },
+ {
+  "name": "T38 a relay that opens late never hears the list request",
+  "file": "crates/core/src/browse.rs",
+  "find": "        self.opened += 1;\n        if self.listening {\n",
+  "replace": "        self.opened += 1;\n        if false {\n",
+  "test": "a_relay_that_opens_late_hears_the_list_request_and_the_record"
+ },
+ {
+  "name": "T38 a record is never renewed",
+  "file": "crates/core/src/browse.rs",
+  "find": "said != ad || now_us - at >= RENEW_US,",
+  "replace": "said != ad,",
+  "test": "a_record_is_renewed_when_due_or_changed_and_not_otherwise"
+ },
+ {
+  "name": "T38 a friends-only host is listed",
+  "file": "crates/core/src/find.rs",
+  "find": "        if !v.host || !self.public || v.ended()",
+  "replace": "        if !v.host || v.ended()",
+  "test": "a_host_set_to_friends_only_never_reaches_the_relays"
+ },
+ {
+  "name": "T38 a started match stays listed",
+  "file": "crates/core/src/find.rs",
+  "find": "v.ended() || v.session().is_some() {",
+  "replace": "v.ended() {",
+  "test": "a_public_hosts_lobby_is_listed_and_a_searcher_joins_it_by_its_code"
+ },
+ {
+  "name": "T38 a lobby leaving the list never says so",
+  "file": "crates/core/src/find.rs",
+  "find": "                        mine.ad.open = false;\n",
+  "replace": "",
+  "test": "a_public_hosts_lobby_is_listed_and_a_searcher_joins_it_by_its_code"
+ },
+ {
+  "name": "T38 quick match hosts without looking at the list",
+  "file": "crates/core/src/find.rs",
+  "find": "                match best {\n",
+  "replace": "                match best.filter(|_| false) {\n",
+  "test": "quick_match_joins_an_open_lobby_rather_than_hosting_one"
+ },
+ {
+  "name": "T38 a lobby that never answered is listed again",
+  "file": "crates/core/src/find.rs",
+  "find": "            if unanswered {\n",
+  "replace": "            if false {\n",
+  "test": "a_listed_lobby_whose_host_never_answers_leaves_the_list"
+ },
+ {
+  "name": "T38 quick match waits for a dead lobby forever",
+  "file": "crates/core/src/find.rs",
+  "find": "} else if now - since_us >= browse::QUICK_JOIN_US {",
+  "replace": "} else if false {",
+  "test": "quick_match_drops_a_lobby_that_never_seats_it_and_hosts_instead"
+ },
+ {
+  "name": "T38 an event's id hashes the wrong array",
+  "file": "crates/core/src/nostr.rs",
+  "find": "json!([0, pubkey, created_at, kind, tags, content])",
+  "replace": "json!([1, pubkey, created_at, kind, tags, content])",
+  "test": "an_events_id_is_the_hash_of_its_canonical_array"
+ },
+ {
+  "name": "T38 work is overcounted",
+  "file": "crates/core/src/nostr.rs",
+  "find": "            n += b.leading_zeros();\n",
+  "replace": "            n += 8;\n",
+  "test": "mining_reaches_the_work_asked_and_says_so_in_its_nonce"
  }
 ]

@@ -70,6 +70,9 @@ export const CONFIG = {
 
   // A WebSocket's readyState when it is open.
   socketOpen: 1,
+
+  // T38: how many random bytes the page draws for the lobby list's key.
+  keyBytes: 32,
 };
 
 // `?ice=none` drops the STUN servers, so tabs on one machine connect on host

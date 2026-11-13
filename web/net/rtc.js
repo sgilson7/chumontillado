@@ -355,6 +355,53 @@ async function pack(kind, sdp) {
 
 export class BadCode extends Error {}
 
+// T38: the lobby list's link. One WebSocket to each relay in config.js,
+// carrying the Nostr frames the core writes (crates/core/src/browse.rs)
+// and handing back whatever the relays say. It decides nothing: the core
+// says which relay each frame is for (-1, every relay that is open), and
+// reads and checks every record itself. `ready` gets the key's bytes the
+// page drew, the wall clock, and the clock's offset from UTC, as text.
+export function openRelays({ ready, onOpen, onText }) {
+  const bytes = new Uint8Array(CONFIG.keyBytes);
+  crypto.getRandomValues(bytes);
+  ready(Array.from(bytes).join(","), String(Date.now()), String(new Date().getTimezoneOffset()));
+  const sockets = CONFIG.relays.map((url, k) => {
+    let ws = null;
+    try {
+      ws = new WebSocket(url);
+    } catch (e) {
+      return null;
+    }
+    ws.onopen = () => onOpen(k);
+    ws.onmessage = (m) => onText(String(m.data));
+    ws.onerror = () => {};
+    return ws;
+  });
+  return {
+    send(to, text) {
+      sockets.forEach((ws, k) => {
+        if (!ws || ws.readyState !== CONFIG.socketOpen) return;
+        if (to !== k && to >= 0) return;
+        try {
+          ws.send(text);
+        } catch (e) {
+          // closing
+        }
+      });
+    },
+    close() {
+      for (const ws of sockets) {
+        if (!ws) continue;
+        ws.onmessage = null;
+        // one still connecting closes once it opens: closed mid-handshake,
+        // Firefox reports it as an error
+        if (ws.readyState === WebSocket.CONNECTING) ws.onopen = () => ws.close();
+        else ws.close();
+      }
+    },
+  };
+}
+
 async function unpack(kind, code) {
   const text = (code || "").replace(/\s+/g, "");
   if (text.charAt(0) !== kind) throw new BadCode("wrong kind");

@@ -161,6 +161,28 @@ impl Game {
     pub fn online_outbox(&mut self) -> String {
         self.inner.online_outbox()
     }
+
+    /// T38: the link to the relays for the lobby list has opened: the
+    /// bytes drawn for the key, the wall clock (ms) and the clock's minutes
+    /// behind UTC, each as the page wrote it.
+    pub fn lobby_ready(&mut self, bytes: &str, wall_ms: &str, behind: &str) {
+        self.inner.lobby_ready(bytes, wall_ms, behind)
+    }
+
+    /// T38: relay `k` of the config's list has opened.
+    pub fn lobby_opened(&mut self, k: i32) {
+        self.inner.lobby_opened(k)
+    }
+
+    /// T38: text from a relay.
+    pub fn lobby_message(&mut self, text: &str) {
+        self.inner.lobby_message(text)
+    }
+
+    /// T38: what the link should send, as JSON `[[relay, text], ...]`.
+    pub fn lobby_outbox(&mut self) -> String {
+        self.inner.lobby_outbox()
+    }
 }
 
 /// Sizes, layouts, bits and pass states, as JSON.

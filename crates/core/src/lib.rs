@@ -16,7 +16,9 @@
 
 pub mod api;
 pub mod arms;
+pub mod browse;
 pub mod camera;
+pub mod find;
 pub mod flicker;
 pub mod fx;
 pub mod game;
@@ -33,6 +35,7 @@ pub mod maps;
 pub mod mesh;
 pub mod movement;
 pub mod nav;
+pub mod nostr;
 pub mod online;
 pub mod page;
 pub mod pilot;

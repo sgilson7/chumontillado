@@ -256,6 +256,62 @@ fn shooting_panel(g: &Game) -> Panel {
     out
 }
 
+/// T38: the list of open lobbies (Find a game), or Quick match looking.
+fn browse_panel(g: &Game) -> Panel {
+    let s = &g.strings;
+    let mut p = panel("browse");
+    let secs = ((g.now_us - g.listed_since_us) / 1_000_000).max(0);
+    let opened = g.relays.as_ref().map(|r| r.opened).unwrap_or(0);
+    let list = g.listed();
+    if g.quick.is_some() {
+        p.heading = s.get("quick_match");
+        p.text = s.get("quick_looking").replace("{n}", &secs.to_string());
+        p.actions = vec![action(g, "screen.menu", "", "back", false)];
+        return p;
+    }
+    p.heading = s.get("find_game");
+    p.text = if opened == 0 && g.now_us - g.listed_since_us >= crate::browse::NO_RELAY_US {
+        s.get("online.no_relay")
+    } else if opened == 0 {
+        s.get("browse_connecting")
+    } else if list.is_empty() {
+        s.get("browse_none")
+    } else {
+        s.get("browse_some").replace("{n}", &list.len().to_string())
+    };
+    for l in &list {
+        let maps = match l.ad.maps.as_slice() {
+            [] => s.get("playlist_all"),
+            [one] => s.get(crate::maps::map(*one as usize).name),
+            [first, rest @ ..] => s
+                .get("browse_maps")
+                .replace("{map}", &s.get(crate::maps::map(*first as usize).name))
+                .replace("{n}", &rest.len().to_string()),
+        };
+        let label = s
+            .get("browse_lobby")
+            .replace("{maps}", &maps)
+            .replace("{people}", &l.ad.people.to_string())
+            .replace("{seats}", &crate::online::SEATS.to_string())
+            .replace(
+                "{region}",
+                &s.get(REGION_KEYS[l.ad.region as usize % REGION_KEYS.len()]),
+            );
+        p.actions.push(Action {
+            label,
+            ..action(g, "browse.join", &l.code, "join", false)
+        });
+    }
+    p.actions.push(action(g, "browse.quick", "", "quick_match", true));
+    p.actions.push(action(g, "online.host", "", "host_match", false));
+    p.actions.push(action(g, "screen.menu", "", "back", false));
+    p
+}
+
+/// T38: each region band's name, by `browse::region`'s number.
+const REGION_KEYS: [&str; crate::browse::REGIONS as usize] =
+    ["region_americas", "region_europe", "region_asia"];
+
 /// M4: the online screen: hosting (the room code, the invite link, the
 /// seats and Start), joining (a box for the code), a guest's lobby, or a
 /// match that has ended and why.
@@ -336,9 +392,23 @@ fn online_panel(g: &Game) -> Panel {
         ));
     }
     p.actions.push(leave);
-    // T32: the host plans the match's maps and weapons
+    // T32: the host plans the match's maps and weapons; T38: and says
+    // whether the lobby is listed
     if v.host {
         p.settings = plan_settings(g);
+        p.settings.push(Setting {
+            id: "listed".into(),
+            label: s.get("setting_listed"),
+            value: s.get(if g.public {
+                "listed_public"
+            } else {
+                "listed_friends"
+            }),
+            actions: vec![
+                action(g, "online.public", "-1", "listed_friends", false),
+                action(g, "online.public", "1", "listed_public", false),
+            ],
+        });
     }
     p.cards = cards(g, v);
     p
@@ -953,6 +1023,8 @@ pub fn ui(g: &Game) -> Ui {
                 action(g, "menu.practice", "", "practice", true),
                 action(g, "menu.duel", "", "duel", true),
                 action(g, "menu.bots", "", "bots_match", true),
+                action(g, "browse.quick", "", "quick_match", true),
+                action(g, "browse.open", "", "find_game", false),
                 action(g, "online.host", "", "host_match", false),
                 action(g, "online.join", "", "join_match", false),
                 action(g, "screen.playlists", "", "playlists", false),
@@ -995,6 +1067,7 @@ pub fn ui(g: &Game) -> Ui {
             panels.push(p);
         }
         Screen::Playlists => panels.extend(playlist_panels(g)),
+        Screen::Browse => panels.push(browse_panel(g)),
         Screen::Online => {
             panels.push(online_panel(g));
             // CS-Q22: A, and after an online match

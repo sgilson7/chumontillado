@@ -216,6 +216,12 @@ Where the players of an online match wait for the host to start it, each seat a 
 
 Not: waiting room
 
+### Lobby list
+
+The lobbies other players are hosting with a seat free, read from the public relays: Find a game shows it, and Quick match joins from it. A lobby leaves it when it fills, starts or closes, and a host can keep theirs off it.
+
+Not: server browser, matchmaking server
+
 ### Lunge
 
 The katana's second use: it flings you along your view and hits whatever its arc meets on the way.
@@ -299,6 +305,12 @@ Not: scattergun
 A straight dagger drawn true, light and quick. Held, it makes a jump more than twice as high.
 
 Not: dagger, knife, high-jump knife
+
+### Quick match
+
+Joins the best lobby on the lobby list, or hosts one if the list is empty. When two players looking at once each host, one gives way and joins the other.
+
+Not: matchmaking queue, ranked
 
 ### Room code
 

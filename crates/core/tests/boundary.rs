@@ -27,7 +27,7 @@ use std::path::{Path, PathBuf};
 
 /// Project decision, enforced as a Builder requirement: the crates the core
 /// may use. Add to it only with the person's approval, recorded in PLAN.md.
-const ALLOWED_DEPENDENCIES: &[&str] = &["serde", "serde_json"];
+const ALLOWED_DEPENDENCIES: &[&str] = &["k256", "serde", "serde_json", "sha2"];
 
 /// Builder requirement: names that mean the core is doing input or output.
 const IO_IDENTIFIERS: &[&str] = &[
