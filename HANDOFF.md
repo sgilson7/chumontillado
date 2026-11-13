@@ -122,6 +122,8 @@ After T37 (the Cubo, on the branch `cube-map`, not deployed): `./scripts/check.s
 
 After T38 (Find a game and Quick match, on the branch `lobby-browser`, not deployed): `./scripts/check.sh` passed in all three browsers; `break_tests.py T38`: 21 of 21 caught after two tests were tightened (the first run caught 19); `tests/browser/online.py firefox chromium` passed with its new pass (Find a game lists and joins a host's lobby; two Quick matches end in one lobby) over the real relays.
 
+T38 live at 0f192de (2026-11-13): published before main was pushed; build.txt named the commit; the live browser check passed in Chromium, Firefox and WebKit, and the live online check, with its new pass for Find a game and Quick match, passed in full in Chromium and Firefox on its first run.
+
 T37 live at c3100a9 (2026-11-09): published before main was pushed; build.txt named the commit; the live browser check passed in Chromium, Firefox and WebKit, and the live online check passed in full in Chromium and Firefox on its first run.
 
 T36 live at cddf925 (2026-11-09): the first publish stopped on a Firefox "scene holds still" row while main was already pushed, so the Pages run deployed the old build; the second publish passed, and re-running the Pages workflow put cddf925 live. The live browser check passed in Chromium, Firefox and WebKit. The live online check failed both runs as after T34: the guest opening the invite link never found the room (R8.11, R21.7). T36 changes only a key on the vine, so this is the open relay fault, not the change.
